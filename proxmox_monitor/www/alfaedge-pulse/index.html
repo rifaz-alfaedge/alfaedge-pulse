@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>alfaEdge Pulse</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/proxmox_monitor/alfaedge-pulse/favicon.svg" />
+    {% for css_path in css_paths %}
+    <link rel="stylesheet" href="{{ css_path }}" />
+    {% endfor %}
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Consumed by src/main.tsx (FrappeProvider) — the SPA rides on the
+      // normal Frappe session cookie, this just tells frappe-js-sdk which
+      // site it's talking to and gives it a CSRF token for POST calls.
+      window.csrf_token = "{{ csrf_token }}";
+      window.site_name = "{{ site_name }}";
+    </script>
+    <script type="module" src="{{ js_path }}"></script>
+  </body>
+</html>

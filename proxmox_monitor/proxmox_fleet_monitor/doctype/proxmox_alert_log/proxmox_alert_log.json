@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-06 11:16:25.155498",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "alert_type",
+  "reference_doctype",
+  "reference_name",
+  "resolved",
+  "column_break_alert",
+  "sent_at",
+  "channels_sent",
+  "message"
+ ],
+ "fields": [
+  {
+   "fieldname": "alert_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Alert Type",
+   "options": "Critical Resource\nResource Warning\nBackup Failure\nBackup Overdue\nServer Offline",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference DocType",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Reference Name",
+   "options": "reference_doctype",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Automatically set once the poller observes the underlying condition has cleared (e.g. usage drops back below threshold, backup succeeds, server comes back online).",
+   "fieldname": "resolved",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Resolved",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_alert",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sent_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Sent At",
+   "read_only": 1
+  },
+  {
+   "description": "Comma-separated list of channels the alert was successfully dispatched to, e.g. \"Email, Telegram\".",
+   "fieldname": "channels_sent",
+   "fieldtype": "Data",
+   "label": "Channels Sent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Message",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-bell",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-06 11:16:25.155498",
+ "modified_by": "Administrator",
+ "module": "Proxmox Fleet Monitor",
+ "name": "Proxmox Alert Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "sent_at",
+ "sort_order": "DESC",
+ "states": []
+}

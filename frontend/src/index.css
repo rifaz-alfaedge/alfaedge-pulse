@@ -1,0 +1,85 @@
+/* frappe-ui-react's theme.css already pulls in `@import "tailwindcss"` (plus
+   the Inter font and the Tailwind typography plugin) internally, so we
+   import only this — adding our own separate `@import "tailwindcss"` before
+   it would push that internal font @import after other generated rules,
+   which is invalid CSS (an @import must precede all other rules) and gets
+   silently dropped by the browser. */
+@import '@rtcamp/frappe-ui-react/theme';
+@source "../node_modules/@rtcamp/frappe-ui-react/dist";
+
+/* ---------------------------------------------------------------------
+ * Design tokens (dataviz-skill palette: references/palette.md)
+ *
+ * Declared once as CSS custom properties and registered as Tailwind
+ * color utilities via @theme (so `bg-surface-card`, `text-ink-primary`,
+ * etc. work directly) — then re-pointed under `.dark` below. Because the
+ * generated utilities reference `var(--color-*)` rather than a baked-in
+ * hex, every one of them re-themes automatically from this single spot;
+ * components never need their own `dark:` variant for these roles.
+ *
+ * Status colors (good/warning/serious/critical) are fixed — the skill
+ * documents them as validated against both the light and dark chart
+ * surface already, so unlike the chrome tokens they do NOT change
+ * between light and dark.
+ * ------------------------------------------------------------------- */
+@theme {
+  --color-surface-page: #f9f9f7;
+  --color-surface-card: #fcfcfb;
+  --color-ink-primary: #0b0b0b;
+  --color-ink-secondary: #52514e;
+  --color-ink-muted: #898781;
+  --color-border-hairline: rgba(11, 11, 11, 0.1);
+  --color-gridline: #e1e0d9;
+  --color-accent: #2a78d6;
+  --color-accent-track: #cde2fb;
+
+  --color-status-good: #0ca30c;
+  --color-status-warning: #fab219;
+  --color-status-serious: #ec835a;
+  --color-status-critical: #d03b3b;
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.dark {
+  --color-surface-page: #0d0d0d;
+  --color-surface-card: #1a1a19;
+  --color-ink-primary: #ffffff;
+  --color-ink-secondary: #c3c2b7;
+  --color-ink-muted: #898781;
+  --color-border-hairline: rgba(255, 255, 255, 0.1);
+  --color-gridline: #2c2c2a;
+  --color-accent: #3987e5;
+  --color-accent-track: #184f95;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-surface-page);
+  color: var(--color-ink-primary);
+  font-family: var(--font-sans);
+}
+
+/* Heartbeat pulse used on every live-synced card (see HeartbeatDot.tsx) */
+@keyframes heartbeat-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(12, 163, 12, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0); }
+}
+
+.heartbeat-live {
+  animation: heartbeat-pulse 2s ease-out infinite;
+}
+
+@keyframes heartbeat-pulse-critical {
+  0% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(208, 59, 59, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0); }
+}
+
+.heartbeat-critical {
+  animation: heartbeat-pulse-critical 1.4s ease-out infinite;
+}

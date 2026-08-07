@@ -1,0 +1,165 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:{server}-{datastore_name}",
+ "creation": "2026-08-06 11:16:25.155498",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "server",
+  "datastore_name",
+  "datastore_type",
+  "storage_role",
+  "is_critical",
+  "is_warning",
+  "warning_since",
+  "column_break_usage",
+  "used",
+  "total",
+  "usage_percent",
+  "last_synced"
+ ],
+ "fields": [
+  {
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Server",
+   "options": "Proxmox Server",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "datastore_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Datastore / Storage Name",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "datastore_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "PVE Storage\nPBS Datastore",
+   "read_only": 1
+  },
+  {
+   "description": "Inferred from the underlying PVE storage type (dir vs lvmthin). Lets the dashboard tell \"backup drive is full\" apart from \"guest storage pool is full\".",
+   "fieldname": "storage_role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Storage Role",
+   "options": "OS + Local Backup Drive\nGuest Storage (LVM-Thin)\nOther",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "At or above the Critical Threshold — alerted on immediately.",
+   "fieldname": "is_critical",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Critical",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "At or above the Warning Threshold continuously for the configured Warning Duration, but below Critical.",
+   "fieldname": "is_warning",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Warning",
+   "read_only": 1
+  },
+  {
+   "description": "When usage first went at-or-above the Warning Threshold in the current unbroken streak. Cleared the moment a reading dips back below it.",
+   "fieldname": "warning_since",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Warning Since",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_usage",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "used",
+   "fieldtype": "Float",
+   "label": "Used (GB)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total",
+   "fieldtype": "Float",
+   "label": "Total (GB)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "usage_percent",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Usage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_synced",
+   "fieldtype": "Datetime",
+   "label": "Last Synced",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-hdd-o",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-06 11:16:25.155498",
+ "modified_by": "Administrator",
+ "module": "Proxmox Fleet Monitor",
+ "name": "Proxmox Datastore",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "datastore_name"
+}

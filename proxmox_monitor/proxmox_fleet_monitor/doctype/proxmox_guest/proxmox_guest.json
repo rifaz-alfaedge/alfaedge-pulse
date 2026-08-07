@@ -1,0 +1,262 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:{server}-{vmid}",
+ "creation": "2026-08-06 11:16:25.155498",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "server",
+  "vmid",
+  "guest_name",
+  "guest_type",
+  "status",
+  "is_critical",
+  "is_warning",
+  "warning_since",
+  "column_break_resources",
+  "cpu_usage",
+  "memory_usage",
+  "memory_total",
+  "disk_usage",
+  "disk_total",
+  "uptime",
+  "last_synced",
+  "last_successful_backup",
+  "network_section",
+  "ip_address",
+  "network_mode",
+  "column_break_network",
+  "public_ip",
+  "access_url",
+  "ownership_section",
+  "assigned_engineer",
+  "tags"
+ ],
+ "fields": [
+  {
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Server",
+   "options": "Proxmox Server",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "vmid",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "VMID",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "guest_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Guest Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "guest_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "QEMU (VM)\nLXC (CT)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "running\nstopped\npaused\nunknown",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "At or above the Critical Threshold — alerted on immediately. Only ever set for guests on a Production server.",
+   "fieldname": "is_critical",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Critical",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "At or above the Warning Threshold continuously for the configured Warning Duration, but below Critical. Only ever set for guests on a Production server.",
+   "fieldname": "is_warning",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Warning",
+   "read_only": 1
+  },
+  {
+   "description": "When CPU/RAM/disk first went at-or-above the Warning Threshold in the current unbroken streak. Cleared the moment a reading dips back below it.",
+   "fieldname": "warning_since",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Warning Since",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_resources",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cpu_usage",
+   "fieldtype": "Percent",
+   "label": "CPU Usage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "memory_usage",
+   "fieldtype": "Percent",
+   "label": "Memory Usage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "memory_total",
+   "fieldtype": "Float",
+   "label": "Memory Total (GB)",
+   "read_only": 1
+  },
+  {
+   "description": "LXC containers report this natively. QEMU VMs only report this if the QEMU guest agent is installed inside the VM — otherwise this stays blank.",
+   "fieldname": "disk_usage",
+   "fieldtype": "Percent",
+   "label": "Disk Usage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "disk_total",
+   "fieldtype": "Float",
+   "label": "Disk Total (GB)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "uptime",
+   "fieldtype": "Duration",
+   "label": "Uptime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_synced",
+   "fieldtype": "Datetime",
+   "label": "Last Synced",
+   "read_only": 1
+  },
+  {
+   "description": "The most recent Success entry in Proxmox Backup Log for this guest, from either Local Disk or PBS Remote — whichever is newer.",
+   "fieldname": "last_successful_backup",
+   "fieldtype": "Datetime",
+   "label": "Last Successful Backup",
+   "read_only": 1
+  },
+  {
+   "fieldname": "network_section",
+   "fieldtype": "Section Break",
+   "label": "Network"
+  },
+  {
+   "description": "Best-effort, auto-populated from the QEMU guest agent / LXC network config where available.",
+   "fieldname": "ip_address",
+   "fieldtype": "Data",
+   "label": "IP Address (auto)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "network_mode",
+   "fieldtype": "Select",
+   "label": "Network Mode",
+   "options": "\nDirect Public IP\nInternal Bridge + Reverse Proxy"
+  },
+  {
+   "fieldname": "column_break_network",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Set manually — a directly-attached public IP or NAT/reverse-proxy mapping isn't always inferable from the Proxmox API alone.",
+   "fieldname": "public_ip",
+   "fieldtype": "Data",
+   "label": "Public IP"
+  },
+  {
+   "description": "The Nginx Proxy Manager-fronted hostname you actually browse to, if any. Used by Phase 3 (Uptime Kuma monitoring).",
+   "fieldname": "access_url",
+   "fieldtype": "Data",
+   "label": "Access URL"
+  },
+  {
+   "fieldname": "ownership_section",
+   "fieldtype": "Section Break",
+   "label": "Ownership & Tags"
+  },
+  {
+   "description": "Manually assigned; never overwritten by the sync. Useful on Beta where one engineer may own several instances.",
+   "fieldname": "assigned_engineer",
+   "fieldtype": "Link",
+   "label": "Assigned Engineer",
+   "options": "User"
+  },
+  {
+   "fieldname": "tags",
+   "fieldtype": "Data",
+   "label": "Proxmox Tags",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-desktop",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-06 11:16:25.155498",
+ "modified_by": "Administrator",
+ "module": "Proxmox Fleet Monitor",
+ "name": "Proxmox Guest",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "guest_name"
+}

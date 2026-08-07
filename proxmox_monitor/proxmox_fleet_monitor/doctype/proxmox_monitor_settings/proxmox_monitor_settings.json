@@ -1,0 +1,158 @@
+{
+ "actions": [],
+ "creation": "2026-08-06 11:16:25.155498",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "polling_section",
+  "poll_interval_seconds",
+  "column_break_polling",
+  "warning_threshold_percent",
+  "warning_duration_minutes",
+  "critical_threshold_percent",
+  "email_section",
+  "enable_email_alerts",
+  "email_recipients",
+  "telegram_section",
+  "enable_telegram_alerts",
+  "telegram_chat_id",
+  "whatsapp_section",
+  "enable_whatsapp_alerts",
+  "whatsapp_recipients"
+ ],
+ "fields": [
+  {
+   "fieldname": "polling_section",
+   "fieldtype": "Section Break",
+   "label": "Polling"
+  },
+  {
+   "default": "20",
+   "description": "How often the background poller refreshes data from every connected Proxmox server.",
+   "fieldname": "poll_interval_seconds",
+   "fieldtype": "Int",
+   "label": "Poll Interval (seconds)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_polling",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "85",
+   "description": "Any CPU, RAM, or storage reading at or above this percentage — but below the Critical Threshold — is flagged Warning once it's stayed at or above this line continuously for the Warning Duration below.",
+   "fieldname": "warning_threshold_percent",
+   "fieldtype": "Int",
+   "label": "Warning Threshold (%)",
+   "non_negative": 1
+  },
+  {
+   "default": "5",
+   "description": "How long a reading must stay at or above the Warning Threshold, with no dip below it, before a Warning alert fires. A single dip below the threshold resets this — it does not carry over partial progress.",
+   "fieldname": "warning_duration_minutes",
+   "fieldtype": "Int",
+   "label": "Warning Duration (minutes)",
+   "non_negative": 1
+  },
+  {
+   "default": "95",
+   "description": "Any CPU, RAM, or storage reading at or above this percentage is flagged Critical and alerted on immediately — no waiting period, unlike the Warning tier above.",
+   "fieldname": "critical_threshold_percent",
+   "fieldtype": "Int",
+   "label": "Critical Threshold (%)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "email_section",
+   "fieldtype": "Section Break",
+   "label": "Alerting — Email"
+  },
+  {
+   "default": "0",
+   "description": "Uses the Email Account already configured in core Frappe (Settings > Email Account). No separate SMTP config here.",
+   "fieldname": "enable_email_alerts",
+   "fieldtype": "Check",
+   "label": "Enable Email Alerts"
+  },
+  {
+   "description": "Comma-separated list of email addresses.",
+   "fieldname": "email_recipients",
+   "fieldtype": "Small Text",
+   "label": "Email Recipients"
+  },
+  {
+   "fieldname": "telegram_section",
+   "fieldtype": "Section Break",
+   "label": "Alerting — Telegram"
+  },
+  {
+   "default": "0",
+   "description": "Requires a Telegram integration app (e.g. frappe_telegram) installed and configured with its own bot token — this app never stores the bot token.",
+   "fieldname": "enable_telegram_alerts",
+   "fieldtype": "Check",
+   "label": "Enable Telegram Alerts"
+  },
+  {
+   "description": "The chat/group ID the configured Telegram bot should send alerts to.",
+   "fieldname": "telegram_chat_id",
+   "fieldtype": "Data",
+   "label": "Telegram Chat ID"
+  },
+  {
+   "fieldname": "whatsapp_section",
+   "fieldtype": "Section Break",
+   "label": "Alerting — WhatsApp"
+  },
+  {
+   "default": "0",
+   "description": "Requires the frappe_whatsapp app installed and configured with its own WhatsApp Cloud API credentials — this app never stores those credentials.",
+   "fieldname": "enable_whatsapp_alerts",
+   "fieldtype": "Check",
+   "label": "Enable WhatsApp Alerts"
+  },
+  {
+   "description": "Comma-separated list of WhatsApp numbers in international format, e.g. 919812345678.",
+   "fieldname": "whatsapp_recipients",
+   "fieldtype": "Small Text",
+   "label": "WhatsApp Recipients"
+  }
+ ],
+ "icon": "fa fa-cog",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-06 11:16:25.155498",
+ "modified_by": "Administrator",
+ "module": "Proxmox Fleet Monitor",
+ "name": "Proxmox Monitor Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

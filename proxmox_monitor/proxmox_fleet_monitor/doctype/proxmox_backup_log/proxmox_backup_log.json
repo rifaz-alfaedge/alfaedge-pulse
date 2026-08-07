@@ -1,0 +1,165 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-06 11:16:25.155498",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "server",
+  "guest",
+  "vmid",
+  "backup_source",
+  "status",
+  "column_break_details",
+  "backup_time",
+  "size",
+  "storage_target",
+  "notes",
+  "error_message",
+  "upid"
+ ],
+ "fields": [
+  {
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Server",
+   "options": "Proxmox Server",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "description": "Kept even if the guest is later removed from Proxmox Guest, so backup history for decommissioned guests isn't lost.",
+   "fieldname": "guest",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Guest",
+   "options": "Proxmox Guest",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vmid",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "VMID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "backup_source",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Backup Source",
+   "options": "Local Disk\nPBS Remote",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Success\nFailed\nRunning",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "backup_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Backup Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "size",
+   "fieldtype": "Float",
+   "label": "Size (GB)",
+   "read_only": 1
+  },
+  {
+   "description": "The local storage name (Local Disk) or PBS datastore name (PBS Remote) the backup landed on.",
+   "fieldname": "storage_target",
+   "fieldtype": "Data",
+   "label": "Storage Target",
+   "read_only": 1
+  },
+  {
+   "description": "The backup file's Notes field from Proxmox's own storage content listing (Local Disk only — matched by vmid and creation time, since the task log doesn't carry it). Usually the guest name if the backup job uses the default notes template.",
+   "fieldname": "notes",
+   "fieldtype": "Data",
+   "label": "Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Error Message",
+   "read_only": 1
+  },
+  {
+   "description": "Proxmox task UPID (Local Disk) or a synthetic key (PBS Remote). Internal-only, used by the poller to avoid creating duplicate rows for a backup it has already recorded.",
+   "fieldname": "upid",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "UPID",
+   "read_only": 1,
+   "unique": 1
+  }
+ ],
+ "icon": "fa fa-history",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-06 11:16:25.155498",
+ "modified_by": "Administrator",
+ "module": "Proxmox Fleet Monitor",
+ "name": "Proxmox Backup Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "backup_time",
+ "sort_order": "DESC",
+ "states": []
+}
