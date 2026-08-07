@@ -125,6 +125,26 @@ year with no revalidation (`config/nginx.conf`); a fixed filename would
 mean a deploy silently keeps serving stale JS/CSS to anyone who already
 loaded the page.
 
+**If a checkout misbehaves in a way that doesn't match this repo** (a
+dependency resolving to a version that shouldn't be reachable, a build
+error nobody else can reproduce, etc.), check for local drift *before*
+assuming it's a code or environment bug:
+
+```bash
+git status --short
+git diff HEAD -- frontend/package.json frontend/package-lock.json
+```
+
+An uncommitted local edit to either file (e.g. from someone running
+`npm install <package>@<version>` directly on that server at some point)
+silently overrides what's actually committed — `git show HEAD:...` will
+still show the correct, intended version even while the real working
+files on disk have drifted, which is what actually happened once during
+this app's development: a locally-downgraded `frappe-react-sdk` produced
+a runtime `ReactCurrentOwner` crash that looked like an environment or
+npm-version issue until `git status` revealed the real cause. Restore
+with `git checkout -- <file>` and reinstall.
+
 ## How it works
 
 - A background loop (`proxmox_monitor.tasks.poller.run_poll_loop`) polls
