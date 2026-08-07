@@ -76,6 +76,26 @@ bench build --app proxmox_monitor
 Then visit `https://your-site/alfaedge-pulse` (an authenticated Frappe
 session is required — Guests are redirected to `/login`).
 
+`npm install`/`npm run build` need write access to `frontend/node_modules`
+and to `proxmox_monitor/public/alfaedge-pulse` — run them as the bench's
+own user (usually `frappe`), not root or an unrelated account, or the
+build will silently fail to produce output and the dashboard route will
+500 with a `manifest.json` not found error.
+
+### Permissions
+
+The **Administrator** account has full access by default, but any other
+Frappe user needs one of this app's two roles explicitly assigned
+(*User → Roles*) before they can see or do anything here — with neither
+role, every Proxmox doctype is invisible to them:
+
+- **Proxmox Monitor Manager** — full read/write, including **Proxmox
+  Monitor Settings**. Needed to add/edit `Proxmox Server` connections or
+  change thresholds.
+- **Proxmox Monitor Viewer** — read-only across guests, datastores,
+  servers, and logs; can view the dashboard but not configure it (no
+  access to Settings at all).
+
 ## Deploying backend or frontend changes
 
 After editing any Python file, `bench build` alone is **not** enough —
