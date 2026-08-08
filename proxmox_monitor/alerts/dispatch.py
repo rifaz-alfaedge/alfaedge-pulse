@@ -184,6 +184,15 @@ def _send_whatsapp(settings, message: str) -> bool:
 					"to": number,
 					"message": message,
 					"message_type": "Manual",
+					# frappe_whatsapp's before_insert hook only calls its
+					# outgoing-send logic when type == "Outgoing" — without it,
+					# insert() succeeds silently with no API call ever made, so
+					# this always reported success even though nothing sent.
+					# content_type is a mandatory field there too and selects
+					# the payload shape; "text" is all a plain-text alert body
+					# needs (see frappe_whatsapp's send_outgoing()).
+					"type": "Outgoing",
+					"content_type": "text",
 				}
 			).insert(ignore_permissions=True)
 		return bool(numbers)
