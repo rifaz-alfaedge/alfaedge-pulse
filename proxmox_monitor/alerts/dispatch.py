@@ -24,6 +24,8 @@ history of red flags even before notifications are set up.
 
 from __future__ import annotations
 
+import json
+
 import frappe
 
 
@@ -47,7 +49,7 @@ def dispatch_alert(alert_type: str, reference_doctype: str, reference_name: str,
 		if _send_telegram(settings, message):
 			channels_sent.append("Telegram")
 
-	if settings.enable_whatsapp_alerts and settings.whatsapp_recipients:
+	if settings.enable_whatsapp_alerts and settings.whatsapp_recipients and settings.whatsapp_template:
 		if _send_whatsapp(settings, message):
 			channels_sent.append("WhatsApp")
 
@@ -128,7 +130,7 @@ def _send_email(settings, alert_type: str, message: str) -> bool:
 		# alert; everything else (Critical Resource, Backup Failure, Server
 		# Offline) is urgent enough to bucket as Critical here.
 		location = message.split(":", 1)[0]
-		severity = "Warning" if alert_type == "Resource Warning" else "Critical"
+		severity = "Warning" if alert_type == "Resource Warning" else "Test" if alert_type == "Test Alert" else "Critical"
 		frappe.sendmail(
 			recipients=recipients,
 			subject=f"Infra {severity} Alert - {location}",
@@ -166,14 +168,39 @@ def _send_telegram(settings, message: str) -> bool:
 		return False
 
 
+def _resolve_whatsapp_template(template_setting: str) -> str | None:
+	"""Resolve the configured template setting to a WhatsApp Templates document name.
+
+	frappe_whatsapp autonames WhatsApp Templates as
+	"{template_name}-{language_code}" (e.g. "alert_notification-en_US"),
+	which isn't obvious from the Settings UI — accept either that exact
+	document name or the plain template_name someone would naturally type.
+	"""
+	if frappe.db.exists("WhatsApp Templates", template_setting):
+		return template_setting
+	return frappe.db.get_value("WhatsApp Templates", {"template_name": template_setting}, "name")
+
+
 def _send_whatsapp(settings, message: str) -> bool:
 	"""Send via the frappe_whatsapp app, if installed.
 
 	Sends by inserting a document in frappe_whatsapp's own "WhatsApp
 	Message" DocType (its documented integration pattern) — this app never
 	touches the underlying WhatsApp Cloud API credentials.
+
+	Sent via a Meta-approved template (message_type "Template") rather than
+	free text: Meta requires business-initiated messages outside an open
+	customer conversation window to use a pre-approved template, and flags
+	free-text sends like this as non-compliant "marketing" traffic.
 	"""
 	if "frappe_whatsapp" not in frappe.get_installed_apps():
+		return False
+	template_name = _resolve_whatsapp_template(settings.whatsapp_template)
+	if not template_name:
+		frappe.log_error(
+			title="Proxmox Monitor: whatsapp alert failed",
+			message=f"No WhatsApp Templates record found for {settings.whatsapp_template!r}",
+		)
 		return False
 	try:
 		numbers = [n.strip() for n in settings.whatsapp_recipients.split(",") if n.strip()]
@@ -182,20 +209,44 @@ def _send_whatsapp(settings, message: str) -> bool:
 				{
 					"doctype": "WhatsApp Message",
 					"to": number,
-					"message": message,
-					"message_type": "Manual",
 					# frappe_whatsapp's before_insert hook only calls its
 					# outgoing-send logic when type == "Outgoing" — without it,
-					# insert() succeeds silently with no API call ever made, so
-					# this always reported success even though nothing sent.
-					# content_type is a mandatory field there too and selects
-					# the payload shape; "text" is all a plain-text alert body
-					# needs (see frappe_whatsapp's send_outgoing()).
+					# insert() succeeds silently with no API call ever made.
+					# content_type is a mandatory field there too, independent
+					# of message_type.
 					"type": "Outgoing",
 					"content_type": "text",
+					"message_type": "Template",
+					"template": template_name,
+					# Only read by send_template() if the target template has
+					# sample_values configured — harmless to pass otherwise.
+					"body_param": json.dumps({"1": message}),
+					"message": message,
 				}
 			).insert(ignore_permissions=True)
 		return bool(numbers)
 	except Exception:
 		frappe.log_error(title="Proxmox Monitor: whatsapp alert failed", message=frappe.get_traceback())
 		return False
+
+
+@frappe.whitelist()
+def send_test_alert() -> dict:
+	"""Send a one-off test message through every enabled, fully-configured channel.
+
+	Lets an admin verify SMTP/Telegram/WhatsApp config from the Settings
+	form without waiting for a real Warning/Critical condition to occur.
+	"""
+	frappe.only_for(("System Manager", "Proxmox Monitor Manager"))
+	settings = frappe.get_cached_doc("Proxmox Monitor Settings")
+	message = "alfaEdge Pulse Test: this is a test alert to verify your notification channels are configured correctly."
+	results = {}
+
+	if settings.enable_email_alerts and settings.email_recipients:
+		results["Email"] = _send_email(settings, "Test Alert", message)
+	if settings.enable_telegram_alerts and settings.telegram_chat_id:
+		results["Telegram"] = _send_telegram(settings, message)
+	if settings.enable_whatsapp_alerts and settings.whatsapp_recipients and settings.whatsapp_template:
+		results["WhatsApp"] = _send_whatsapp(settings, message)
+
+	return results

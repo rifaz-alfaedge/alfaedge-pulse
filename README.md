@@ -246,11 +246,26 @@ third-party notification credentials itself:
 - **WhatsApp** — install and configure
   [`frappe_whatsapp`](https://github.com/shridarpatil/frappe_whatsapp)
   separately, with its own WhatsApp Cloud API credentials. Then enable
-  WhatsApp alerts here and enter recipient numbers.
+  WhatsApp alerts here, enter recipient numbers, and set **WhatsApp
+  Template Name** to a Meta-approved **UTILITY**-category template (in
+  `frappe_whatsapp`'s **WhatsApp Templates** list, synced via its "Sync
+  from Meta" button) with exactly one body variable — that variable
+  receives the alert text. You can enter either the template's document
+  name (e.g. `alert_notification-en_US`) or just its Template Name (e.g.
+  `alert_notification`). WhatsApp Business API requires business-initiated
+  messages outside an open customer conversation to use a pre-approved
+  template; free-text sends get flagged as non-compliant marketing
+  traffic by Meta. Without a template configured, WhatsApp alerts are
+  treated as not fully configured and skipped, same as with no recipients.
 
-If a channel's app isn't installed, alerts for that channel are silently
-skipped (and still logged to **Proxmox Alert Log**) — the other channels
-are unaffected.
+If a channel's app isn't installed, or isn't fully configured, alerts for
+that channel are silently skipped (and still logged to **Proxmox Alert
+Log**) — the other channels are unaffected.
+
+Use the **Send Test Alert** button on the Proxmox Monitor Settings form to
+send a one-off test message through every currently enabled and fully
+configured channel, without waiting for a real Warning/Critical
+condition — useful for verifying SMTP/Telegram/WhatsApp setup end-to-end.
 
 ## Known Proxmox API limitations (not bugs in this app)
 

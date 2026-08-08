@@ -19,7 +19,8 @@
   "telegram_chat_id",
   "whatsapp_section",
   "enable_whatsapp_alerts",
-  "whatsapp_recipients"
+  "whatsapp_recipients",
+  "whatsapp_template"
  ],
  "fields": [
   {
@@ -116,6 +117,12 @@
    "fieldname": "whatsapp_recipients",
    "fieldtype": "Small Text",
    "label": "WhatsApp Recipients"
+  },
+  {
+   "description": "The WhatsApp Templates document name (or its Template Name) for a Meta-approved UTILITY template with exactly one body variable, which will receive the alert text. Required for WhatsApp alerts to send — without it, WhatsApp is treated as not configured and skipped.",
+   "fieldname": "whatsapp_template",
+   "fieldtype": "Data",
+   "label": "WhatsApp Template Name"
   }
  ],
  "icon": "fa fa-cog",
