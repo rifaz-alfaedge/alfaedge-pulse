@@ -1,6 +1,6 @@
 # alfaEdge Pulse
 
-**Version 1.0.2**
+**Version 1.0.2** — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 A standalone Frappe 16 app (no ERPNext dependency) that gives you a single,
 real-time dashboard for a Proxmox fleet — PVE hosts, every VM/CT running on
