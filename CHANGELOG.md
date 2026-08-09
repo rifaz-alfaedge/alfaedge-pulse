@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.3] - 2026-08-09
+
+### Added
+- **"Back to normal" recovery notifications.** When a Critical Resource
+  (CPU/RAM/storage) or Server Offline condition clears, every enabled
+  channel now gets a follow-up "resolved" message, in addition to the
+  original alert. WhatsApp recovery messages use a separate, dedicated
+  UTILITY template (**WhatsApp Recovery Template Name** in Proxmox
+  Monitor Settings) so a resolved-condition message doesn't reuse the
+  original alert's framing. Backup Failure is intentionally excluded —
+  backups often only run every ~24h, so a "back to normal" notification
+  would just be a stale, confusing non-sequitur.
+- **Alert Subscription module.** Engineers can now self-subscribe to a
+  specific Proxmox Server, or one specific VM/CT/datastore on it, and
+  choose their own Email/WhatsApp/Telegram contact per subscription
+  (*Desk → Alert Subscription → New*). Subscriptions are additive to the
+  existing global recipients in Proxmox Monitor Settings — nothing about
+  the existing global alerting changes. Each engineer only sees/manages
+  their own subscriptions (Managers see all, for audit). Subscribing to
+  a server does **not** cascade to its guests/datastores — subscribe to
+  those separately if wanted.
+- **"Send Test Alert" button on Alert Subscription** — lets a subscriber
+  verify their own channel/contact setup without needing Manager access.
+- **Dashboard: warning/critical meter icons.** A CPU/RAM/Storage ring at
+  or above its warning/critical threshold now shows a warning triangle
+  or critical octagon icon in place of the percentage, with a pulsing
+  glow on critical readings to draw the eye.
+- **Dashboard: two persistent summary cards** — "Critical Instances" and
+  "Warning Instances" — shown under the tab bar on every tab, listing
+  matching servers/guests by name with their CPU/RAM/Storage values.
+- **Dashboard: VM/CT sort control** — sort the Virtual Machines &
+  Containers grid by CPU, RAM, or Storage, ascending or descending
+  (default: CPU descending).
+
+### Changed
+- VM/CT lazy-load page size reduced from 24 to 12 per load.
+
 ## [1.0.2] - 2026-08-08
 
 ### Changed

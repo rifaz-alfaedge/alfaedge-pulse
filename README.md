@@ -1,6 +1,6 @@
 # alfaEdge Pulse
 
-**Version 1.0.2** — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version 1.0.3** — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 A standalone Frappe 16 app (no ERPNext dependency) that gives you a single,
 real-time dashboard for a Proxmox fleet — PVE hosts, every VM/CT running on
@@ -38,13 +38,19 @@ hand.
   whatever Email Account is already configured in core Frappe. Telegram
   and WhatsApp defer entirely to separate, already-installed integration
   apps — this app never stores a bot token or a Cloud API credential
-  itself; see [Alerting](#alerting).
+  itself; see [Alerting](#alerting). "Back to normal" recovery messages
+  fire when a critical condition clears, and individual engineers can
+  self-subscribe to specific servers/instances on top of the global
+  recipients — see [Alert Subscriptions](#alert-subscriptions).
 - **A live, glanceable dashboard.** CPU/RAM/Swap/storage rings with
   at-a-glance icons, a heartbeat indicator tied to how recently each node
   actually synced, click-through detail views, and dashboard ordering
   that groups every server (and its guests) by role — Production first,
   then Staging, then Development, then PBS — so what matters most is
-  always at the top.
+  always at the top. A ring past its warning/critical threshold swaps its
+  percentage for a warning/critical icon (with a pulsing glow on
+  critical), two persistent summary cards list every critical/warning
+  instance by name, and VM/CT cards can be sorted by CPU, RAM, or Storage.
 
 ## Requirements
 
@@ -266,6 +272,33 @@ Use the **Send Test Alert** button on the Proxmox Monitor Settings form to
 send a one-off test message through every currently enabled and fully
 configured channel, without waiting for a real Warning/Critical
 condition — useful for verifying SMTP/Telegram/WhatsApp setup end-to-end.
+
+### Recovery ("back to normal") notifications
+
+When a Critical Resource (CPU/RAM/storage above the critical threshold) or
+Server Offline condition clears, every enabled channel also gets a
+follow-up "resolved" message. WhatsApp recovery messages use a second,
+separate template — set **WhatsApp Recovery Template Name** in Proxmox
+Monitor Settings to a Meta-approved UTILITY template distinct from the
+main alert template, so a resolved message doesn't reuse the original
+alert's framing. Without it set, WhatsApp recovery sends are skipped
+(Email/Telegram recovery still send). Backup Failure does **not** get a
+recovery notification — backups often only run on a ~24h cadence, so
+"back to normal" would just be a stale, confusing non-sequitur.
+
+### Alert Subscriptions
+
+Beyond the global recipients above, individual engineers can self-subscribe
+to specific alerts via *Desk → Alert Subscription → New*: pick a Proxmox
+Server, optionally narrow to one specific VM/CT or datastore on it, then
+choose Email/WhatsApp/Telegram and enter your own contact info for each.
+Subscriptions are **additive** — they don't replace or affect the global
+recipients above. Each engineer only sees and manages their own
+subscriptions (`Proxmox Monitor Manager`/System Manager can see everyone's,
+for audit). A subscription to a server does **not** automatically cover
+its guests/datastores — subscribe to those separately if you want alerts
+for them too. Use the **Send Test Alert** button on a saved subscription to
+verify your own channel/contact setup.
 
 ## Known Proxmox API limitations (not bugs in this app)
 
