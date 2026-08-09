@@ -26,11 +26,14 @@ function iconFor(label: string): Parameters<typeof MeterIcon>[0]['name'] {
  * via CircularProgressBar's own documented `theme` prop, since that's the
  * one color-control surface the component actually exposes (it doesn't
  * take arbitrary hex, only a small fixed set of named themes). A small
- * identifying icon sits as a badge on the ring's rim rather than
- * overlapping the percentage in the center — CircularProgressBar always
- * renders that number itself with no way to substitute it, and the
- * percentage is the one thing on this whole dashboard nobody wants
- * crowded out. */
+ * identifying icon sits as a badge on the ring's rim.
+ *
+ * CircularProgressBar always renders a number in the center with no prop
+ * to suppress it (`showPercentage={false}` falls back to the raw step
+ * count, not blank) — so on warning/critical, an opaque badge is overlaid
+ * on top of that number instead, covering it with a warning/critical icon.
+ * The ring itself gets a pulsing glow on critical to draw the eye, reusing
+ * the same box-shadow technique as the existing heartbeat-dot animation. */
 export function MeterRow({
   label,
   value,
@@ -68,9 +71,21 @@ export function MeterRow({
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="relative">
+      <div className={`relative rounded-full ${critical ? 'meter-critical-pulse' : ''}`}>
         {/* "xl" (108px) — at least 2x the previous "sm" (42px) size per explicit request. */}
         <CircularProgressBar step={Math.round(value)} totalSteps={100} size="xl" showPercentage theme={theme} />
+        {(critical || approaching) && (
+          // z-10: CircularProgressBar's own inner text wrapper sets
+          // z-index: 2 with no stacking context of its own, so it'd
+          // otherwise paint on top of a later, unindexed sibling despite
+          // DOM order — this badge needs an explicit higher z-index to
+          // actually cover that number.
+          <div className="absolute inset-0 z-10 flex items-center justify-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-card">
+              <MeterIcon name={critical ? 'alert-octagon' : 'alert-triangle'} className={`h-8 w-8 ${labelClass}`} />
+            </div>
+          </div>
+        )}
         <div className="absolute left-1/2 top-0 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface-card">
           <MeterIcon name={iconFor(label)} className={`h-5 w-5 ${labelClass}`} />
         </div>

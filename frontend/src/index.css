@@ -83,3 +83,16 @@ body {
 .heartbeat-critical {
   animation: heartbeat-pulse-critical 1.4s ease-out infinite;
 }
+
+/* Same technique as heartbeat-pulse-critical above, sized for the larger
+ * (108px) meter rings in MeterRow.tsx — draws the eye to a CPU/RAM/Storage
+ * reading that's crossed the critical threshold. */
+@keyframes meter-pulse-critical {
+  0% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(208, 59, 59, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0); }
+}
+
+.meter-critical-pulse {
+  animation: meter-pulse-critical 1.4s ease-out infinite;
+}

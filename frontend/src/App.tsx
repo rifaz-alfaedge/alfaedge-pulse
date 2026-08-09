@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Switch } from '@rtcamp/frappe-ui-react'
 import { useAlertLogs, useBackupLogs, useDatastores, useGuests, useServers, useSettings } from './lib/hooks'
 import { ResourceCard, type DiskMeter, type Severity } from './components/ResourceCard'
+import { InstanceSeverityLists } from './components/InstanceSeverityLists'
 import { NodeDetailDialog, type SelectedNode } from './components/NodeDetailDialog'
 import { BackupsPanel } from './components/BackupsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
@@ -29,7 +30,37 @@ const DEFAULT_POLL_SECONDS = 20
 // time the scroll sentinel comes into view — keeps the DOM light as the
 // fleet grows into the hundreds of VMs/CTs instead of rendering everything
 // that matches the current filter/search all at once.
-const GUEST_PAGE_SIZE = 24
+const GUEST_PAGE_SIZE = 12
+
+type GuestSortField = 'cpu' | 'ram' | 'storage'
+type SortDirection = 'asc' | 'desc'
+
+const GUEST_SORT_OPTIONS: { field: GuestSortField; label: string }[] = [
+  { field: 'cpu', label: 'CPU' },
+  { field: 'ram', label: 'RAM' },
+  { field: 'storage', label: 'Storage' },
+]
+
+/** Guests missing a reading for the selected metric (e.g. disk usage with
+ * no QEMU agent) always sort to the end, regardless of direction — an
+ * unknown value is neither "highest" nor "lowest," just absent. */
+function guestMetricValue(g: ProxmoxGuest, field: GuestSortField): number | null {
+  if (field === 'cpu') return g.cpu_usage ?? null
+  if (field === 'ram') return g.memory_usage ?? null
+  return g.disk_usage ?? null
+}
+
+function sortGuestsByMetric(guests: ProxmoxGuest[], field: GuestSortField, direction: SortDirection) {
+  const sign = direction === 'asc' ? 1 : -1
+  return [...guests].sort((a, b) => {
+    const av = guestMetricValue(a, field)
+    const bv = guestMetricValue(b, field)
+    if (av === null && bv === null) return 0
+    if (av === null) return 1
+    if (bv === null) return -1
+    return (av - bv) * sign
+  })
+}
 
 function App() {
   const { data: servers } = useServers()
@@ -48,6 +79,8 @@ function App() {
   const [criticalOnly, setCriticalOnly] = useState(false)
   const [offlineOnly, setOfflineOnly] = useState(false)
   const [guestSearch, setGuestSearch] = useState('')
+  const [guestSortField, setGuestSortField] = useState<GuestSortField>('cpu')
+  const [guestSortDirection, setGuestSortDirection] = useState<SortDirection>('desc')
   const [visibleGuestCount, setVisibleGuestCount] = useState(GUEST_PAGE_SIZE)
   const [selected, setSelected] = useState<SelectedNode | null>(null)
 
@@ -85,7 +118,11 @@ function App() {
   const visibleHosts = filterAndSortServers(
     [...pveHosts, ...pbsInstances], serverFilter, criticalOnly, offlineOnly, isHostCritical,
   )
-  const matchingGuests = filterAndSortGuests(allGuests, allServers, serverFilter, criticalOnly, guestSearch)
+  const matchingGuests = sortGuestsByMetric(
+    filterAndSortGuests(allGuests, allServers, serverFilter, criticalOnly, guestSearch),
+    guestSortField,
+    guestSortDirection,
+  )
   const visibleGuests = matchingGuests.slice(0, visibleGuestCount)
   const hasMoreGuests = visibleGuestCount < matchingGuests.length
 
@@ -102,7 +139,7 @@ function App() {
   // matching the scroll position resetting back to the section itself.
   useEffect(() => {
     setVisibleGuestCount(GUEST_PAGE_SIZE)
-  }, [serverFilter, criticalOnly, guestSearch])
+  }, [serverFilter, criticalOnly, guestSearch, guestSortField, guestSortDirection])
 
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -194,6 +231,14 @@ function App() {
         <Tabs options={[...MAIN_TABS]} value={mainTab} onChange={(v) => setMainTab(v as (typeof MAIN_TABS)[number])} />
       </div>
 
+      <InstanceSeverityLists
+        servers={allServers}
+        guests={allGuests}
+        datastores={allDatastores}
+        isHostCritical={isHostCritical}
+        isHostWarning={isHostWarning}
+      />
+
       {mainTab === 'Overview' && (
         <>
           <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -274,9 +319,36 @@ function App() {
               />
             ) : (
               <>
-                <p className="mb-4 text-sm text-ink-muted">
-                  Showing {visibleGuests.length} of {matchingGuests.length}
-                </p>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-ink-muted">
+                    Showing {visibleGuests.length} of {matchingGuests.length}
+                  </p>
+                  <div className="flex items-center gap-1 text-sm">
+                    <span className="mr-1 text-ink-muted">Sort by</span>
+                    {GUEST_SORT_OPTIONS.map(({ field, label }) => (
+                      <button
+                        key={field}
+                        type="button"
+                        onClick={() => setGuestSortField(field)}
+                        className={`rounded-full px-3 py-1 transition-colors ${
+                          guestSortField === field
+                            ? 'bg-accent text-white'
+                            : 'text-ink-secondary hover:bg-surface-card'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setGuestSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                      title={guestSortDirection === 'desc' ? 'Descending' : 'Ascending'}
+                      className="ml-1 rounded-full px-2 py-1 text-ink-secondary hover:bg-surface-card"
+                    >
+                      {guestSortDirection === 'desc' ? '▼' : '▲'}
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
                   {visibleGuests.map((g) => (
                     <ResourceCard
