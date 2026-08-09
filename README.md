@@ -50,7 +50,9 @@ hand.
   always at the top. A ring past its warning/critical threshold swaps its
   percentage for a warning/critical icon (with a pulsing glow on
   critical), two persistent summary cards list every critical/warning
-  instance by name, and VM/CT cards can be sorted by CPU, RAM, or Storage.
+  instance by name, and VM/CT cards can be sorted by CPU, RAM, or Storage —
+  each card's own meter rings reorder to lead with whichever metric you're
+  currently sorting by.
 
 ## Requirements
 
@@ -289,16 +291,27 @@ recovery notification — backups often only run on a ~24h cadence, so
 ### Alert Subscriptions
 
 Beyond the global recipients above, individual engineers can self-subscribe
-to specific alerts via *Desk → Alert Subscription → New*: pick a Proxmox
-Server, optionally narrow to one specific VM/CT or datastore on it, then
-choose Email/WhatsApp/Telegram and enter your own contact info for each.
-Subscriptions are **additive** — they don't replace or affect the global
-recipients above. Each engineer only sees and manages their own
-subscriptions (`Proxmox Monitor Manager`/System Manager can see everyone's,
-for audit). A subscription to a server does **not** automatically cover
-its guests/datastores — subscribe to those separately if you want alerts
-for them too. Use the **Send Test Alert** button on a saved subscription to
-verify your own channel/contact setup.
+to specific alerts via *Desk → Alert Subscription* — one document per user.
+Set your own Email/WhatsApp/Telegram contact info once at the top, then add
+rows to the **Servers / Instances** table below: pick a Proxmox Server,
+optionally narrowed to one specific VM/CT or datastore on it. Add as many
+rows as you like to watch multiple things. Subscriptions are **additive**
+— they don't replace or affect the global recipients above. Each engineer
+only sees and manages their own subscription document (`Proxmox Monitor
+Manager`/System Manager can see everyone's, for audit). Watching a server
+does **not** automatically cover its guests/datastores — add those as
+separate rows if you want alerts for them too. Use the **Send Test Alert**
+button on a saved subscription to verify your own channel/contact setup.
+
+**Subscriptions reach Dev/Staging/Backup instances too.** Per-guest
+resource alerting (Critical Resource/Resource Warning) is normally scoped
+to Production servers — a Development/Staging VM is expected to spike
+routinely and the global recipient list is never notified about it. But if
+you specifically subscribe to a Dev/Staging VM/CT, you'll be notified about
+it regardless of its server's role — subscribing is a deliberate, per-
+instance opt-in. This also means every guest's warning/critical status is
+now tracked and shown on the dashboard honestly, whatever its server's
+role, even though the global list still only hears about Production ones.
 
 ## Known Proxmox API limitations (not bugs in this app)
 

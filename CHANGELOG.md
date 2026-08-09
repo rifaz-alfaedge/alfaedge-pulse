@@ -14,17 +14,34 @@ All notable changes to this project are documented here.
   original alert's framing. Backup Failure is intentionally excluded —
   backups often only run every ~24h, so a "back to normal" notification
   would just be a stale, confusing non-sequitur.
-- **Alert Subscription module.** Engineers can now self-subscribe to a
-  specific Proxmox Server, or one specific VM/CT/datastore on it, and
-  choose their own Email/WhatsApp/Telegram contact per subscription
-  (*Desk → Alert Subscription → New*). Subscriptions are additive to the
-  existing global recipients in Proxmox Monitor Settings — nothing about
-  the existing global alerting changes. Each engineer only sees/manages
-  their own subscriptions (Managers see all, for audit). Subscribing to
-  a server does **not** cascade to its guests/datastores — subscribe to
-  those separately if wanted.
+- **Alert Subscription module.** Engineers can now self-subscribe to
+  alerts (*Desk → Alert Subscription*) — one document per user, holding
+  their own Email/WhatsApp/Telegram contact info once, plus a table of
+  scenarios (a Proxmox Server, or one specific VM/CT/datastore on it) to
+  watch. Subscriptions are additive to the existing global recipients in
+  Proxmox Monitor Settings — nothing about the existing global alerting
+  changes. Each engineer only sees/manages their own subscription
+  document (Managers see all, for audit). Watching a server does **not**
+  cascade to its guests/datastores — add those as separate scenario rows
+  if wanted.
+- **Subscriptions override the Production-only guest alerting rule.**
+  Per-guest resource alerting (Critical Resource / Resource Warning) has
+  always been scoped to Production servers, to avoid noise from Dev/
+  Staging VMs that are expected to spike routinely. Severity is now
+  tracked for *every* guest regardless of role (so Dev/Staging/Backup
+  VM/CT cards correctly show real warning/critical icons and appear in
+  the summary cards too), but the **global** Settings recipient list is
+  still only notified for Production guests — an individual who
+  specifically subscribes to a Dev/Staging instance gets notified about
+  it regardless of role. Server-level, datastore-level, Backup Failure,
+  and Server Offline alerting are unaffected (always global, as before).
 - **"Send Test Alert" button on Alert Subscription** — lets a subscriber
   verify their own channel/contact setup without needing Manager access.
+- **Dashboard: VM/CT cards lead with the active sort metric.** Sorting
+  the Virtual Machines & Containers grid by CPU/RAM/Storage now also
+  reorders each card's own meter rings so the sorted-by metric is always
+  the first (leftmost) ring — RAM first when sorting by RAM, Disk first
+  when sorting by Storage, and so on.
 - **Dashboard: warning/critical meter icons.** A CPU/RAM/Storage ring at
   or above its warning/critical threshold now shows a warning triangle
   or critical octagon icon in place of the percentage, with a pulsing
