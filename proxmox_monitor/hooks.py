@@ -130,13 +130,13 @@ after_migrate = "proxmox_monitor.tasks.poller.ensure_poller_running"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+permission_query_conditions = {
+	"Alert Subscription": "proxmox_monitor.proxmox_fleet_monitor.doctype.alert_subscription.alert_subscription.get_permission_query_conditions",
+}
+
+has_permission = {
+	"Alert Subscription": "proxmox_monitor.proxmox_fleet_monitor.doctype.alert_subscription.alert_subscription.has_permission",
+}
 
 # Document Events
 # ---------------

@@ -1,0 +1,171 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-09 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "server",
+  "column_break_target",
+  "instance_type",
+  "instance",
+  "channels_section",
+  "enable_email",
+  "email",
+  "column_break_channels_1",
+  "enable_whatsapp",
+  "whatsapp_number",
+  "column_break_channels_2",
+  "enable_telegram",
+  "telegram_chat_id"
+ ],
+ "fields": [
+  {
+   "description": "The engineer to notify. Defaults to you — only change this if you're subscribing on someone else's behalf.",
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Proxmox Server",
+   "options": "Proxmox Server",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_target",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Leave blank to subscribe to the server itself (e.g. Server Offline, host CPU/RAM). Set this to subscribe to one specific VM/CT or datastore on that server instead.",
+   "fieldname": "instance_type",
+   "fieldtype": "Select",
+   "label": "Instance Type",
+   "options": "\nProxmox Guest\nProxmox Datastore"
+  },
+  {
+   "depends_on": "eval:doc.instance_type",
+   "description": "Only guests/datastores on the selected Proxmox Server are offered.",
+   "fieldname": "instance",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Instance",
+   "options": "instance_type"
+  },
+  {
+   "fieldname": "channels_section",
+   "fieldtype": "Section Break",
+   "label": "Notify Me Via"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_email",
+   "fieldtype": "Check",
+   "label": "Email"
+  },
+  {
+   "depends_on": "eval:doc.enable_email",
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email Address",
+   "mandatory_depends_on": "eval:doc.enable_email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "column_break_channels_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_whatsapp",
+   "fieldtype": "Check",
+   "label": "WhatsApp"
+  },
+  {
+   "depends_on": "eval:doc.enable_whatsapp",
+   "description": "International format, e.g. 919812345678.",
+   "fieldname": "whatsapp_number",
+   "fieldtype": "Data",
+   "label": "WhatsApp Number",
+   "mandatory_depends_on": "eval:doc.enable_whatsapp"
+  },
+  {
+   "fieldname": "column_break_channels_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_telegram",
+   "fieldtype": "Check",
+   "label": "Telegram"
+  },
+  {
+   "depends_on": "eval:doc.enable_telegram",
+   "fieldname": "telegram_chat_id",
+   "fieldtype": "Data",
+   "label": "Telegram Chat ID",
+   "mandatory_depends_on": "eval:doc.enable_telegram"
+  }
+ ],
+ "icon": "fa fa-bell-o",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Proxmox Fleet Monitor",
+ "name": "Alert Subscription",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

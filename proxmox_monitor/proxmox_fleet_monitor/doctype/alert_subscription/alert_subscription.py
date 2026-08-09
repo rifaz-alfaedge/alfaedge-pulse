@@ -1,0 +1,80 @@
+# Copyright (c) 2026, AlfaEdge and contributors
+# For license information, please see license.txt
+
+from __future__ import annotations
+
+import frappe
+from frappe import _
+from frappe.model.document import Document
+
+
+class AlertSubscription(Document):
+	"""One engineer's opt-in to be notified (in addition to Proxmox Monitor
+	Settings' global recipients) about alerts for one Proxmox Server, or
+	one specific Guest/Datastore living on it.
+
+	Deliberately non-cascading: subscribing to a server only matches
+	alerts fired directly against that server, never its guests/datastores
+	— see ``_get_matching_subscriptions`` in ``alerts/dispatch.py``.
+	"""
+
+	def before_insert(self):
+		if not self.user:
+			self.user = frappe.session.user
+
+	def validate(self):
+		self._validate_at_least_one_channel()
+		self._validate_channel_contacts()
+		self._validate_instance_belongs_to_server()
+
+	def _validate_at_least_one_channel(self):
+		if not (self.enable_email or self.enable_whatsapp or self.enable_telegram):
+			frappe.throw(_("Enable at least one notification channel (Email, WhatsApp, or Telegram)."))
+
+	def _validate_channel_contacts(self):
+		if self.enable_email and not (self.email or "").strip():
+			frappe.throw(_("Email Address is required when Email is enabled."))
+		if self.enable_whatsapp and not (self.whatsapp_number or "").strip():
+			frappe.throw(_("WhatsApp Number is required when WhatsApp is enabled."))
+		if self.enable_telegram and not (self.telegram_chat_id or "").strip():
+			frappe.throw(_("Telegram Chat ID is required when Telegram is enabled."))
+
+	def _validate_instance_belongs_to_server(self):
+		"""Defense against a stale/bypassed client-side set_query filter —
+		the instance field is only ever meant to hold a Guest/Datastore that
+		actually lives on the selected server.
+		"""
+		if not self.instance_type or not self.instance:
+			return
+		if self.instance_type not in ("Proxmox Guest", "Proxmox Datastore"):
+			frappe.throw(_("Instance Type must be Proxmox Guest or Proxmox Datastore."))
+		owning_server = frappe.db.get_value(self.instance_type, self.instance, "server")
+		if owning_server != self.server:
+			frappe.throw(_("The selected instance does not belong to the selected server."))
+
+
+def get_permission_query_conditions(user: str | None = None) -> str:
+	"""List-view/report scoping: Managers see every subscription (to audit
+	who's subscribed to what); everyone else only sees their own.
+
+	Filters on the `user` field, not `owner` — a subscription is tied to a
+	user, not necessarily its creator (e.g. a manager subscribing an
+	engineer on their behalf) — something Frappe's built-in if_owner
+	permission level can't express, since it's pinned to the owner
+	metafield.
+	"""
+	user = user or frappe.session.user
+	if user == "Administrator" or set(frappe.get_roles(user)) & {"System Manager", "Proxmox Monitor Manager"}:
+		return ""
+	return f"(`tabAlert Subscription`.`user` = {frappe.db.escape(user)})"
+
+
+def has_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
+	"""Doc-level counterpart to get_permission_query_conditions — needed
+	because the query-condition hook alone only narrows list views/reports;
+	a direct by-name open (URL, API, report link) still goes through this.
+	"""
+	user = user or frappe.session.user
+	if user == "Administrator" or set(frappe.get_roles(user)) & {"System Manager", "Proxmox Monitor Manager"}:
+		return True
+	return doc.user == user
