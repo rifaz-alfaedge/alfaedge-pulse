@@ -408,14 +408,15 @@ def _upsert_guest(
 	old_is_critical = cint(doc.is_critical)
 	old_is_warning = cint(doc.is_warning)
 
-	# Per-guest resource alerting only applies to Production servers — a
-	# Development/Staging/Backup host's individual VMs/CTs are expected to
-	# spike routinely and would just be noise; for those roles only the
-	# host itself (_apply_host_status), its storage pools (_upsert_datastore)
-	# and backup task health (_handle_backup_task_result) are flagged, none
-	# of which go through this function.
+	# Severity is tracked for every guest regardless of role — a
+	# Development/Staging/Backup host's VMs/CTs are still expected to spike
+	# routinely, but suppressing that here would also hide it from the
+	# dashboard and make it impossible for an individual Alert Subscription
+	# to ever see a transition to notify on. Instead, the *global* Settings
+	# recipient list stays Production-only — see notify_global below and
+	# dispatch.py's _merge_contacts.
 	readings = [cpu_usage, memory_usage] + ([disk_pct] if disk_pct is not None else [])
-	if server.role == "Production" and readings:
+	if readings:
 		is_critical, is_warning = _track_severity(doc, max(readings), thresholds, now_datetime())
 	else:
 		is_critical, is_warning = False, False
@@ -439,18 +440,26 @@ def _upsert_guest(
 	doc.save(ignore_permissions=True)
 
 	metrics = [("CPU", cpu_usage), ("RAM", memory_usage)] + ([("Disk", disk_pct)] if disk_pct is not None else [])
+	# Global Settings recipients stay Production-only, matching this app's
+	# existing "Dev/Staging spikes routinely, would be noise" stance —
+	# individual Alert Subscriptions still get notified regardless of role
+	# (see _handle_transition/dispatch.py), since subscribing is an
+	# explicit, deliberate opt-in per instance.
+	notify_global = server.role == "Production"
 	_handle_transition(
 		old_is_critical, is_critical, "Proxmox Guest", doc.name,
 		"Critical Resource",
 		f"{server.server_name} → {guest_name}: {_format_over_threshold(metrics, thresholds.critical_percent)} "
 		f"above {thresholds.critical_percent}%",
 		recovery_message=f"{server.server_name} → {guest_name}: usage back below {thresholds.critical_percent}%",
+		notify_global=notify_global,
 	)
 	_handle_transition(
 		old_is_warning, is_warning, "Proxmox Guest", doc.name,
 		"Resource Warning",
 		f"{server.server_name} → {guest_name}: {_format_over_threshold(metrics, thresholds.warning_percent)} "
 		f"above {thresholds.warning_percent}% for {thresholds.warning_minutes}+ min",
+		notify_global=notify_global,
 	)
 
 
@@ -1107,6 +1116,7 @@ def _handle_transition(
 	alert_type: str,
 	message: str,
 	recovery_message: str | None = None,
+	notify_global: bool = True,
 ) -> None:
 	"""Dispatch an alert on False->True, resolve it on True->False. No-op otherwise.
 
@@ -1121,12 +1131,18 @@ def _handle_transition(
 	call sites, per this app's decision not to notify on Resource Warning
 	recovering) to also send a "back to normal" notification once the
 	condition clears.
+
+	``notify_global`` gates whether Proxmox Monitor Settings' global
+	recipient lists get notified (see dispatch.py's _merge_contacts) —
+	individual Alert Subscriptions are notified either way. Only guest-level
+	calls ever pass False (non-Production servers); every other caller
+	(server/datastore/offline/backup) keeps the default.
 	"""
 	if is_critical and not was_critical:
-		dispatch_alert(alert_type, doctype, name, message)
+		dispatch_alert(alert_type, doctype, name, message, notify_global=notify_global)
 	elif was_critical and not is_critical:
 		resolve_alert(doctype, name, alert_type)
 		if recovery_message:
-			dispatch_recovery(alert_type, doctype, name, recovery_message)
+			dispatch_recovery(alert_type, doctype, name, recovery_message, notify_global=notify_global)
 	elif is_critical and was_critical and not has_open_alert(doctype, name, alert_type):
-		dispatch_alert(alert_type, doctype, name, message)
+		dispatch_alert(alert_type, doctype, name, message, notify_global=notify_global)

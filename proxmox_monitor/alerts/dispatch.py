@@ -29,7 +29,9 @@ import json
 import frappe
 
 
-def dispatch_alert(alert_type: str, reference_doctype: str, reference_name: str, message: str) -> None:
+def dispatch_alert(
+	alert_type: str, reference_doctype: str, reference_name: str, message: str, notify_global: bool = True
+) -> None:
 	"""Record and send one alert for a newly-observed problem.
 
 	Args:
@@ -37,13 +39,20 @@ def dispatch_alert(alert_type: str, reference_doctype: str, reference_name: str,
 		reference_doctype: The DocType the alert is about (e.g. "Proxmox Guest").
 		reference_name: The specific document name (e.g. "alpha-104").
 		message: Human-readable alert text, sent verbatim to every enabled channel.
+		notify_global: Whether Proxmox Monitor Settings' global recipient
+			lists get notified — False for guest-level alerts on
+			non-Production servers (see poller.py's _upsert_guest).
+			Individual Alert Subscriptions are notified either way.
 	"""
 	settings = frappe.get_cached_doc("Proxmox Monitor Settings")
 	subscriptions = _get_matching_subscriptions(reference_doctype, reference_name)
 	channels_sent = []
 
 	email_recipients = _merge_contacts(
-		bool(settings.enable_email_alerts), settings.email_recipients, (s.email for s in subscriptions if s.enable_email)
+		bool(settings.enable_email_alerts),
+		settings.email_recipients,
+		(s.email for s in subscriptions if s.enable_email),
+		include_global=notify_global,
 	)
 	if email_recipients and _send_email(email_recipients, alert_type, message):
 		channels_sent.append("Email")
@@ -52,6 +61,7 @@ def dispatch_alert(alert_type: str, reference_doctype: str, reference_name: str,
 		bool(settings.enable_telegram_alerts),
 		settings.telegram_chat_id,
 		(s.telegram_chat_id for s in subscriptions if s.enable_telegram),
+		include_global=notify_global,
 	)
 	if telegram_ids and any([_send_telegram(cid, message) for cid in telegram_ids]):
 		channels_sent.append("Telegram")
@@ -60,6 +70,7 @@ def dispatch_alert(alert_type: str, reference_doctype: str, reference_name: str,
 		bool(settings.enable_whatsapp_alerts),
 		settings.whatsapp_recipients,
 		(s.whatsapp_number for s in subscriptions if s.enable_whatsapp),
+		include_global=notify_global,
 	)
 	template_name = _resolve_whatsapp_template(settings.whatsapp_template) if settings.whatsapp_template else None
 	if whatsapp_numbers and template_name and _send_whatsapp(whatsapp_numbers, template_name, message):
@@ -79,7 +90,9 @@ def dispatch_alert(alert_type: str, reference_doctype: str, reference_name: str,
 	).insert(ignore_permissions=True)
 
 
-def dispatch_recovery(alert_type: str, reference_doctype: str, reference_name: str, message: str) -> None:
+def dispatch_recovery(
+	alert_type: str, reference_doctype: str, reference_name: str, message: str, notify_global: bool = True
+) -> None:
 	"""Send a "back to normal" notification once a previously critical
 	condition has cleared, and log it as its own Proxmox Alert Log row.
 
@@ -90,13 +103,18 @@ def dispatch_recovery(alert_type: str, reference_doctype: str, reference_name: s
 	flipped to resolved by resolve_alert(); this is a separate, later
 	event ("we told people it's fixed"), distinguishable in the Alert Log
 	by its message text and later timestamp. No schema change needed.
+
+	``notify_global`` mirrors dispatch_alert's — see there.
 	"""
 	settings = frappe.get_cached_doc("Proxmox Monitor Settings")
 	subscriptions = _get_matching_subscriptions(reference_doctype, reference_name)
 	channels_sent = []
 
 	email_recipients = _merge_contacts(
-		bool(settings.enable_email_alerts), settings.email_recipients, (s.email for s in subscriptions if s.enable_email)
+		bool(settings.enable_email_alerts),
+		settings.email_recipients,
+		(s.email for s in subscriptions if s.enable_email),
+		include_global=notify_global,
 	)
 	if email_recipients and _send_email(email_recipients, alert_type, message, severity="Resolved"):
 		channels_sent.append("Email")
@@ -105,6 +123,7 @@ def dispatch_recovery(alert_type: str, reference_doctype: str, reference_name: s
 		bool(settings.enable_telegram_alerts),
 		settings.telegram_chat_id,
 		(s.telegram_chat_id for s in subscriptions if s.enable_telegram),
+		include_global=notify_global,
 	)
 	if telegram_ids and any([_send_telegram(cid, message) for cid in telegram_ids]):
 		channels_sent.append("Telegram")
@@ -113,6 +132,7 @@ def dispatch_recovery(alert_type: str, reference_doctype: str, reference_name: s
 		bool(settings.enable_whatsapp_alerts),
 		settings.whatsapp_recipients,
 		(s.whatsapp_number for s in subscriptions if s.enable_whatsapp),
+		include_global=notify_global,
 	)
 	template_name = (
 		_resolve_whatsapp_template(settings.whatsapp_recovery_template) if settings.whatsapp_recovery_template else None
@@ -135,9 +155,11 @@ def dispatch_recovery(alert_type: str, reference_doctype: str, reference_name: s
 
 
 def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> list:
-	"""Alert Subscription rows to additionally notify for this alert/recovery.
+	"""Alert Subscription (parent, contact info) rows to additionally notify
+	for this alert/recovery, found via their Alert Subscription Item
+	scenario rows.
 
-	Deliberately non-cascading: a server-only subscription (instance blank)
+	Deliberately non-cascading: a server-only scenario (instance blank)
 	only matches alerts fired directly against that Proxmox Server, never
 	its guests/datastores — subscribe to those separately if wanted.
 	"""
@@ -145,22 +167,32 @@ def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> 
 		filters = {"server": reference_name, "instance": ""}
 	else:
 		filters = {"instance_type": reference_doctype, "instance": reference_name}
+	rows = frappe.get_all("Alert Subscription Item", filters=filters, fields=["parent"])
+	if not rows:
+		return []
 	return frappe.get_all(
 		"Alert Subscription",
-		filters=filters,
+		filters={"name": ["in", {r.parent for r in rows}]},
 		fields=["enable_email", "email", "enable_telegram", "telegram_chat_id", "enable_whatsapp", "whatsapp_number"],
 	)
 
 
-def _merge_contacts(enabled: bool, global_value: str | None, subscription_values) -> list[str]:
+def _merge_contacts(
+	enabled: bool, global_value: str | None, subscription_values, include_global: bool = True
+) -> list[str]:
 	"""Merge a channel's global recipient(s) (Proxmox Monitor Settings) with
 	each matching Alert Subscription's own contact for that channel.
 
 	[] outright if the channel's master "Enable ... Alerts" checkbox is
 	off — that's a fleet-wide kill switch a subscription can't override.
-	When on, the global field is allowed to be empty (subscriptions alone
-	still get notified), which is what makes subscriptions additive rather
-	than requiring the global list to be populated first. Deduped
+	``include_global`` is a separate, narrower gate: False excludes just
+	the global recipient list for this particular alert (e.g. a
+	non-Production guest), while subscription values still flow through —
+	this is what lets an individual subscriber override the role-based
+	gate without touching the fleet-wide switch. When both are satisfied,
+	the global field is allowed to be empty (subscriptions alone still get
+	notified), which is what makes subscriptions additive rather than
+	requiring the global list to be populated first. Deduped
 	case/whitespace-insensitively so a subscriber who's also in the global
 	list is never double-notified.
 	"""
@@ -168,7 +200,10 @@ def _merge_contacts(enabled: bool, global_value: str | None, subscription_values
 		return []
 	seen: set[str] = set()
 	merged: list[str] = []
-	for value in [v.strip() for v in (global_value or "").split(",")] + [(v or "").strip() for v in subscription_values]:
+	candidates = ([v.strip() for v in (global_value or "").split(",")] if include_global else []) + [
+		(v or "").strip() for v in subscription_values
+	]
+	for value in candidates:
 		if not value:
 			continue
 		key = value.lower()
