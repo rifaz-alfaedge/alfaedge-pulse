@@ -13,7 +13,8 @@
   "storage_role",
   "is_critical",
   "is_warning",
-  "warning_since",
+  "warning_streak",
+  "critical_streak",
   "column_break_usage",
   "used",
   "total",
@@ -60,7 +61,7 @@
   },
   {
    "default": "0",
-   "description": "At or above the Critical Threshold — alerted on immediately.",
+   "description": "At or above the Critical Threshold for the configured Confirmation Checks.",
    "fieldname": "is_critical",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -69,7 +70,7 @@
   },
   {
    "default": "0",
-   "description": "At or above the Warning Threshold continuously for the configured Warning Duration, but below Critical.",
+   "description": "At or above the Warning Threshold for the configured Confirmation Checks, but below Critical.",
    "fieldname": "is_warning",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -77,11 +78,23 @@
    "read_only": 1
   },
   {
-   "description": "When usage first went at-or-above the Warning Threshold in the current unbroken streak. Cleared the moment a reading dips back below it.",
-   "fieldname": "warning_since",
-   "fieldtype": "Datetime",
+   "default": "0",
+   "description": "Consecutive polls usage has stayed at-or-above the Warning Threshold. Cleared to 0 the moment a reading dips back below it.",
+   "fieldname": "warning_streak",
+   "fieldtype": "Int",
    "hidden": 1,
-   "label": "Warning Since",
+   "label": "Warning Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Consecutive polls usage has stayed at-or-above the Critical Threshold. Cleared to 0 the moment a reading dips back below it.",
+   "fieldname": "critical_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Critical Streak",
+   "non_negative": 1,
    "read_only": 1
   },
   {

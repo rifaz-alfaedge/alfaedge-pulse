@@ -109,6 +109,6 @@ export interface ProxmoxAlertLog {
 export interface ProxmoxMonitorSettings {
   poll_interval_seconds: number
   warning_threshold_percent: number
-  warning_duration_minutes: number
   critical_threshold_percent: number
+  confirmation_checks: number
 }

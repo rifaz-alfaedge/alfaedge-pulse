@@ -26,7 +26,8 @@
   "status",
   "is_critical",
   "backup_critical",
-  "warning_since",
+  "warning_streak",
+  "critical_streak",
   "column_break_status",
   "cpu_usage",
   "memory_usage",
@@ -176,11 +177,23 @@
    "read_only": 1
   },
   {
-   "description": "When CPU/RAM first went at-or-above the Warning Threshold in the current unbroken streak. Cleared the moment a reading dips back below it; a Warning alert only fires once this has held for the configured Warning Duration.",
-   "fieldname": "warning_since",
-   "fieldtype": "Datetime",
+   "default": "0",
+   "description": "Consecutive polls CPU/RAM has stayed at-or-above the Warning Threshold. Cleared to 0 the moment a reading dips back below it; a Warning alert only fires once this reaches the configured Confirmation Checks.",
+   "fieldname": "warning_streak",
+   "fieldtype": "Int",
    "hidden": 1,
-   "label": "Warning Since",
+   "label": "Warning Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Consecutive polls CPU/RAM has stayed at-or-above the Critical Threshold. Cleared to 0 the moment a reading dips back below it; a Critical alert only fires once this reaches the configured Confirmation Checks.",
+   "fieldname": "critical_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Critical Streak",
+   "non_negative": 1,
    "read_only": 1
   },
   {

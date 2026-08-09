@@ -14,7 +14,8 @@
   "status",
   "is_critical",
   "is_warning",
-  "warning_since",
+  "warning_streak",
+  "critical_streak",
   "column_break_resources",
   "cpu_usage",
   "memory_usage",
@@ -80,7 +81,7 @@
   },
   {
    "default": "0",
-   "description": "At or above the Critical Threshold — alerted on immediately. Only ever set for guests on a Production server.",
+   "description": "At or above the Critical Threshold for the configured Confirmation Checks. Tracked for guests on every server role; the global recipient list is only notified for Production, see Alert Subscriptions for the per-instance override.",
    "fieldname": "is_critical",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -89,7 +90,7 @@
   },
   {
    "default": "0",
-   "description": "At or above the Warning Threshold continuously for the configured Warning Duration, but below Critical. Only ever set for guests on a Production server.",
+   "description": "At or above the Warning Threshold for the configured Confirmation Checks, but below Critical. Tracked for guests on every server role.",
    "fieldname": "is_warning",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -97,11 +98,23 @@
    "read_only": 1
   },
   {
-   "description": "When CPU/RAM/disk first went at-or-above the Warning Threshold in the current unbroken streak. Cleared the moment a reading dips back below it.",
-   "fieldname": "warning_since",
-   "fieldtype": "Datetime",
+   "default": "0",
+   "description": "Consecutive polls CPU/RAM/disk has stayed at-or-above the Warning Threshold. Cleared to 0 the moment a reading dips back below it.",
+   "fieldname": "warning_streak",
+   "fieldtype": "Int",
    "hidden": 1,
-   "label": "Warning Since",
+   "label": "Warning Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Consecutive polls CPU/RAM/disk has stayed at-or-above the Critical Threshold. Cleared to 0 the moment a reading dips back below it.",
+   "fieldname": "critical_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Critical Streak",
+   "non_negative": 1,
    "read_only": 1
   },
   {

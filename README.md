@@ -1,6 +1,6 @@
 # alfaEdge Pulse
 
-**Version 1.0.3** — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version 1.0.5** — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 A standalone Frappe 16 app (no ERPNext dependency) that gives you a single,
 real-time dashboard for a Proxmox fleet — PVE hosts, every VM/CT running on
@@ -16,11 +16,11 @@ hand.
   its own. Nothing is entered by hand, and anything removed from Proxmox
   disappears from the dashboard on the next cycle.
 - **Two-phase resource alerting.** A reading at or above the **Warning**
-  threshold (default 85%) only fires once it's stayed there continuously —
-  no dip below it, even briefly — for the configured **Warning Duration**
-  (default 5 minutes). A reading at or above the **Critical** threshold
-  (default 95%) fires immediately, no waiting period. See
-  [How it works](#how-it-works) for exactly how the two tiers interact.
+  threshold (default 85%) or the **Critical** threshold (default 95%) only
+  fires once it's stayed there continuously — no dip below it, even
+  briefly — for the configured **Confirmation Checks** (default 3
+  consecutive polls), so a single transient spike never triggers an alert.
+  See [How it works](#how-it-works) for exactly how the two tiers interact.
 - **Role-aware noise control.** Per-guest resource alerts (Warning and
   Critical) only apply to servers whose `role` is **Production** — a
   Development/Staging/Backup host's individual VMs/CTs are expected to
@@ -171,20 +171,23 @@ with `git checkout -- <file>` and reinstall.
   create or delete them by hand — your edits will be overwritten on the next
   cycle. The exceptions are a guest's `assigned_engineer`, `network_mode`,
   `public_ip`, and `access_url` fields, which are yours to set.
-- A guest's `is_critical`/`is_warning` are CPU/RAM/disk only, and only
-  ever set for servers whose `role` is **Production** — see the role
-  check in `_upsert_guest`. Other roles never flag individual guests,
-  regardless of actual usage.
-- Warning is deliberately not immediate. `_track_severity` only sets
-  `is_warning` once a reading has stayed at or above `warning_threshold_percent`
-  continuously — tracked via each doctype's `warning_since` field, reset
-  to null the instant a reading dips back below the line — for the full
-  `warning_duration_minutes`. Critical (`critical_threshold_percent`)
-  short-circuits that wait entirely. Escalating from Warning to Critical
-  resolves the open Warning alert (Critical supersedes it); dropping back
-  from Critical into the warning band re-opens Warning immediately rather
-  than restarting the 5-minute wait, since the reading's already been
-  elevated the whole time.
+- A guest's `is_critical`/`is_warning` are CPU/RAM/disk only, and are
+  tracked for every guest regardless of its server's `role` — see
+  `_upsert_guest`. What's role-gated is only whether the **global**
+  Proxmox Monitor Settings recipient list gets notified (Production
+  only); an individual Alert Subscription still gets notified for a
+  Dev/Staging/any-role instance it specifically watches — see
+  [Alert Subscriptions](#alert-subscriptions).
+- Neither tier is immediate. `_track_severity` only sets `is_warning`/
+  `is_critical` once a reading has stayed at or above the relevant
+  threshold continuously — tracked via each doctype's `warning_streak`/
+  `critical_streak` fields, reset to 0 the instant a reading dips below
+  the line — for the full `confirmation_checks` consecutive polls.
+  Escalating from Warning to Critical resolves the open Warning alert
+  (Critical supersedes it); dropping back from Critical into the warning
+  band re-opens Warning immediately rather than restarting the count,
+  since the reading's already been at-or-above the warning line the
+  whole time.
 - A server's `is_critical` combines two independent things, for every
   role: its own CPU/RAM (`_apply_host_status`), and whether its most
   recently processed backup task failed (`backup_critical`, set in
@@ -234,9 +237,9 @@ Everything below lives in the single **Proxmox Monitor Settings** doctype
 | Field | Default | Meaning |
 | --- | --- | --- |
 | Poll Interval (seconds) | 20 | How often the background loop refreshes every connected server. |
-| Warning Threshold (%) | 85 | See [How it works](#how-it-works) — the sustained-for-a-while tier. |
-| Warning Duration (minutes) | 5 | How long a reading must stay at/above the Warning Threshold, with no dip below it, before a Warning alert fires. |
-| Critical Threshold (%) | 95 | The immediate, no-waiting-period tier. |
+| Warning Threshold (%) | 85 | See [How it works](#how-it-works) — the lower of the two tiers. |
+| Critical Threshold (%) | 95 | The higher, more urgent tier. |
+| Confirmation Checks | 3 | How many consecutive polls a reading must stay at/above the Warning/Critical Threshold, with no dip below it, before that alert fires. Applies to both tiers. |
 | Enable Email/Telegram/WhatsApp Alerts + recipients | off | See [Alerting](#alerting) below. |
 
 ## Alerting

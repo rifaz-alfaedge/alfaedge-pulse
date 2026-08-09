@@ -42,24 +42,25 @@ Design notes (the "why" behind the shape of this module):
   failed as a whole — see ``_handle_backup_task_result``. A failure marks
   the *server* critical (``Proxmox Server.backup_critical``), not the
   individual guests inside that job.
-- **Per-guest resource alerting is Production-only.** A Development/
-  Staging/Backup host's VMs/CTs are expected to spike routinely and would
-  just be noise; for those roles, only the host itself, its storage pools,
-  and its backup task health are flagged critical — see the role check in
-  ``_upsert_guest``.
+- **Per-guest severity is tracked for every role, notified globally only
+  for Production.** A Development/Staging/Backup host's VMs/CTs are still
+  expected to spike routinely, but suppressing severity tracking entirely
+  would also hide it from the dashboard and make per-instance Alert
+  Subscriptions unable to ever see a transition. Instead, severity is
+  always tracked; only the *global* Settings recipient list is gated to
+  Production — see ``notify_global`` in ``_upsert_guest``.
 - **A server can be "critical" for two independent reasons.** Host
   resource usage (CPU/RAM, from ``_apply_host_status``) and backup task
   health (``backup_critical``) are OR'd together into the final
   ``is_critical`` in ``sync_server``, but tracked and alerted on
   separately — clearing one never silently clears the other, and a
   transition in one doesn't get misreported as the other's alert type.
-- **Resource severity is two-phase: Warning, then Critical.** Critical
-  (``Thresholds.critical_percent``) fires immediately, every cycle a
-  reading is at or above it. Warning (``Thresholds.warning_percent``) is
-  deliberately *not* immediate — it only fires once a reading has stayed
-  at or above that line, with no dip below it, for a full
-  ``Thresholds.warning_minutes`` — see ``_track_severity``. This applies
-  identically to host CPU/RAM, guest CPU/RAM/disk, and datastore usage.
+- **Both severity tiers require confirmation.** Neither Warning
+  (``Thresholds.warning_percent``) nor Critical (``Thresholds.critical_percent``)
+  fires on a single reading — each only fires once a reading has stayed at
+  or above its line, with no dip below it, for ``Thresholds.confirmation_checks``
+  consecutive polls — see ``_track_severity``. This applies identically to
+  host CPU/RAM, guest CPU/RAM/disk, and datastore usage.
 """
 
 from __future__ import annotations
@@ -96,14 +97,14 @@ class Thresholds(NamedTuple):
 
 	warning_percent: int
 	critical_percent: int
-	warning_minutes: int
+	confirmation_checks: int
 
 
 def _get_thresholds() -> Thresholds:
 	return Thresholds(
 		warning_percent=cint(frappe.db.get_single_value("Proxmox Monitor Settings", "warning_threshold_percent")) or 85,
 		critical_percent=cint(frappe.db.get_single_value("Proxmox Monitor Settings", "critical_threshold_percent")) or 95,
-		warning_minutes=cint(frappe.db.get_single_value("Proxmox Monitor Settings", "warning_duration_minutes")) or 5,
+		confirmation_checks=cint(frappe.db.get_single_value("Proxmox Monitor Settings", "confirmation_checks")) or 3,
 	)
 
 
@@ -267,7 +268,7 @@ def sync_server(server) -> None:
 		old_resource_warning, new_resource_warning, "Proxmox Server", server.name,
 		"Resource Warning",
 		f"{server.server_name}: {_format_over_threshold(metrics, thresholds.warning_percent)} above {thresholds.warning_percent}% "
-		f"for {thresholds.warning_minutes}+ min",
+		f"for {thresholds.confirmation_checks}+ checks",
 	)
 	# The raw exception text (server.last_error) is deliberately left out of
 	# the alert body — it can be a long technical string (a stack trace-like
@@ -328,7 +329,7 @@ def _apply_host_status(server, status: dict, thresholds: Thresholds) -> None:
 	server.storage_total = round(flt(rootfs.get("total")) / 1e9, 2)
 	server.uptime = cint(status.get("uptime"))
 
-	is_critical, is_warning = _track_severity(server, max(cpu_usage, memory_usage), thresholds, now_datetime())
+	is_critical, is_warning = _track_severity(server, max(cpu_usage, memory_usage), thresholds)
 	server.is_critical = 1 if is_critical else 0
 	server.status = "Critical" if is_critical else "Warning" if is_warning else "Online"
 
@@ -417,10 +418,11 @@ def _upsert_guest(
 	# dispatch.py's _merge_contacts.
 	readings = [cpu_usage, memory_usage] + ([disk_pct] if disk_pct is not None else [])
 	if readings:
-		is_critical, is_warning = _track_severity(doc, max(readings), thresholds, now_datetime())
+		is_critical, is_warning = _track_severity(doc, max(readings), thresholds)
 	else:
 		is_critical, is_warning = False, False
-		doc.warning_since = None
+		doc.warning_streak = 0
+		doc.critical_streak = 0
 
 	doc.guest_name = guest_name
 	doc.guest_type = guest_type
@@ -458,7 +460,7 @@ def _upsert_guest(
 		old_is_warning, is_warning, "Proxmox Guest", doc.name,
 		"Resource Warning",
 		f"{server.server_name} → {guest_name}: {_format_over_threshold(metrics, thresholds.warning_percent)} "
-		f"above {thresholds.warning_percent}% for {thresholds.warning_minutes}+ min",
+		f"above {thresholds.warning_percent}% for {thresholds.confirmation_checks}+ checks",
 		notify_global=notify_global,
 	)
 
@@ -519,7 +521,7 @@ def _upsert_datastore(server, name: str, datastore_type: str, storage_role: str,
 
 	old_is_critical = cint(doc.is_critical)
 	old_is_warning = cint(doc.is_warning)
-	is_critical, is_warning = _track_severity(doc, usage_percent, thresholds, now_datetime())
+	is_critical, is_warning = _track_severity(doc, usage_percent, thresholds)
 
 	doc.datastore_type = datastore_type
 	doc.storage_role = storage_role
@@ -541,7 +543,7 @@ def _upsert_datastore(server, name: str, datastore_type: str, storage_role: str,
 		old_is_warning, is_warning, "Proxmox Datastore", doc.name,
 		"Resource Warning",
 		f"{server.server_name}: {name} storage {round(usage_percent)}% full "
-		f"(above {thresholds.warning_percent}% for {thresholds.warning_minutes}+ min)",
+		f"(above {thresholds.warning_percent}% for {thresholds.confirmation_checks}+ checks)",
 	)
 
 
@@ -1070,42 +1072,45 @@ def _format_over_threshold(metrics: list[tuple[str, float]], threshold: int) -> 
 	return ", ".join(f"{label} {round(value)}%" for label, value in metrics if value >= threshold)
 
 
-def _track_severity(doc, value: float, thresholds: Thresholds, now: datetime) -> tuple[bool, bool]:
+def _track_severity(doc, value: float, thresholds: Thresholds) -> tuple[bool, bool]:
 	"""Compute two-phase (Warning/Critical) severity for one reading,
-	updating ``doc.warning_since`` in place.
+	updating ``doc.warning_streak``/``doc.critical_streak`` in place.
 
-	Critical is immediate: at/above ``critical_percent`` is true the
-	instant it's read, every cycle. Warning is not — a reading only
-	counts once it's stayed at or above ``warning_percent`` continuously
-	(no dip below it, not even for one cycle) for the full
-	``warning_minutes``. Deliberately keyed off ``warning_percent`` alone,
-	not "below critical" — a reading that's already critical has plainly
-	also been at-or-above the warning line the whole time it's been
-	critical, so escalating to critical doesn't reset this streak, and
-	dropping back out of critical into the warning band can immediately
-	satisfy an already-elapsed duration rather than restarting a fresh
-	5-minute wait.
+	Neither tier is immediate: a reading only counts once it's stayed at
+	or above the relevant line continuously (no dip below it, not even
+	for one cycle) for ``thresholds.confirmation_checks`` consecutive
+	polls. The two streaks are tracked independently — ``warning_streak``
+	is keyed off ``warning_percent`` alone, not "below critical", so a
+	reading that's already critical has plainly also been at-or-above the
+	warning line the whole time it's been critical, and escalating to
+	critical doesn't reset it; dropping back out of critical into the
+	warning band keeps whatever count it already had rather than
+	restarting from zero.
 
-	Sets ``doc.warning_since`` as a plain in-memory attribute rather than
-	writing it straight to the database — every caller holds a document
-	it's about to ``.save()`` itself, and a direct DB write here would
-	corrupt that save the same way an earlier direct write to
-	``backup_critical`` did (see ``_handle_backup_task_result``'s note).
+	Sets ``doc.warning_streak``/``doc.critical_streak`` as plain in-memory
+	attributes rather than writing them straight to the database — every
+	caller holds a document it's about to ``.save()`` itself, and a direct
+	DB write here would corrupt that save the same way an earlier direct
+	write to ``backup_critical`` did (see ``_handle_backup_task_result``'s
+	note).
 
 	Returns ``(is_critical, is_warning)`` — the two are mutually
 	exclusive, so a caller never needs to check both.
 	"""
-	is_critical = value >= thresholds.critical_percent
+	if value >= thresholds.critical_percent:
+		doc.critical_streak = (doc.critical_streak or 0) + 1
+	else:
+		doc.critical_streak = 0
 
 	if value >= thresholds.warning_percent:
-		if not doc.warning_since:
-			doc.warning_since = now
-		elapsed = (now - doc.warning_since) >= timedelta(minutes=thresholds.warning_minutes)
+		doc.warning_streak = (doc.warning_streak or 0) + 1
 	else:
-		doc.warning_since = None
-		elapsed = False
+		doc.warning_streak = 0
 
-	return is_critical, elapsed and not is_critical
+	is_critical = doc.critical_streak >= thresholds.confirmation_checks
+	is_warning = doc.warning_streak >= thresholds.confirmation_checks
+
+	return is_critical, is_warning and not is_critical
 
 
 def _handle_transition(

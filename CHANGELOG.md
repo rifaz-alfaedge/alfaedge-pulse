@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.5] - 2026-08-09
+
+### Changed
+- **Critical alerts now require confirmation too, not just Warning.**
+  Previously, Critical fired on a single at/above-threshold reading while
+  Warning required a sustained duration. Both tiers now use the same
+  model: a reading must stay at/above its threshold, with no dip below
+  it, for **Confirmation Checks** consecutive polls (new setting in
+  Proxmox Monitor Settings, default 3) before that alert fires. This
+  replaces the old time-based **Warning Duration (minutes)** setting —
+  a single transient spike no longer triggers either tier. Applies
+  identically to host CPU/RAM, guest CPU/RAM/disk, and datastore usage.
+
 ## [1.0.4] - 2026-08-09
 
 ### Fixed

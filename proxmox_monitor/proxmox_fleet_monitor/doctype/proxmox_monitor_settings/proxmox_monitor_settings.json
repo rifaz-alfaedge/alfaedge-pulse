@@ -9,8 +9,8 @@
   "poll_interval_seconds",
   "column_break_polling",
   "warning_threshold_percent",
-  "warning_duration_minutes",
   "critical_threshold_percent",
+  "confirmation_checks",
   "email_section",
   "enable_email_alerts",
   "email_recipients",
@@ -43,26 +43,26 @@
   },
   {
    "default": "85",
-   "description": "Any CPU, RAM, or storage reading at or above this percentage — but below the Critical Threshold — is flagged Warning once it's stayed at or above this line continuously for the Warning Duration below.",
+   "description": "Any CPU, RAM, or storage reading at or above this percentage — but below the Critical Threshold — is flagged Warning once it's stayed at or above this line for Confirmation Checks below.",
    "fieldname": "warning_threshold_percent",
    "fieldtype": "Int",
    "label": "Warning Threshold (%)",
    "non_negative": 1
   },
   {
-   "default": "5",
-   "description": "How long a reading must stay at or above the Warning Threshold, with no dip below it, before a Warning alert fires. A single dip below the threshold resets this — it does not carry over partial progress.",
-   "fieldname": "warning_duration_minutes",
-   "fieldtype": "Int",
-   "label": "Warning Duration (minutes)",
-   "non_negative": 1
-  },
-  {
    "default": "95",
-   "description": "Any CPU, RAM, or storage reading at or above this percentage is flagged Critical and alerted on immediately — no waiting period, unlike the Warning tier above.",
+   "description": "Any CPU, RAM, or storage reading at or above this percentage is flagged Critical once it's stayed at or above this line for Confirmation Checks below.",
    "fieldname": "critical_threshold_percent",
    "fieldtype": "Int",
    "label": "Critical Threshold (%)",
+   "non_negative": 1
+  },
+  {
+   "default": "3",
+   "description": "How many consecutive polls a reading must stay at or above the Warning/Critical Threshold, with no dip below it, before that alert fires. A single dip below the threshold resets the count — it does not carry over partial progress. Applies to both tiers.",
+   "fieldname": "confirmation_checks",
+   "fieldtype": "Int",
+   "label": "Confirmation Checks",
    "non_negative": 1
   },
   {
