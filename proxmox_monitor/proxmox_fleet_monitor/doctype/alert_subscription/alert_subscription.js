@@ -8,9 +8,13 @@ frappe.ui.form.on("Alert Subscription", {
 		}
 	},
 	refresh(frm) {
+		// PBS servers don't run VMs/CTs, so only offer PVE servers to watch.
 		// Only ever offer guests/datastores that live on that row's own
 		// server — grid fields use grid.get_field(...).get_query, not the
 		// top-level frm.set_query.
+		frm.fields_dict["scenarios"].grid.get_field("server").get_query = () => {
+			return { filters: { server_type: "PVE" } };
+		};
 		frm.fields_dict["scenarios"].grid.get_field("instance").get_query = (doc, cdt, cdn) => {
 			const row = locals[cdt][cdn];
 			return { filters: { server: row.server || "" } };

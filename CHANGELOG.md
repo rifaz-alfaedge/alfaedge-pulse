@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.4] - 2026-08-09
+
+### Fixed
+- **Alert Subscription Server picker no longer offers PBS servers.** PBS
+  hosts don't run VMs/CTs, so they had nothing to subscribe to — the
+  dropdown is now filtered to PVE servers only, enforced both client-side
+  and server-side.
+
 ## [1.0.3] - 2026-08-09
 
 ### Added

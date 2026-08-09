@@ -11,6 +11,7 @@
  ],
  "fields": [
   {
+   "description": "PVE servers only — Proxmox Backup Server hosts don't run VMs/CTs.",
    "fieldname": "server",
    "fieldtype": "Link",
    "in_list_view": 1,

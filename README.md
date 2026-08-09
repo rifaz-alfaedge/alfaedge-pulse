@@ -302,7 +302,8 @@ System Manager can see everyone's, for audit). Use the **Send Test Alert**
 button on a saved subscription to verify your own channel/contact setup.
 Subscriptions are VM/CT-only — watching a server itself, or a datastore,
 is handled purely by the global recipients above, not per-user
-subscriptions.
+subscriptions. Only PVE servers are offered in the Server picker — PBS
+hosts don't run VMs/CTs, so they have nothing to subscribe to.
 
 **Subscriptions reach Dev/Staging/Backup instances too.** Per-guest
 resource alerting (Critical Resource/Resource Warning) is normally scoped

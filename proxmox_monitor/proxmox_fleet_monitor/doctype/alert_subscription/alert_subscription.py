@@ -27,7 +27,18 @@ class AlertSubscription(Document):
 		self._validate_at_least_one_channel()
 		self._validate_channel_contacts()
 		for row in self.scenarios:
+			self._validate_server_is_pve(row)
 			self._validate_instance_belongs_to_server(row)
+
+	def _validate_server_is_pve(self, row):
+		"""PBS servers don't run VMs/CTs, so they're not valid subscription
+		targets — defense against a stale/bypassed client-side grid filter.
+		"""
+		if not row.server:
+			return
+		server_type = frappe.db.get_value("Proxmox Server", row.server, "server_type")
+		if server_type != "PVE":
+			frappe.throw(_("Row {0}: {1} is a PBS server and has no VMs/CTs to subscribe to.").format(row.idx, row.server))
 
 	def _validate_at_least_one_channel(self):
 		if not (self.enable_email or self.enable_whatsapp or self.enable_telegram):
