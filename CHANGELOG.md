@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.6] - 2026-08-09
+
+### Changed
+- **Telegram removed from per-user Alert Subscription.** Individual
+  subscriptions now offer only Email and WhatsApp — Telegram is a
+  fleet-wide-only channel, configured exclusively in Proxmox Monitor
+  Settings. Global Telegram alerting is unaffected.
+
 ## [1.0.5] - 2026-08-09
 
 ### Changed

@@ -57,10 +57,12 @@ def dispatch_alert(
 	if email_recipients and _send_email(email_recipients, alert_type, message):
 		channels_sent.append("Email")
 
+	# Telegram is fleet-wide-only — Alert Subscription doesn't offer it, so
+	# there's no per-subscription contact to merge in here, unlike Email/WhatsApp.
 	telegram_ids = _merge_contacts(
 		bool(settings.enable_telegram_alerts),
 		settings.telegram_chat_id,
-		(s.telegram_chat_id for s in subscriptions if s.enable_telegram),
+		[],
 		include_global=notify_global,
 	)
 	if telegram_ids and any([_send_telegram(cid, message) for cid in telegram_ids]):
@@ -119,10 +121,12 @@ def dispatch_recovery(
 	if email_recipients and _send_email(email_recipients, alert_type, message, severity="Resolved"):
 		channels_sent.append("Email")
 
+	# Telegram is fleet-wide-only — Alert Subscription doesn't offer it, so
+	# there's no per-subscription contact to merge in here, unlike Email/WhatsApp.
 	telegram_ids = _merge_contacts(
 		bool(settings.enable_telegram_alerts),
 		settings.telegram_chat_id,
-		(s.telegram_chat_id for s in subscriptions if s.enable_telegram),
+		[],
 		include_global=notify_global,
 	)
 	if telegram_ids and any([_send_telegram(cid, message) for cid in telegram_ids]):
@@ -172,7 +176,7 @@ def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> 
 	return frappe.get_all(
 		"Alert Subscription",
 		filters={"name": ["in", {r.parent for r in rows}]},
-		fields=["enable_email", "email", "enable_telegram", "telegram_chat_id", "enable_whatsapp", "whatsapp_number"],
+		fields=["enable_email", "email", "enable_whatsapp", "whatsapp_number"],
 	)
 
 
@@ -413,8 +417,6 @@ def send_subscription_test_alert(name: str) -> dict:
 
 	if subscription.enable_email:
 		results["Email"] = _send_email([subscription.email], "Test Alert", message)
-	if subscription.enable_telegram:
-		results["Telegram"] = _send_telegram(subscription.telegram_chat_id, message)
 	if subscription.enable_whatsapp:
 		template_name = _resolve_whatsapp_template(settings.whatsapp_template) if settings.whatsapp_template else None
 		results["WhatsApp"] = _send_whatsapp([subscription.whatsapp_number], template_name, message) if template_name else False

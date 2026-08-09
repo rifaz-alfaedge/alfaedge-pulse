@@ -9,9 +9,11 @@ from frappe.model.document import Document
 
 
 class AlertSubscription(Document):
-	"""One engineer's notification profile: their own Email/WhatsApp/
-	Telegram contact info (in addition to Proxmox Monitor Settings' global
+	"""One engineer's notification profile: their own Email/WhatsApp
+	contact info (in addition to Proxmox Monitor Settings' global
 	recipients), plus a table of servers/instances they want to watch.
+	Telegram is deliberately not offered here — it's a fleet-wide-only
+	channel, configured solely in Proxmox Monitor Settings.
 
 	One document per Frappe User (autoname: field:user). Deliberately
 	non-cascading: watching a server only matches alerts fired directly
@@ -41,16 +43,14 @@ class AlertSubscription(Document):
 			frappe.throw(_("Row {0}: {1} is a PBS server and has no VMs/CTs to subscribe to.").format(row.idx, row.server))
 
 	def _validate_at_least_one_channel(self):
-		if not (self.enable_email or self.enable_whatsapp or self.enable_telegram):
-			frappe.throw(_("Enable at least one notification channel (Email, WhatsApp, or Telegram)."))
+		if not (self.enable_email or self.enable_whatsapp):
+			frappe.throw(_("Enable at least one notification channel (Email or WhatsApp)."))
 
 	def _validate_channel_contacts(self):
 		if self.enable_email and not (self.email or "").strip():
 			frappe.throw(_("Email Address is required when Email is enabled."))
 		if self.enable_whatsapp and not (self.whatsapp_number or "").strip():
 			frappe.throw(_("WhatsApp Number is required when WhatsApp is enabled."))
-		if self.enable_telegram and not (self.telegram_chat_id or "").strip():
-			frappe.throw(_("Telegram Chat ID is required when Telegram is enabled."))
 
 	def _validate_instance_belongs_to_server(self, row):
 		"""Defense against a stale/bypassed client-side grid query filter —

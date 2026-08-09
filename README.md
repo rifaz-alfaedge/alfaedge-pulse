@@ -1,6 +1,6 @@
 # alfaEdge Pulse
 
-**Version 1.0.5** — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version 1.0.6** — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 A standalone Frappe 16 app (no ERPNext dependency) that gives you a single,
 real-time dashboard for a Proxmox fleet — PVE hosts, every VM/CT running on
@@ -295,8 +295,9 @@ recovery notification — backups often only run on a ~24h cadence, so
 
 Beyond the global recipients above, individual engineers can self-subscribe
 to specific VM/CT alerts via *Desk → Alert Subscription* — one document per
-user. Set your own Email/WhatsApp/Telegram contact info once at the top,
-then add rows to the **Servers / Instances** table below: pick a Proxmox
+user. Set your own Email/WhatsApp contact info once at the top (Telegram is
+fleet-wide-only — see above — and isn't offered here), then add rows to
+the **Servers / Instances** table below: pick a Proxmox
 Server, then pick one of its VMs/CTs. Add as many rows as you like to
 watch multiple instances. Subscriptions are **additive** — they don't
 replace or affect the global recipients above. Each engineer only sees
