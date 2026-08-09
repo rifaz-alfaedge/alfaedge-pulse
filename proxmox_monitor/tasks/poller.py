@@ -74,7 +74,7 @@ import frappe
 from frappe.utils import cint, flt, now_datetime
 from frappe.utils.password import get_decrypted_password
 
-from proxmox_monitor.alerts.dispatch import dispatch_alert, has_open_alert, resolve_alert
+from proxmox_monitor.alerts.dispatch import dispatch_alert, dispatch_recovery, has_open_alert, resolve_alert
 from proxmox_monitor.proxmox_client.base import ProxmoxAPIError
 from proxmox_monitor.proxmox_client.pbs import PBSClient
 from proxmox_monitor.proxmox_client.pve import PVEClient
@@ -261,6 +261,7 @@ def sync_server(server) -> None:
 		old_resource_critical, new_resource_critical, "Proxmox Server", server.name,
 		"Critical Resource",
 		f"{server.server_name}: {_format_over_threshold(metrics, thresholds.critical_percent)} above {thresholds.critical_percent}%",
+		recovery_message=f"{server.server_name}: CPU/RAM usage back below {thresholds.critical_percent}%",
 	)
 	_handle_transition(
 		old_resource_warning, new_resource_warning, "Proxmox Server", server.name,
@@ -278,6 +279,10 @@ def sync_server(server) -> None:
 		dispatch_alert("Server Offline", "Proxmox Server", server.name, offline_message)
 	elif old_status == "Offline" and server.status != "Offline":
 		resolve_alert("Proxmox Server", server.name, "Server Offline")
+		dispatch_recovery(
+			"Server Offline", "Proxmox Server", server.name,
+			f"{server.server_name}: server back online ({server.hostname})",
+		)
 	elif server.status == "Offline" and not has_open_alert("Proxmox Server", server.name, "Server Offline"):
 		dispatch_alert("Server Offline", "Proxmox Server", server.name, offline_message)
 
@@ -439,6 +444,7 @@ def _upsert_guest(
 		"Critical Resource",
 		f"{server.server_name} → {guest_name}: {_format_over_threshold(metrics, thresholds.critical_percent)} "
 		f"above {thresholds.critical_percent}%",
+		recovery_message=f"{server.server_name} → {guest_name}: usage back below {thresholds.critical_percent}%",
 	)
 	_handle_transition(
 		old_is_warning, is_warning, "Proxmox Guest", doc.name,
@@ -520,6 +526,7 @@ def _upsert_datastore(server, name: str, datastore_type: str, storage_role: str,
 		old_is_critical, is_critical, "Proxmox Datastore", doc.name,
 		"Critical Resource",
 		f"{server.server_name}: {name} storage {round(usage_percent)}% full (above {thresholds.critical_percent}%)",
+		recovery_message=f"{server.server_name}: {name} storage back below {thresholds.critical_percent}% full (now {round(usage_percent)}%)",
 	)
 	_handle_transition(
 		old_is_warning, is_warning, "Proxmox Datastore", doc.name,
@@ -1092,7 +1099,15 @@ def _track_severity(doc, value: float, thresholds: Thresholds, now: datetime) ->
 	return is_critical, elapsed and not is_critical
 
 
-def _handle_transition(was_critical: bool, is_critical: bool, doctype: str, name: str, alert_type: str, message: str) -> None:
+def _handle_transition(
+	was_critical: bool,
+	is_critical: bool,
+	doctype: str,
+	name: str,
+	alert_type: str,
+	message: str,
+	recovery_message: str | None = None,
+) -> None:
 	"""Dispatch an alert on False->True, resolve it on True->False. No-op otherwise.
 
 	Shared by server/guest/datastore critical-resource checks so "only
@@ -1101,10 +1116,17 @@ def _handle_transition(was_critical: bool, is_critical: bool, doctype: str, name
 	Also self-heals a steady-state critical condition with no tracked open
 	incident (see ``has_open_alert``) by dispatching then too — this is the
 	one case a pure edge-trigger can never recover from on its own.
+
+	``recovery_message`` is opt-in: pass it (only from "Critical Resource"
+	call sites, per this app's decision not to notify on Resource Warning
+	recovering) to also send a "back to normal" notification once the
+	condition clears.
 	"""
 	if is_critical and not was_critical:
 		dispatch_alert(alert_type, doctype, name, message)
 	elif was_critical and not is_critical:
 		resolve_alert(doctype, name, alert_type)
+		if recovery_message:
+			dispatch_recovery(alert_type, doctype, name, recovery_message)
 	elif is_critical and was_critical and not has_open_alert(doctype, name, alert_type):
 		dispatch_alert(alert_type, doctype, name, message)
