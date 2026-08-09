@@ -41,6 +41,15 @@ const GUEST_SORT_OPTIONS: { field: GuestSortField; label: string }[] = [
   { field: 'storage', label: 'Storage' },
 ]
 
+// Whichever metric a card grid is currently sorted by leads that card's own
+// meter rings too, so the value driving the order is always the first thing
+// you see on it.
+const GUEST_METER_ORDER: Record<GuestSortField, Array<'cpu' | 'ram' | 'disk'>> = {
+  cpu: ['cpu', 'ram', 'disk'],
+  ram: ['ram', 'cpu', 'disk'],
+  storage: ['disk', 'cpu', 'ram'],
+}
+
 /** Guests missing a reading for the selected metric (e.g. disk usage with
  * no QEMU agent) always sort to the end, regardless of direction — an
  * unknown value is neither "highest" nor "lowest," just absent. */
@@ -361,6 +370,7 @@ function App() {
                       cpu={g.cpu_usage}
                       memory={g.memory_usage}
                       disks={[{ label: 'Disk', value: g.disk_usage }]}
+                      meterOrder={GUEST_METER_ORDER[guestSortField]}
                       lastSynced={g.last_synced}
                       pollIntervalSeconds={pollIntervalSeconds}
                       warningThreshold={warningThreshold}

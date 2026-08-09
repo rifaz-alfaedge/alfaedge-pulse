@@ -29,6 +29,12 @@ export interface ResourceCardProps {
   warningThreshold: number
   criticalThreshold: number
   tags?: string[]
+  /** Reorders the CPU/RAM/first-disk meters (e.g. to lead with whatever
+   * metric the caller is currently sorting by). Extra disks beyond the
+   * first (host cards only) always render after these three, unaffected.
+   * Omitted entirely for host/PBS cards, which keep the fixed CPU→RAM→
+   * Swap→drives order. */
+  meterOrder?: Array<'cpu' | 'ram' | 'disk'>
   onClick: () => void
 }
 
@@ -61,8 +67,17 @@ export function ResourceCard({
   warningThreshold,
   criticalThreshold,
   tags,
+  meterOrder,
   onClick,
 }: ResourceCardProps) {
+  const baseMeters: Record<'cpu' | 'ram' | 'disk', DiskMeter> = {
+    cpu: { label: 'CPU', value: cpu },
+    ram: { label: 'RAM', value: memory },
+    disk: disks[0] ?? { label: 'Disk', value: undefined },
+  }
+  const order = meterOrder ?? (['cpu', 'ram', 'disk'] as const)
+  const extraDisks = disks.slice(1)
+
   const accentClass =
     severity === 'critical' ? 'border-l-4 border-l-status-critical'
     : severity === 'warning' ? 'border-l-4 border-l-status-warning'
@@ -91,9 +106,16 @@ export function ResourceCard({
       </div>
 
       <div className="flex flex-wrap items-center justify-around gap-x-6 gap-y-6 py-2">
-        <MeterRow label="CPU" value={cpu} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
-        <MeterRow label="RAM" value={memory} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
-        {disks.map((d) => (
+        {order.map((key) => (
+          <MeterRow
+            key={key}
+            label={baseMeters[key].label}
+            value={baseMeters[key].value}
+            warningThreshold={warningThreshold}
+            criticalThreshold={criticalThreshold}
+          />
+        ))}
+        {extraDisks.map((d) => (
           <MeterRow key={d.label} label={d.label} value={d.value} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
         ))}
       </div>
