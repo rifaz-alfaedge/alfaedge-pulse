@@ -53,9 +53,4 @@ frappe.ui.form.on("Alert Subscription Item", {
 		row.instance = "";
 		frm.refresh_field("scenarios");
 	},
-	instance_type(frm, cdt, cdn) {
-		const row = locals[cdt][cdn];
-		row.instance = "";
-		frm.refresh_field("scenarios");
-	},
 });

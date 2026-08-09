@@ -159,15 +159,14 @@ def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> 
 	for this alert/recovery, found via their Alert Subscription Item
 	scenario rows.
 
-	Deliberately non-cascading: a server-only scenario (instance blank)
-	only matches alerts fired directly against that Proxmox Server, never
-	its guests/datastores — subscribe to those separately if wanted.
+	Per-instance subscriptions only ever target a Proxmox Guest (VM/CT) —
+	watching a server itself, or a datastore, is handled purely by the
+	global recipients in Proxmox Monitor Settings, not individual
+	subscriptions.
 	"""
-	if reference_doctype == "Proxmox Server":
-		filters = {"server": reference_name, "instance": ""}
-	else:
-		filters = {"instance_type": reference_doctype, "instance": reference_name}
-	rows = frappe.get_all("Alert Subscription Item", filters=filters, fields=["parent"])
+	if reference_doctype != "Proxmox Guest":
+		return []
+	rows = frappe.get_all("Alert Subscription Item", filters={"instance": reference_name}, fields=["parent"])
 	if not rows:
 		return []
 	return frappe.get_all(

@@ -14,16 +14,15 @@ All notable changes to this project are documented here.
   original alert's framing. Backup Failure is intentionally excluded —
   backups often only run every ~24h, so a "back to normal" notification
   would just be a stale, confusing non-sequitur.
-- **Alert Subscription module.** Engineers can now self-subscribe to
+- **Alert Subscription module.** Engineers can now self-subscribe to VM/CT
   alerts (*Desk → Alert Subscription*) — one document per user, holding
   their own Email/WhatsApp/Telegram contact info once, plus a table of
-  scenarios (a Proxmox Server, or one specific VM/CT/datastore on it) to
-  watch. Subscriptions are additive to the existing global recipients in
-  Proxmox Monitor Settings — nothing about the existing global alerting
-  changes. Each engineer only sees/manages their own subscription
-  document (Managers see all, for audit). Watching a server does **not**
-  cascade to its guests/datastores — add those as separate scenario rows
-  if wanted.
+  specific VM/CT instances (server + guest) to watch. Subscriptions are
+  additive to the existing global recipients in Proxmox Monitor Settings
+  — nothing about the existing global alerting changes. Each engineer
+  only sees/manages their own subscription document (Managers see all,
+  for audit). Subscriptions are VM/CT-only — watching a server itself, or
+  a datastore, stays purely the global recipients' job.
 - **Subscriptions override the Production-only guest alerting rule.**
   Per-guest resource alerting (Critical Resource / Resource Warning) has
   always been scoped to Production servers, to avoid noise from Dev/

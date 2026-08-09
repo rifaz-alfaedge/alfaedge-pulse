@@ -40,7 +40,7 @@ hand.
   apps — this app never stores a bot token or a Cloud API credential
   itself; see [Alerting](#alerting). "Back to normal" recovery messages
   fire when a critical condition clears, and individual engineers can
-  self-subscribe to specific servers/instances on top of the global
+  self-subscribe to specific VM/CT instances on top of the global
   recipients — see [Alert Subscriptions](#alert-subscriptions).
 - **A live, glanceable dashboard.** CPU/RAM/Swap/storage rings with
   at-a-glance icons, a heartbeat indicator tied to how recently each node
@@ -291,17 +291,18 @@ recovery notification — backups often only run on a ~24h cadence, so
 ### Alert Subscriptions
 
 Beyond the global recipients above, individual engineers can self-subscribe
-to specific alerts via *Desk → Alert Subscription* — one document per user.
-Set your own Email/WhatsApp/Telegram contact info once at the top, then add
-rows to the **Servers / Instances** table below: pick a Proxmox Server,
-optionally narrowed to one specific VM/CT or datastore on it. Add as many
-rows as you like to watch multiple things. Subscriptions are **additive**
-— they don't replace or affect the global recipients above. Each engineer
-only sees and manages their own subscription document (`Proxmox Monitor
-Manager`/System Manager can see everyone's, for audit). Watching a server
-does **not** automatically cover its guests/datastores — add those as
-separate rows if you want alerts for them too. Use the **Send Test Alert**
+to specific VM/CT alerts via *Desk → Alert Subscription* — one document per
+user. Set your own Email/WhatsApp/Telegram contact info once at the top,
+then add rows to the **Servers / Instances** table below: pick a Proxmox
+Server, then pick one of its VMs/CTs. Add as many rows as you like to
+watch multiple instances. Subscriptions are **additive** — they don't
+replace or affect the global recipients above. Each engineer only sees
+and manages their own subscription document (`Proxmox Monitor Manager`/
+System Manager can see everyone's, for audit). Use the **Send Test Alert**
 button on a saved subscription to verify your own channel/contact setup.
+Subscriptions are VM/CT-only — watching a server itself, or a datastore,
+is handled purely by the global recipients above, not per-user
+subscriptions.
 
 **Subscriptions reach Dev/Staging/Backup instances too.** Per-guest
 resource alerting (Critical Resource/Resource Warning) is normally scoped

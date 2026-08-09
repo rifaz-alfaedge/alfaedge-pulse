@@ -43,14 +43,13 @@ class AlertSubscription(Document):
 
 	def _validate_instance_belongs_to_server(self, row):
 		"""Defense against a stale/bypassed client-side grid query filter —
-		the instance field is only ever meant to hold a Guest/Datastore that
-		actually lives on the row's own server.
+		the instance field is only ever meant to hold a Guest that actually
+		lives on the row's own server. Missing server/instance is left to
+		Frappe's own mandatory-field check, which runs after validate().
 		"""
-		if not row.instance_type or not row.instance:
+		if not row.server or not row.instance:
 			return
-		if row.instance_type not in ("Proxmox Guest", "Proxmox Datastore"):
-			frappe.throw(_("Row {0}: Instance Type must be Proxmox Guest or Proxmox Datastore.").format(row.idx))
-		owning_server = frappe.db.get_value(row.instance_type, row.instance, "server")
+		owning_server = frappe.db.get_value("Proxmox Guest", row.instance, "server")
 		if owning_server != row.server:
 			frappe.throw(_("Row {0}: the selected instance does not belong to the selected server.").format(row.idx))
 

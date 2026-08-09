@@ -7,7 +7,6 @@
  "engine": "InnoDB",
  "field_order": [
   "server",
-  "instance_type",
   "instance"
  ],
  "fields": [
@@ -20,20 +19,13 @@
    "reqd": 1
   },
   {
-   "description": "Leave blank to watch the server itself (e.g. Server Offline, host CPU/RAM). Set this to watch one specific VM/CT or datastore on that server instead.",
-   "fieldname": "instance_type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Instance Type",
-   "options": "\nProxmox Guest\nProxmox Datastore"
-  },
-  {
-   "depends_on": "eval:doc.instance_type",
+   "description": "Only VMs/CTs on the selected server are offered. Watching a server itself, or a datastore, is handled by the global recipients in Proxmox Monitor Settings, not per-user subscriptions.",
    "fieldname": "instance",
-   "fieldtype": "Dynamic Link",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Instance",
-   "options": "instance_type"
+   "options": "Proxmox Guest",
+   "reqd": 1
   }
  ],
  "index_web_pages_for_search": 0,
