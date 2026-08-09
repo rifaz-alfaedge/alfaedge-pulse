@@ -8,11 +8,13 @@ frappe.ui.form.on("Alert Subscription", {
 		}
 	},
 	refresh(frm) {
-		// Only ever offer guests/datastores that live on the currently
-		// selected server.
-		frm.set_query("instance", () => ({
-			filters: { server: frm.doc.server || "" },
-		}));
+		// Only ever offer guests/datastores that live on that row's own
+		// server — grid fields use grid.get_field(...).get_query, not the
+		// top-level frm.set_query.
+		frm.fields_dict["scenarios"].grid.get_field("instance").get_query = (doc, cdt, cdn) => {
+			const row = locals[cdt][cdn];
+			return { filters: { server: row.server || "" } };
+		};
 
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Send Test Alert"), () => {
@@ -41,16 +43,19 @@ frappe.ui.form.on("Alert Subscription", {
 			});
 		}
 	},
-	server(frm) {
+});
+
+frappe.ui.form.on("Alert Subscription Item", {
+	server(frm, cdt, cdn) {
 		// A previously chosen instance may no longer belong to the new
 		// server — clear rather than leave a stale/mismatched selection.
-		if (frm.doc.instance) {
-			frm.set_value("instance", "");
-		}
+		const row = locals[cdt][cdn];
+		row.instance = "";
+		frm.refresh_field("scenarios");
 	},
-	instance_type(frm) {
-		if (frm.doc.instance) {
-			frm.set_value("instance", "");
-		}
+	instance_type(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		row.instance = "";
+		frm.refresh_field("scenarios");
 	},
 });

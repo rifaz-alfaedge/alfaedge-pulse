@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-09 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "server",
+  "instance_type",
+  "instance"
+ ],
+ "fields": [
+  {
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Proxmox Server",
+   "options": "Proxmox Server",
+   "reqd": 1
+  },
+  {
+   "description": "Leave blank to watch the server itself (e.g. Server Offline, host CPU/RAM). Set this to watch one specific VM/CT or datastore on that server instead.",
+   "fieldname": "instance_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Instance Type",
+   "options": "\nProxmox Guest\nProxmox Datastore"
+  },
+  {
+   "depends_on": "eval:doc.instance_type",
+   "fieldname": "instance",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Instance",
+   "options": "instance_type"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Proxmox Fleet Monitor",
+ "name": "Alert Subscription Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -9,13 +9,14 @@ from frappe.model.document import Document
 
 
 class AlertSubscription(Document):
-	"""One engineer's opt-in to be notified (in addition to Proxmox Monitor
-	Settings' global recipients) about alerts for one Proxmox Server, or
-	one specific Guest/Datastore living on it.
+	"""One engineer's notification profile: their own Email/WhatsApp/
+	Telegram contact info (in addition to Proxmox Monitor Settings' global
+	recipients), plus a table of servers/instances they want to watch.
 
-	Deliberately non-cascading: subscribing to a server only matches
-	alerts fired directly against that server, never its guests/datastores
-	— see ``_get_matching_subscriptions`` in ``alerts/dispatch.py``.
+	One document per Frappe User (autoname: field:user). Deliberately
+	non-cascading: watching a server only matches alerts fired directly
+	against that server, never its guests/datastores — see
+	``_get_matching_subscriptions`` in ``alerts/dispatch.py``.
 	"""
 
 	def before_insert(self):
@@ -25,7 +26,8 @@ class AlertSubscription(Document):
 	def validate(self):
 		self._validate_at_least_one_channel()
 		self._validate_channel_contacts()
-		self._validate_instance_belongs_to_server()
+		for row in self.scenarios:
+			self._validate_instance_belongs_to_server(row)
 
 	def _validate_at_least_one_channel(self):
 		if not (self.enable_email or self.enable_whatsapp or self.enable_telegram):
@@ -39,18 +41,18 @@ class AlertSubscription(Document):
 		if self.enable_telegram and not (self.telegram_chat_id or "").strip():
 			frappe.throw(_("Telegram Chat ID is required when Telegram is enabled."))
 
-	def _validate_instance_belongs_to_server(self):
-		"""Defense against a stale/bypassed client-side set_query filter —
+	def _validate_instance_belongs_to_server(self, row):
+		"""Defense against a stale/bypassed client-side grid query filter —
 		the instance field is only ever meant to hold a Guest/Datastore that
-		actually lives on the selected server.
+		actually lives on the row's own server.
 		"""
-		if not self.instance_type or not self.instance:
+		if not row.instance_type or not row.instance:
 			return
-		if self.instance_type not in ("Proxmox Guest", "Proxmox Datastore"):
-			frappe.throw(_("Instance Type must be Proxmox Guest or Proxmox Datastore."))
-		owning_server = frappe.db.get_value(self.instance_type, self.instance, "server")
-		if owning_server != self.server:
-			frappe.throw(_("The selected instance does not belong to the selected server."))
+		if row.instance_type not in ("Proxmox Guest", "Proxmox Datastore"):
+			frappe.throw(_("Row {0}: Instance Type must be Proxmox Guest or Proxmox Datastore.").format(row.idx))
+		owning_server = frappe.db.get_value(row.instance_type, row.instance, "server")
+		if owning_server != row.server:
+			frappe.throw(_("Row {0}: the selected instance does not belong to the selected server.").format(row.idx))
 
 
 def get_permission_query_conditions(user: str | None = None) -> str:

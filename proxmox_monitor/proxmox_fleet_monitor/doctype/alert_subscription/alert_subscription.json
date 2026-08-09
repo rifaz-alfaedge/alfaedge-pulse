@@ -1,17 +1,13 @@
 {
  "actions": [],
  "allow_rename": 0,
- "autoname": "hash",
+ "autoname": "field:user",
  "creation": "2026-08-09 00:00:00.000000",
  "doctype": "DocType",
  "document_type": "System",
  "engine": "InnoDB",
  "field_order": [
   "user",
-  "server",
-  "column_break_target",
-  "instance_type",
-  "instance",
   "channels_section",
   "enable_email",
   "email",
@@ -20,47 +16,21 @@
   "whatsapp_number",
   "column_break_channels_2",
   "enable_telegram",
-  "telegram_chat_id"
+  "telegram_chat_id",
+  "scenarios_section",
+  "scenarios"
  ],
  "fields": [
   {
-   "description": "The engineer to notify. Defaults to you — only change this if you're subscribing on someone else's behalf.",
+   "description": "The engineer to notify. Defaults to you — only change this if you're subscribing on someone else's behalf. One subscription document per user.",
    "fieldname": "user",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "User",
    "options": "User",
-   "reqd": 1
-  },
-  {
-   "fieldname": "server",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Proxmox Server",
-   "options": "Proxmox Server",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_target",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Leave blank to subscribe to the server itself (e.g. Server Offline, host CPU/RAM). Set this to subscribe to one specific VM/CT or datastore on that server instead.",
-   "fieldname": "instance_type",
-   "fieldtype": "Select",
-   "label": "Instance Type",
-   "options": "\nProxmox Guest\nProxmox Datastore"
-  },
-  {
-   "depends_on": "eval:doc.instance_type",
-   "description": "Only guests/datastores on the selected Proxmox Server are offered.",
-   "fieldname": "instance",
-   "fieldtype": "Dynamic Link",
-   "in_list_view": 1,
-   "label": "Instance",
-   "options": "instance_type"
+   "reqd": 1,
+   "unique": 1
   },
   {
    "fieldname": "channels_section",
@@ -115,6 +85,17 @@
    "fieldtype": "Data",
    "label": "Telegram Chat ID",
    "mandatory_depends_on": "eval:doc.enable_telegram"
+  },
+  {
+   "fieldname": "scenarios_section",
+   "fieldtype": "Section Break",
+   "label": "Watching"
+  },
+  {
+   "fieldname": "scenarios",
+   "fieldtype": "Table",
+   "label": "Servers / Instances",
+   "options": "Alert Subscription Item"
   }
  ],
  "icon": "fa fa-bell-o",
@@ -124,7 +105,7 @@
  "modified_by": "Administrator",
  "module": "Proxmox Fleet Monitor",
  "name": "Alert Subscription",
- "naming_rule": "Random",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
