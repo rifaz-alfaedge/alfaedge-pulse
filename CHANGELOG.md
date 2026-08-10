@@ -2,6 +2,56 @@
 
 All notable changes to this project are documented here.
 
+## [2.0.0] - 2026-08-10
+
+### Added
+- **AI Usage dashboard (Bifrost).** A new "AI Usage" tab gives in-depth
+  analytics for a self-hosted [Bifrost](https://getbifrost.ai) LLM
+  gateway — total cost/tokens/requests, a cost-over-time and
+  tokens-over-time chart, provider/model cost breakdowns, and a
+  sortable/filterable recent-requests table. A new background job
+  (`Bifrost Settings`) pulls request logs from Bifrost's Management API
+  on a configurable interval (default 15 minutes, live-editable with no
+  restart) into a new `LLM Usage Log` doctype — alfaEdge Pulse keeps its
+  own permanent history independent of however long Bifrost itself
+  retains logs. The sync is idempotent and self-healing (a request still
+  `processing` at sync time is automatically reconciled once it
+  completes). Designed to extend to direct-provider (OpenAI/Google/etc.)
+  billing API tracking later without a schema rework.
+- **Uptime monitoring (Uptime Kuma).** A new "Uptime" tab lets you add,
+  pause, resume, and delete monitored sites across any number of
+  connected [Uptime Kuma](https://github.com/louislam/uptime-kuma)
+  instances (`Uptime Kuma Instance`) directly from the dashboard, see
+  live Up/Down status and historical uptime %, and get "Critical Sites"
+  vs. "Down (not yet critical)" summary cards at a glance. Status is
+  polled every minute from Kuma's official Prometheus `/metrics`
+  endpoint and recorded into alfaEdge Pulse's own `Uptime Check Log` —
+  Kuma's own alerting stays off entirely. A site is flagged **Critical**
+  once more than half of its last N checks (`Uptime Monitor Settings` >
+  Alert Window Checks, default 3) report Down, and an alert fires
+  through this app's existing Email/WhatsApp mechanism — the same
+  "back to normal" recovery notification other alert types already get.
+  Adding/editing/deleting a monitor uses Kuma's internal (unofficial)
+  Socket.IO API; that risk is deliberately scoped to just that
+  admin-initiated convenience feature, not the status polling alerting
+  depends on.
+- **Charting.** [uPlot](https://github.com/leeoniya/uPlot) (MIT
+  licensed, ~21KB gzip) added as the dashboard's first charting
+  dependency, used for the new cost/token/uptime trend lines. Simple
+  proportional breakdowns (e.g. cost by provider) stay hand-rolled
+  CSS/SVG — no library needed for those.
+
+### Fixed
+- **Timestamps could be off by the site's UTC offset.** `timeAgo`/the
+  live-freshness check treated every Frappe datetime as UTC, which is
+  wrong on any site not configured for the UTC timezone (this
+  deployment's is IST, UTC+5:30) — Frappe stores/serializes datetimes
+  naively in the site's own system timezone, with no UTC conversion and
+  no timezone context available to a standalone SPA like this one to
+  convert with. Now parsed as browser-local time instead, correct
+  whenever the viewer's timezone matches the site's (the expected case
+  for an internal ops dashboard).
+
 ## [1.0.6] - 2026-08-09
 
 ### Changed

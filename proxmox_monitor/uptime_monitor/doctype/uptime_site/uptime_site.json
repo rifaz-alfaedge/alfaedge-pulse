@@ -1,0 +1,191 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "instance",
+  "site_name",
+  "kuma_monitor_id",
+  "column_break_target",
+  "monitor_type",
+  "url",
+  "hostname",
+  "port",
+  "config_section",
+  "check_interval_seconds",
+  "is_active",
+  "column_break_config",
+  "status_section",
+  "current_status",
+  "is_critical",
+  "column_break_status",
+  "last_checked"
+ ],
+ "fields": [
+  {
+   "fieldname": "instance",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Instance",
+   "options": "Uptime Kuma Instance",
+   "reqd": 1
+  },
+  {
+   "description": "This is also the literal monitor name created in Kuma, and the exact string matched against /metrics' monitor_name label — must be unique per instance.",
+   "fieldname": "site_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Site Name",
+   "reqd": 1
+  },
+  {
+   "description": "The monitor ID Kuma assigned when this site was created.",
+   "fieldname": "kuma_monitor_id",
+   "fieldtype": "Int",
+   "label": "Kuma Monitor ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_target",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "monitor_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Monitor Type",
+   "options": "HTTP(s)\nTCP\nPing",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.monitor_type == \"HTTP(s)\"",
+   "fieldname": "url",
+   "fieldtype": "Data",
+   "label": "URL",
+   "mandatory_depends_on": "eval:doc.monitor_type == \"HTTP(s)\""
+  },
+  {
+   "depends_on": "eval:doc.monitor_type == \"TCP\" || doc.monitor_type == \"Ping\"",
+   "fieldname": "hostname",
+   "fieldtype": "Data",
+   "label": "Hostname / IP",
+   "mandatory_depends_on": "eval:doc.monitor_type == \"TCP\" || doc.monitor_type == \"Ping\""
+  },
+  {
+   "depends_on": "eval:doc.monitor_type == \"TCP\"",
+   "fieldname": "port",
+   "fieldtype": "Int",
+   "label": "Port",
+   "mandatory_depends_on": "eval:doc.monitor_type == \"TCP\""
+  },
+  {
+   "fieldname": "config_section",
+   "fieldtype": "Section Break",
+   "label": "Configuration"
+  },
+  {
+   "default": "60",
+   "description": "Kuma's own internal check interval for this monitor — keep this aligned with the fleet-wide poll cadence (Uptime Monitor Settings) so /metrics is always fresh when polled.",
+   "fieldname": "check_interval_seconds",
+   "fieldtype": "Int",
+   "label": "Check Interval (seconds)",
+   "non_negative": 1
+  },
+  {
+   "default": "1",
+   "description": "Mirrors Kuma's paused/resumed state.",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Active"
+  },
+  {
+   "fieldname": "column_break_config",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Live Status (updated automatically by the poller)"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "current_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Current Status",
+   "options": "Up\nDown\nPending\nMaintenance",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "True once more than half of the last N checks (Uptime Monitor Settings > Alert Window Checks) report Down.",
+   "fieldname": "is_critical",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Critical",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_checked",
+   "fieldtype": "Datetime",
+   "label": "Last Checked",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-globe",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Uptime Monitor",
+ "name": "Uptime Site",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "site_name",
+ "sort_order": "ASC",
+ "states": []
+}

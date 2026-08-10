@@ -6,6 +6,8 @@ import { InstanceSeverityLists } from './components/InstanceSeverityLists'
 import { NodeDetailDialog, type SelectedNode } from './components/NodeDetailDialog'
 import { BackupsPanel } from './components/BackupsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
+import { AiUsagePanel } from './components/AiUsagePanel'
+import { UptimePanel } from './components/UptimePanel'
 import { HeartbeatDot } from './components/HeartbeatDot'
 import { SearchInput } from './components/SearchInput'
 import { Tabs } from './components/Tabs'
@@ -21,7 +23,7 @@ function driveLabel(d: ProxmoxDatastore): string {
   return d.datastore_name
 }
 
-const MAIN_TABS = ['Overview', 'Backups', 'Alerts'] as const
+const MAIN_TABS = ['Overview', 'Backups', 'Alerts', 'AI Usage', 'Uptime'] as const
 const DEFAULT_WARNING_THRESHOLD = 85
 const DEFAULT_CRITICAL_THRESHOLD = 95
 const DEFAULT_POLL_SECONDS = 20
@@ -393,6 +395,8 @@ function App() {
 
       {mainTab === 'Backups' && <BackupsPanel backupLogs={activeBackupLogs} guests={allGuests} servers={allServers} />}
       {mainTab === 'Alerts' && <AlertsPanel alertLogs={allAlertLogs} />}
+      {mainTab === 'AI Usage' && <AiUsagePanel />}
+      {mainTab === 'Uptime' && <UptimePanel />}
 
       <NodeDetailDialog
         selected={selected}

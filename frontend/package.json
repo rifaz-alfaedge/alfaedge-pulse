@@ -16,7 +16,8 @@
     "frappe-react-sdk": "^1.17.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

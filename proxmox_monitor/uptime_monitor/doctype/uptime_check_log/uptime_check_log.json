@@ -1,0 +1,110 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "site",
+  "checked_at",
+  "column_break_check",
+  "is_up",
+  "raw_status",
+  "response_time_ms"
+ ],
+ "fields": [
+  {
+   "fieldname": "site",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Site",
+   "options": "Uptime Site",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "checked_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Checked At",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_check",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_up",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Up",
+   "read_only": 1
+  },
+  {
+   "description": "Kuma's raw /metrics status value for this check, kept for debugging.",
+   "fieldname": "raw_status",
+   "fieldtype": "Data",
+   "label": "Raw Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "response_time_ms",
+   "fieldtype": "Float",
+   "label": "Response Time (ms)",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-history",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Uptime Monitor",
+ "name": "Uptime Check Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "checked_at",
+ "sort_order": "DESC",
+ "states": []
+}

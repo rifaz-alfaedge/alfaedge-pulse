@@ -164,6 +164,14 @@ scheduler_events = {
 	"cron": {
 		"* * * * *": [
 			"proxmox_monitor.tasks.poller.ensure_poller_running",
+			# Both of these are plain, self-throttled functions (not bounded
+			# loops like the Proxmox poller) — each checks its own Settings
+			# doctype's interval and no-ops most ticks. See their module
+			# docstrings for why a fixed */N cron key isn't used instead:
+			# it would make the interval un-editable from Desk without a
+			# code change.
+			"proxmox_monitor.tasks.bifrost_sync.sync_bifrost_logs",
+			"proxmox_monitor.tasks.uptime_kuma_poller.poll_all_instances",
 		],
 	},
 }

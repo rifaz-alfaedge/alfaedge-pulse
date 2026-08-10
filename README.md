@@ -1,12 +1,16 @@
 # alfaEdge Pulse
 
-**Version 1.0.6** — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version 2.0.0** — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 A standalone Frappe 16 app (no ERPNext dependency) that gives you a single,
 real-time dashboard for a Proxmox fleet — PVE hosts, every VM/CT running on
 them, and a Proxmox Backup Server instance. Connect a host once and its
 VMs/CTs are discovered and kept in sync automatically; nothing is added by
-hand.
+hand. As of v2.0, the same dashboard also tracks LLM usage/cost through a
+self-hosted [Bifrost](https://getbifrost.ai) gateway (see
+[AI Usage](#ai-usage-bifrost)) and uptime across any number of
+[Uptime Kuma](https://github.com/louislam/uptime-kuma) instances (see
+[Uptime Monitoring](#uptime-monitoring-uptime-kuma)).
 
 ## Features
 
@@ -53,6 +57,14 @@ hand.
   instance by name, and VM/CT cards can be sorted by CPU, RAM, or Storage —
   each card's own meter rings reorder to lead with whichever metric you're
   currently sorting by.
+- **AI Usage analytics for a self-hosted Bifrost gateway.** Cost, tokens,
+  provider/model breakdowns, and historical trend charts, synced from
+  Bifrost's own request logs into this app's permanent storage — see
+  [AI Usage](#ai-usage-bifrost).
+- **Uptime monitoring across any number of Uptime Kuma instances.** Add,
+  pause, resume, and delete monitored sites from this dashboard; alerts
+  fire through this app's own Email/WhatsApp mechanism, not Kuma's — see
+  [Uptime Monitoring](#uptime-monitoring-uptime-kuma).
 
 ## Requirements
 
@@ -319,6 +331,83 @@ instance opt-in. This also means every guest's warning/critical status is
 now tracked and shown on the dashboard honestly, whatever its server's
 role, even though the global list still only hears about Production ones.
 
+## AI Usage (Bifrost)
+
+In-depth cost/token/provider analytics for a self-hosted
+[Bifrost](https://getbifrost.ai) LLM gateway, on the **AI Usage** tab.
+
+**Setup:**
+1. Generate a **Management API token** in Bifrost's own UI (Settings →
+   API Keys) — this is separate from any provider/virtual key, and never
+   passes through this app to any provider.
+2. Open *Desk → Bifrost Settings*, set **Base URL** (e.g.
+   `https://llm.alfaedge.in`) and the token, and save.
+3. Click **Sync Now** for an immediate first pull, or wait for the
+   background job (every **Sync Interval (minutes)**, default 15, live-
+   editable with no restart) to pick it up on its own.
+
+**How it works:** a background job pulls `GET /api/logs` from Bifrost's
+Management API — paginated, filtered by time range, sorted ascending —
+and upserts each row into a new `LLM Usage Log` doctype, keyed by
+Bifrost's own log ID so re-processing the same row (a 5-minute overlap
+window is re-pulled every cycle, deliberately) never creates a
+duplicate. This is why the dashboard keeps working even if Bifrost's own
+log retention doesn't go back as far as you want to look: alfaEdge Pulse
+becomes the permanent record. A request still `processing` at sync time
+is automatically re-checked later once it completes, so its final
+cost/token numbers land without needing a manual re-sync. **Initial
+Backfill (days)** (default 30) controls how far back the very first sync
+reaches.
+
+The `LLM Usage Log` schema includes a `Source` field (currently always
+`Bifrost`) so a future direct-provider tracker (calling OpenAI/Google/
+etc.'s own billing APIs directly, bypassing Bifrost) could feed the same
+table and dashboard without a rework — not built yet, just left room for.
+
+## Uptime Monitoring (Uptime Kuma)
+
+Add, monitor, and manage sites across any number of self-hosted
+[Uptime Kuma](https://github.com/louislam/uptime-kuma) instances from the
+**Uptime** tab — alerting through this app's own Email/WhatsApp mechanism,
+with Kuma's own alerting left off entirely.
+
+**Setup:**
+1. In Kuma, note (or create) a login with permission to manage monitors.
+   If that instance already has an **API Key** configured, note it too —
+   Kuma permanently disables Basic Auth on `/metrics` once any API Key
+   exists on an instance.
+2. In Desk, create an **Uptime Kuma Instance** record per Kuma deployment:
+   Base URL, Username/Password (and API Key, only if the step above
+   applies to that instance).
+3. From the dashboard's **Uptime** tab, click **+ Add Site**, pick the
+   instance, and fill in the monitor details (HTTP(s)/TCP/Ping supported).
+
+**How it works:** two separate paths, deliberately kept apart —
+
+- **Adding/editing/deleting/pausing/resuming a monitor** uses Kuma's
+  internal Socket.IO API. Kuma's own docs call this API unofficial
+  ("not supported for third-party integrations... may break without
+  notice") — accepted deliberately, and scoped to just this
+  admin-initiated convenience feature.
+- **Status polling** — the one thing alerting depends on — instead uses
+  Kuma's official, stable Prometheus `/metrics` endpoint, polled every
+  **Poll Interval (minutes)** (`Uptime Monitor Settings`, default 1,
+  live-editable with no restart). Every poll is recorded into this app's
+  own `Uptime Check Log`, independent of whatever heartbeat history Kuma
+  itself retains. If a future Kuma upgrade ever breaks the Socket.IO
+  side, only "manage sites from this dashboard" needs a fix — monitoring
+  and alerting keep working regardless.
+
+A site is flagged **Critical** once more than half of its last **N**
+checks (`Uptime Monitor Settings` → **Alert Window (checks)**, default 3)
+report Down — a single flaky check never triggers an alert on its own. A
+site with fewer than a full window of checks on record is never flagged,
+to avoid a false positive on insufficient data. Maintenance/Pending
+readings from Kuma are excluded from that count entirely, not treated as
+"down." Crossing the threshold dispatches a **Site Down** alert through
+the existing Email/WhatsApp channels; dropping back below it sends the
+same "back to normal" recovery message other alert types get.
+
 ## Known Proxmox API limitations (not bugs in this app)
 
 - **VM disk usage** is only available if the QEMU guest agent is installed
@@ -334,14 +423,12 @@ role, even though the global list still only hears about Production ones.
 
 ## Future phases (not implemented yet)
 
-Two directions were scoped out but deliberately left for a later release:
-
 - **One-click CT deployment from templates** — listing available CT
   templates per server and creating a new container directly from the
   dashboard, rather than the read-only monitoring this version provides.
-- **Uptime monitoring via self-hosted Uptime Kuma instances**, with
-  majority-vote down detection across multiple instances so a single
-  regional network blip doesn't false-positive a guest as down.
+- **Direct-provider (OpenAI/Google/etc.) billing API tracking**, feeding
+  the same `LLM Usage Log` table the Bifrost sync already populates — see
+  [AI Usage](#ai-usage-bifrost).
 
 ## Contributing
 

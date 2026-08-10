@@ -1,11 +1,21 @@
 import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-react-sdk'
 import type {
+  BifrostSettings,
+  LlmUsageLog,
   ProxmoxAlertLog,
   ProxmoxBackupLog,
   ProxmoxDatastore,
   ProxmoxGuest,
   ProxmoxMonitorSettings,
   ProxmoxServer,
+  UptimeHistoryPoint,
+  UptimeKumaInstance,
+  UptimeMonitorSettings,
+  UptimeSite,
+  UptimeSummary,
+  UsageBreakdownRow,
+  UsageSummary,
+  UsageTrendPoint,
 } from './types'
 
 /** How often the dashboard itself re-fetches — deliberately faster than the
@@ -101,4 +111,125 @@ export function useSettings() {
     undefined,
     { refreshInterval: 60000 },
   )
+}
+
+// ---------------------------------------------------------------------------
+// AI Usage (Bifrost) — this data only changes on Bifrost Settings'
+// sync_interval_minutes cadence (minutes, not seconds), so every hook here
+// uses the same slow ~60s refresh as useSettings rather than the live
+// dashboard's 7s UI_POLL_MS, which would just be wasted requests.
+// ---------------------------------------------------------------------------
+const SLOW_POLL_MS = 60000
+
+export function useBifrostSettings() {
+  return useFrappeGetDoc<BifrostSettings>('Bifrost Settings', 'Bifrost Settings', undefined, {
+    refreshInterval: SLOW_POLL_MS,
+  })
+}
+
+export function useAiUsageSummary(startDate?: string, endDate?: string, source?: string) {
+  const result = useFrappeGetCall<{ message: UsageSummary }>(
+    'proxmox_monitor.llm_usage_monitor.api.get_usage_summary',
+    { start_date: startDate, end_date: endDate, source },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useAiUsageTrend(startDate?: string, endDate?: string, groupBy: 'day' | 'hour' = 'day', source?: string) {
+  const result = useFrappeGetCall<{ message: UsageTrendPoint[] }>(
+    'proxmox_monitor.llm_usage_monitor.api.get_usage_trend',
+    { start_date: startDate, end_date: endDate, group_by: groupBy, source },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useAiUsageBreakdown(dimension: 'provider' | 'model', startDate?: string, endDate?: string, source?: string) {
+  const result = useFrappeGetCall<{ message: UsageBreakdownRow[] }>(
+    'proxmox_monitor.llm_usage_monitor.api.get_breakdown',
+    { dimension, start_date: startDate, end_date: endDate, source },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+// ---------------------------------------------------------------------------
+// Uptime (Uptime Kuma) — instance/site status changes roughly every minute
+// (the poll cadence), so those two use the live UI_POLL_MS like the rest of
+// the dashboard; the aggregate summary/history/settings hooks use the slow
+// poll like everything else in this file that only changes occasionally.
+// ---------------------------------------------------------------------------
+
+export function useUptimeInstances() {
+  return useFrappeGetDocList<UptimeKumaInstance>(
+    'Uptime Kuma Instance',
+    {
+      fields: ['name', 'instance_name', 'base_url', 'enabled', 'verify_ssl', 'last_synced', 'last_error'],
+      limit: 0,
+      orderBy: { field: 'instance_name', order: 'asc' },
+    },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+}
+
+export function useUptimeSites() {
+  return useFrappeGetDocList<UptimeSite>(
+    'Uptime Site',
+    {
+      fields: [
+        'name', 'instance', 'site_name', 'kuma_monitor_id', 'monitor_type', 'url', 'hostname', 'port',
+        'check_interval_seconds', 'is_active', 'current_status', 'is_critical', 'last_checked',
+      ],
+      limit: 0,
+      orderBy: { field: 'site_name', order: 'asc' },
+    },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+}
+
+export function useUptimeMonitorSettings() {
+  return useFrappeGetDoc<UptimeMonitorSettings>('Uptime Monitor Settings', 'Uptime Monitor Settings', undefined, {
+    refreshInterval: SLOW_POLL_MS,
+  })
+}
+
+export function useUptimeSummary(site?: string, days = 7) {
+  const result = useFrappeGetCall<{ message: UptimeSummary }>(
+    'proxmox_monitor.uptime_monitor.api.get_uptime_summary',
+    { site, days },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useUptimeHistory(site: string, days = 7) {
+  const result = useFrappeGetCall<{ message: UptimeHistoryPoint[] }>(
+    'proxmox_monitor.uptime_monitor.api.get_uptime_history',
+    { site, days },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useAiRecentRequests(
+  limit = 50,
+  offset = 0,
+  sortBy: 'request_timestamp' | 'latency_ms' | 'total_tokens' | 'total_cost' = 'request_timestamp',
+  order: 'asc' | 'desc' = 'desc',
+) {
+  const result = useFrappeGetCall<{ message: { rows: LlmUsageLog[]; total_count: number } }>(
+    'proxmox_monitor.llm_usage_monitor.api.get_recent_requests',
+    { limit, offset, sort_by: sortBy, order },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
 }

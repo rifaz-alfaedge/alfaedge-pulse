@@ -12,6 +12,10 @@ const THEME_BY_STATUS: Record<string, 'green' | 'gray' | 'orange' | 'red'> = {
   Success: 'green',
   Failed: 'red',
   Running: 'orange',
+  Up: 'green',
+  Down: 'red',
+  Pending: 'orange',
+  Maintenance: 'gray',
 }
 
 export function StatusBadge({ status }: { status: string }) {

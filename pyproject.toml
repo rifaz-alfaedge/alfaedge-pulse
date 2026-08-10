@@ -12,6 +12,13 @@ dynamic = ["version"]
 dependencies = [
     # "frappe~=16.0.0" # Installed and managed by bench.
     "requests>=2.31.0",
+    # Used only for Uptime Kuma's internal (unofficial) Socket.IO API, to
+    # add/edit/delete/pause/resume monitors from this app's dashboard —
+    # see uptime_kuma_client/socketio_client.py. Status polling for
+    # alerting instead uses Kuma's official, stable Prometheus /metrics
+    # endpoint via plain `requests`, so this dependency's blast radius is
+    # limited to that one admin-initiated convenience feature.
+    "python-socketio[client]>=5.11.0",
 ]
 
 [build-system]

@@ -5,3 +5,5 @@
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
 proxmox_monitor.patches.backfill_guest_last_backup
+proxmox_monitor.patches.add_llm_usage_log_indexes
+proxmox_monitor.patches.add_uptime_check_log_indexes

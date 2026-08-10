@@ -1,0 +1,159 @@
+{
+ "actions": [],
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "connection_section",
+  "enabled",
+  "base_url",
+  "column_break_connection",
+  "management_api_token",
+  "verify_ssl",
+  "sync_section",
+  "sync_interval_minutes",
+  "initial_backfill_days",
+  "sync_now",
+  "status_section",
+  "last_synced",
+  "last_synced_through",
+  "column_break_status",
+  "last_sync_row_count",
+  "last_error"
+ ],
+ "fields": [
+  {
+   "fieldname": "connection_section",
+   "fieldtype": "Section Break",
+   "label": "Connection"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "description": "Bifrost's base URL, no trailing slash, e.g. https://llm.alfaedge.in",
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "label": "Base URL",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_connection",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "A Bifrost Management API token (generated in Bifrost's own UI) — separate from any provider/virtual key. Stored encrypted.",
+   "fieldname": "management_api_token",
+   "fieldtype": "Password",
+   "label": "Management API Token",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "verify_ssl",
+   "fieldtype": "Check",
+   "label": "Verify SSL Certificate"
+  },
+  {
+   "fieldname": "sync_section",
+   "fieldtype": "Section Break",
+   "label": "Sync"
+  },
+  {
+   "default": "15",
+   "description": "How often the background job pulls new logs from Bifrost. Takes effect on its own within a minute of saving — no restart needed.",
+   "fieldname": "sync_interval_minutes",
+   "fieldtype": "Int",
+   "label": "Sync Interval (minutes)",
+   "non_negative": 1
+  },
+  {
+   "default": "30",
+   "description": "How far back to backfill the very first time a sync runs (or after resetting the checkpoint below).",
+   "fieldname": "initial_backfill_days",
+   "fieldtype": "Int",
+   "label": "Initial Backfill (days)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "sync_now",
+   "fieldtype": "Button",
+   "label": "Sync Now"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Sync Status (updated automatically)"
+  },
+  {
+   "fieldname": "last_synced",
+   "fieldtype": "Datetime",
+   "label": "Last Synced",
+   "read_only": 1
+  },
+  {
+   "description": "The sync checkpoint — logs up to this point in time have been fully pulled.",
+   "fieldname": "last_synced_through",
+   "fieldtype": "Datetime",
+   "label": "Last Synced Through",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_sync_row_count",
+   "fieldtype": "Int",
+   "label": "Rows Synced (last run)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-cog",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LLM Usage Monitor",
+ "name": "Bifrost Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

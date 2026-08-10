@@ -1,0 +1,314 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:{source}-{external_id}",
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "source",
+  "external_id",
+  "provider",
+  "model",
+  "virtual_key_name",
+  "column_break_request",
+  "status",
+  "object_type",
+  "is_stream",
+  "number_of_retries",
+  "timing_section",
+  "request_timestamp",
+  "created_at",
+  "column_break_timing",
+  "latency_ms",
+  "token_section",
+  "prompt_tokens",
+  "completion_tokens",
+  "total_tokens",
+  "column_break_tokens",
+  "cached_read_tokens",
+  "cached_write_tokens",
+  "reasoning_tokens",
+  "audio_tokens",
+  "image_tokens",
+  "cost_section",
+  "total_cost",
+  "column_break_cost",
+  "input_tokens_cost",
+  "output_tokens_cost",
+  "reasoning_tokens_cost",
+  "raw_section",
+  "raw_log"
+ ],
+ "fields": [
+  {
+   "default": "Bifrost",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "Bifrost\nOpenAI Direct\nGoogle Direct\nOther",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The source system's own unique ID for this request (Bifrost's log `id`). Combined with Source, this is what makes syncing idempotent.",
+   "fieldname": "external_id",
+   "fieldtype": "Data",
+   "label": "External ID",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "provider",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Provider",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Model",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "virtual_key_name",
+   "fieldtype": "Data",
+   "label": "Virtual Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_request",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "processing",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "processing\nsuccess\nerror",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "object_type",
+   "fieldtype": "Data",
+   "label": "Object Type",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_stream",
+   "fieldtype": "Check",
+   "label": "Streamed",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "number_of_retries",
+   "fieldtype": "Int",
+   "label": "Retries",
+   "read_only": 1
+  },
+  {
+   "fieldname": "timing_section",
+   "fieldtype": "Section Break",
+   "label": "Timing"
+  },
+  {
+   "description": "When the request was made, per the source system. Every chart/filter/checkpoint in this app uses this field, not Created At.",
+   "fieldname": "request_timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Request Timestamp",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Informational only — when the source system's own record was created, which can lag slightly behind Request Timestamp.",
+   "fieldname": "created_at",
+   "fieldtype": "Datetime",
+   "label": "Created At (source)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_timing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "latency_ms",
+   "fieldtype": "Float",
+   "label": "Latency (ms)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "token_section",
+   "fieldtype": "Section Break",
+   "label": "Tokens"
+  },
+  {
+   "fieldname": "prompt_tokens",
+   "fieldtype": "Int",
+   "label": "Prompt Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completion_tokens",
+   "fieldtype": "Int",
+   "label": "Completion Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_tokens",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Total Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_tokens",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cached_read_tokens",
+   "fieldtype": "Int",
+   "label": "Cached Read Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cached_write_tokens",
+   "fieldtype": "Int",
+   "label": "Cached Write Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reasoning_tokens",
+   "fieldtype": "Int",
+   "label": "Reasoning Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "audio_tokens",
+   "fieldtype": "Int",
+   "label": "Audio Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "image_tokens",
+   "fieldtype": "Int",
+   "label": "Image Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cost_section",
+   "fieldtype": "Section Break",
+   "label": "Cost"
+  },
+  {
+   "fieldname": "total_cost",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Total Cost ($)",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_cost",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "input_tokens_cost",
+   "fieldtype": "Float",
+   "label": "Input Cost ($)",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "output_tokens_cost",
+   "fieldtype": "Float",
+   "label": "Output Cost ($)",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reasoning_tokens_cost",
+   "fieldtype": "Float",
+   "label": "Reasoning Cost ($)",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "raw_section",
+   "fieldtype": "Section Break",
+   "label": "Raw Payload"
+  },
+  {
+   "description": "The full raw log row from the source system's API, for anything not flattened into the fields above.",
+   "fieldname": "raw_log",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "Raw Log",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-bolt",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LLM Usage Monitor",
+ "name": "LLM Usage Log",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "request_timestamp",
+ "sort_order": "DESC",
+ "states": []
+}

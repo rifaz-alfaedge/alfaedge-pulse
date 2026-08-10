@@ -1,0 +1,71 @@
+{
+ "actions": [],
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "poll_interval_minutes",
+  "column_break_settings",
+  "alert_window_checks"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "description": "How often the background job polls every enabled Uptime Kuma Instance's /metrics endpoint. Takes effect on its own within a minute of saving — no restart needed.",
+   "fieldname": "poll_interval_minutes",
+   "fieldtype": "Int",
+   "label": "Poll Interval (minutes)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_settings",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "3",
+   "description": "A site is flagged Critical once more than half of its last N checks report Down. A single check reporting Up resets the majority the moment it tips back below 50%.",
+   "fieldname": "alert_window_checks",
+   "fieldtype": "Int",
+   "label": "Alert Window (checks)",
+   "non_negative": 1
+  }
+ ],
+ "icon": "fa fa-cog",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Uptime Monitor",
+ "name": "Uptime Monitor Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

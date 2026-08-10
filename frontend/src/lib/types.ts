@@ -93,7 +93,7 @@ export interface ProxmoxBackupLog {
   error_message?: string
 }
 
-export type AlertType = 'Critical Resource' | 'Resource Warning' | 'Backup Failure' | 'Backup Overdue' | 'Server Offline'
+export type AlertType = 'Critical Resource' | 'Resource Warning' | 'Backup Failure' | 'Backup Overdue' | 'Server Offline' | 'Site Down'
 
 export interface ProxmoxAlertLog {
   name: string
@@ -111,4 +111,106 @@ export interface ProxmoxMonitorSettings {
   warning_threshold_percent: number
   critical_threshold_percent: number
   confirmation_checks: number
+}
+
+// Mirrors proxmox_monitor/llm_usage_monitor/doctype — see those .json files
+// for the source of truth.
+
+export type LlmUsageSource = 'Bifrost' | 'OpenAI Direct' | 'Google Direct' | 'Other'
+export type LlmUsageStatus = 'processing' | 'success' | 'error'
+
+export interface LlmUsageLog {
+  name: string
+  source: LlmUsageSource
+  external_id: string
+  provider?: string
+  model?: string
+  virtual_key_name?: string
+  status: LlmUsageStatus
+  request_timestamp?: string
+  latency_ms?: number
+  total_tokens?: number
+  total_cost?: number
+}
+
+export interface BifrostSettings {
+  enabled: 0 | 1
+  base_url: string
+  sync_interval_minutes: number
+  initial_backfill_days: number
+  last_synced?: string
+  last_synced_through?: string
+  last_sync_row_count?: number
+  last_error?: string
+}
+
+export interface UsageSummary {
+  total_requests: number
+  total_tokens: number
+  total_cost: number
+  average_latency: number
+  success_rate: number
+}
+
+export interface UsageTrendPoint {
+  bucket: string
+  total_requests: number
+  total_tokens: number
+  total_cost: number
+}
+
+export interface UsageBreakdownRow {
+  label: string
+  total_requests: number
+  total_tokens: number
+  total_cost: number
+}
+
+// Mirrors proxmox_monitor/uptime_monitor/doctype — see those .json files
+// for the source of truth.
+
+export type UptimeMonitorType = 'HTTP(s)' | 'TCP' | 'Ping'
+export type UptimeStatus = 'Up' | 'Down' | 'Pending' | 'Maintenance'
+
+export interface UptimeKumaInstance {
+  name: string
+  instance_name: string
+  base_url: string
+  enabled: 0 | 1
+  verify_ssl: 0 | 1
+  last_synced?: string
+  last_error?: string
+}
+
+export interface UptimeSite {
+  name: string
+  instance: string
+  site_name: string
+  kuma_monitor_id?: number
+  monitor_type: UptimeMonitorType
+  url?: string
+  hostname?: string
+  port?: number
+  check_interval_seconds: number
+  is_active: 0 | 1
+  current_status: UptimeStatus
+  is_critical: 0 | 1
+  last_checked?: string
+}
+
+export interface UptimeMonitorSettings {
+  poll_interval_minutes: number
+  alert_window_checks: number
+}
+
+export interface UptimeSummary {
+  total_checks: number
+  uptime_percent: number | null
+  avg_response_time_ms: number
+}
+
+export interface UptimeHistoryPoint {
+  bucket: string
+  uptime_percent: number | null
+  avg_response_time_ms: number
 }
