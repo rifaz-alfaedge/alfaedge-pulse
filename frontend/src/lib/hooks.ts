@@ -147,7 +147,7 @@ export function useAiUsageTrend(startDate?: string, endDate?: string, groupBy: '
   return { ...result, data: result.data?.message }
 }
 
-export function useAiUsageBreakdown(dimension: 'provider' | 'model', startDate?: string, endDate?: string, source?: string) {
+export function useAiUsageBreakdown(dimension: 'provider' | 'model' | 'virtual_key_name', startDate?: string, endDate?: string, source?: string) {
   const result = useFrappeGetCall<{ message: UsageBreakdownRow[] }>(
     'proxmox_monitor.llm_usage_monitor.api.get_breakdown',
     { dimension, start_date: startDate, end_date: endDate, source },

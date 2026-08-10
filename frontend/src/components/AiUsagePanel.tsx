@@ -61,6 +61,7 @@ export function AiUsagePanel() {
   const { data: trend } = useAiUsageTrend(startDate)
   const { data: providerBreakdown } = useAiUsageBreakdown('provider', startDate)
   const { data: modelBreakdown } = useAiUsageBreakdown('model', startDate)
+  const { data: virtualKeyBreakdown } = useAiUsageBreakdown('virtual_key_name', startDate)
   const { data: recent } = useAiRecentRequests(25, 0, sortField, sortDirection)
 
   const allTrend = trend ?? []
@@ -143,12 +144,15 @@ export function AiUsagePanel() {
         </ChartCard>
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <ChartCard title="By Provider">
           <BreakdownBars rows={providerBreakdown ?? []} />
         </ChartCard>
         <ChartCard title="By Model">
           <BreakdownBars rows={modelBreakdown ?? []} />
+        </ChartCard>
+        <ChartCard title="By Virtual Key">
+          <BreakdownBars rows={virtualKeyBreakdown ?? []} />
         </ChartCard>
       </div>
 

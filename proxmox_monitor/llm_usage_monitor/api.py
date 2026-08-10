@@ -20,7 +20,18 @@ import frappe
 from frappe.utils import add_to_date, cint, flt, get_datetime, nowdate
 
 ALLOWED_ROLES = ("System Manager", "Proxmox Monitor Manager", "Proxmox Monitor Viewer")
-ALLOWED_DIMENSIONS = {"provider": "provider", "model": "model"}
+ALLOWED_DIMENSIONS = {
+	"provider": "provider",
+	"model": "model",
+	# Bifrost's Virtual Keys are how projects/teams/consumers are scoped in
+	# practice — the /api/logs row only carries the key's name (not any
+	# team/customer it belongs to), so this is as close to "by project" as
+	# the log data itself gets.
+	"virtual_key_name": "virtual_key_name",
+}
+DIMENSION_FALLBACK_LABEL = {
+	"virtual_key_name": "(No Virtual Key)",
+}
 ALLOWED_SORT_FIELDS = {"request_timestamp", "latency_ms", "total_tokens", "total_cost"}
 RECENT_REQUEST_FIELDS = [
 	"name", "source", "provider", "model", "status", "request_timestamp",
@@ -129,7 +140,7 @@ def get_breakdown(
 	source: str | None = None,
 	limit: int = 15,
 ) -> list[dict]:
-	"""Cost/token/request share by provider or model, highest cost first."""
+	"""Cost/token/request share by provider, model, or virtual key, highest cost first."""
 	_check_permission()
 	column = ALLOWED_DIMENSIONS.get(dimension)
 	if not column:
@@ -158,9 +169,10 @@ def get_breakdown(
 		values,
 		as_dict=True,
 	)
+	fallback_label = DIMENSION_FALLBACK_LABEL.get(dimension, frappe._("Unknown"))
 	return [
 		{
-			"label": r.label or frappe._("Unknown"),
+			"label": r.label or fallback_label,
 			"total_requests": cint(r.total_requests),
 			"total_tokens": cint(r.total_tokens),
 			"total_cost": flt(r.total_cost, 6),
