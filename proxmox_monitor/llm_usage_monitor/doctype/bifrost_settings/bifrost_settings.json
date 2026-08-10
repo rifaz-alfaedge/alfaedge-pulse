@@ -36,7 +36,7 @@
    "label": "Enabled"
   },
   {
-   "description": "Bifrost's base URL, no trailing slash, e.g. https://llm.alfaedge.in",
+   "description": "Bifrost's base URL, no trailing slash, e.g. https://llm.example.com",
    "fieldname": "base_url",
    "fieldtype": "Data",
    "label": "Base URL",

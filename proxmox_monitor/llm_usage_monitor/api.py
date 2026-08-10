@@ -49,8 +49,41 @@ def _default_range(start_date: str | None, end_date: str | None, days: int = 30)
 	return start, end
 
 
+def _apply_filters(
+	conditions: str,
+	values: dict,
+	source: str | None,
+	provider: str | None,
+	model: str | None,
+	virtual_key_name: str | None,
+) -> str:
+	"""Shared exact-match filter clause for the raw-SQL aggregates below —
+	kept as a single function so the AI Usage tab's filter bar (source,
+	provider, model, virtual key) behaves identically across every chart."""
+	if source:
+		conditions += " and source = %(source)s"
+		values["source"] = source
+	if provider:
+		conditions += " and provider = %(provider)s"
+		values["provider"] = provider
+	if model:
+		conditions += " and model = %(model)s"
+		values["model"] = model
+	if virtual_key_name:
+		conditions += " and virtual_key_name = %(virtual_key_name)s"
+		values["virtual_key_name"] = virtual_key_name
+	return conditions
+
+
 @frappe.whitelist()
-def get_usage_summary(start_date: str | None = None, end_date: str | None = None, source: str | None = None) -> dict:
+def get_usage_summary(
+	start_date: str | None = None,
+	end_date: str | None = None,
+	source: str | None = None,
+	provider: str | None = None,
+	model: str | None = None,
+	virtual_key_name: str | None = None,
+) -> dict:
 	"""Total requests/tokens/cost, average latency, and success rate for a
 	date range — the AI Usage tab's summary tiles."""
 	_check_permission()
@@ -58,9 +91,7 @@ def get_usage_summary(start_date: str | None = None, end_date: str | None = None
 
 	conditions = "request_timestamp between %(start)s and %(end)s"
 	values = {"start": start, "end": end}
-	if source:
-		conditions += " and source = %(source)s"
-		values["source"] = source
+	conditions = _apply_filters(conditions, values, source, provider, model, virtual_key_name)
 
 	row = frappe.db.sql(
 		f"""
@@ -91,6 +122,9 @@ def get_usage_trend(
 	end_date: str | None = None,
 	group_by: str = "day",
 	source: str | None = None,
+	provider: str | None = None,
+	model: str | None = None,
+	virtual_key_name: str | None = None,
 ) -> list[dict]:
 	"""Daily (or hourly) cost/token/request series for the trend chart,
 	computed from our own table — not Bifrost's histogram endpoints —
@@ -102,9 +136,7 @@ def get_usage_trend(
 
 	conditions = "request_timestamp between %(start)s and %(end)s"
 	values = {"start": start, "end": end}
-	if source:
-		conditions += " and source = %(source)s"
-		values["source"] = source
+	conditions = _apply_filters(conditions, values, source, provider, model, virtual_key_name)
 
 	rows = frappe.db.sql(
 		f"""
@@ -138,6 +170,9 @@ def get_breakdown(
 	start_date: str | None = None,
 	end_date: str | None = None,
 	source: str | None = None,
+	provider: str | None = None,
+	model: str | None = None,
+	virtual_key_name: str | None = None,
 	limit: int = 15,
 ) -> list[dict]:
 	"""Cost/token/request share by provider, model, or virtual key, highest cost first."""
@@ -149,9 +184,7 @@ def get_breakdown(
 
 	conditions = "request_timestamp between %(start)s and %(end)s"
 	values = {"start": start, "end": end, "limit": cint(limit) or 15}
-	if source:
-		conditions += " and source = %(source)s"
-		values["source"] = source
+	conditions = _apply_filters(conditions, values, source, provider, model, virtual_key_name)
 
 	rows = frappe.db.sql(
 		f"""
@@ -183,7 +216,12 @@ def get_breakdown(
 
 @frappe.whitelist()
 def get_recent_requests(
-	filters: dict | None = None,
+	start_date: str | None = None,
+	end_date: str | None = None,
+	source: str | None = None,
+	provider: str | None = None,
+	model: str | None = None,
+	virtual_key_name: str | None = None,
 	limit: int = 50,
 	offset: int = 0,
 	sort_by: str = "request_timestamp",
@@ -193,7 +231,17 @@ def get_recent_requests(
 	raw SQL) so Frappe's own permission layer applies automatically."""
 	sort_by = sort_by if sort_by in ALLOWED_SORT_FIELDS else "request_timestamp"
 	order = "asc" if str(order).lower() == "asc" else "desc"
-	filters = filters or {}
+	start, end = _default_range(start_date, end_date)
+
+	filters: dict = {"request_timestamp": ["between", [start, end]]}
+	if source:
+		filters["source"] = source
+	if provider:
+		filters["provider"] = provider
+	if model:
+		filters["model"] = model
+	if virtual_key_name:
+		filters["virtual_key_name"] = virtual_key_name
 
 	rows = frappe.get_list(
 		"LLM Usage Log",
@@ -205,3 +253,26 @@ def get_recent_requests(
 	)
 	total_count = frappe.db.count("LLM Usage Log", filters=filters)
 	return {"rows": rows, "total_count": total_count}
+
+
+@frappe.whitelist()
+def get_filter_options() -> dict:
+	"""Distinct provider/model/virtual-key values across all synced data,
+	for the AI Usage tab's filter dropdowns."""
+	_check_permission()
+
+	def distinct(column: str) -> list[str]:
+		rows = frappe.db.sql(
+			f"""
+			select distinct {column} from `tabLLM Usage Log`
+			where {column} is not null and {column} != ''
+			order by {column}
+			""",
+		)
+		return [r[0] for r in rows]
+
+	return {
+		"providers": distinct("provider"),
+		"models": distinct("model"),
+		"virtual_keys": distinct("virtual_key_name"),
+	}

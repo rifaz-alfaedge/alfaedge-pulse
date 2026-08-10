@@ -39,7 +39,19 @@ All notable changes to this project are documented here.
   licensed, ~21KB gzip) added as the dashboard's first charting
   dependency, used for the new cost/token/uptime trend lines. Simple
   proportional breakdowns (e.g. cost by provider) stay hand-rolled
-  CSS/SVG — no library needed for those.
+  CSS/SVG — no library needed for those. Hovering a trend chart shows a
+  floating tooltip with the exact date and value(s) under the cursor.
+- **AI Usage: breakdown by Virtual Key.** A third breakdown card groups
+  cost/tokens/requests by Bifrost Virtual Key — the closest the log data
+  gets to "by project/team/consumer" — alongside the existing Provider
+  and Model breakdowns.
+- **AI Usage: timespan and filter controls.** The fixed 7d/30d/90d range
+  tabs are replaced with a date filter offering Today, Yesterday, Last
+  7/30/90 Days, or a Custom Range (two date pickers), plus dropdown
+  filters for Provider, Model, and Virtual Key — populated from the
+  distinct values actually present in your synced data. All apply
+  together across the summary tiles, both trend charts, every breakdown
+  card, and the recent-requests table.
 
 ### Fixed
 - **Timestamps could be off by the site's UTC offset.** `timeAgo`/the
@@ -51,6 +63,18 @@ All notable changes to this project are documented here.
   convert with. Now parsed as browser-local time instead, correct
   whenever the viewer's timezone matches the site's (the expected case
   for an internal ops dashboard).
+- **Bifrost auth model corrected to Basic Auth.** Self-hosted Bifrost
+  (non-Enterprise) has no scoped Management API key to generate — that's
+  an Enterprise-only feature. `Bifrost Settings` now takes the dashboard
+  admin's username/password and authenticates via HTTP Basic Auth,
+  matching what a self-hosted instance actually supports.
+- **Bifrost sync: concurrency race, timezone bug, and a NOT NULL crash.**
+  A duplicate scheduled sync could race the same document into a
+  `TimestampMismatchError`; outbound date filters sent to Bifrost were
+  naive local time instead of UTC, silently widening the requested
+  window; and log rows with empty token/cost sub-objects could crash the
+  upsert. All three fixed and verified against a live, high-volume
+  Bifrost instance.
 
 ## [1.0.6] - 2026-08-09
 

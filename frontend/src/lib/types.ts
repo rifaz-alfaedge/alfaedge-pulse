@@ -166,6 +166,12 @@ export interface UsageBreakdownRow {
   total_cost: number
 }
 
+export interface UsageFilterOptions {
+  providers: string[]
+  models: string[]
+  virtual_keys: string[]
+}
+
 // Mirrors proxmox_monitor/uptime_monitor/doctype — see those .json files
 // for the source of truth.
 

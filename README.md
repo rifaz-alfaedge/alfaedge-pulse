@@ -341,7 +341,7 @@ In-depth cost/token/provider analytics for a self-hosted
    keys are an Enterprise-only feature. Just use your existing **Bifrost
    dashboard admin username and password**.
 2. Open *Desk → Bifrost Settings*, set **Base URL** (e.g.
-   `https://llm.alfaedge.in`) and that admin username/password, and save.
+   `https://llm.example.com`) and that admin username/password, and save.
 3. Click **Sync Now** for an immediate first pull, or wait for the
    background job (every **Sync Interval (minutes)**, default 15, live-
    editable with no restart) to pick it up on its own.

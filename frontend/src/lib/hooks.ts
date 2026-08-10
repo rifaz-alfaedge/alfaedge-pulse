@@ -14,6 +14,7 @@ import type {
   UptimeSite,
   UptimeSummary,
   UsageBreakdownRow,
+  UsageFilterOptions,
   UsageSummary,
   UsageTrendPoint,
 } from './types'
@@ -127,30 +128,84 @@ export function useBifrostSettings() {
   })
 }
 
-export function useAiUsageSummary(startDate?: string, endDate?: string, source?: string) {
+/** Shared shape for the AI Usage tab's provider/model/virtual-key filter
+ * bar — every hook below accepts the same three optional exact-match
+ * filters, on top of its own required params. */
+export interface UsageFilters {
+  provider?: string
+  model?: string
+  virtualKeyName?: string
+}
+
+export function useAiUsageSummary(startDate?: string, endDate?: string, source?: string, filters: UsageFilters = {}) {
   const result = useFrappeGetCall<{ message: UsageSummary }>(
     'proxmox_monitor.llm_usage_monitor.api.get_usage_summary',
-    { start_date: startDate, end_date: endDate, source },
+    {
+      start_date: startDate,
+      end_date: endDate,
+      source,
+      provider: filters.provider,
+      model: filters.model,
+      virtual_key_name: filters.virtualKeyName,
+    },
     undefined,
     { refreshInterval: SLOW_POLL_MS },
   )
   return { ...result, data: result.data?.message }
 }
 
-export function useAiUsageTrend(startDate?: string, endDate?: string, groupBy: 'day' | 'hour' = 'day', source?: string) {
+export function useAiUsageTrend(
+  startDate?: string,
+  endDate?: string,
+  groupBy: 'day' | 'hour' = 'day',
+  source?: string,
+  filters: UsageFilters = {},
+) {
   const result = useFrappeGetCall<{ message: UsageTrendPoint[] }>(
     'proxmox_monitor.llm_usage_monitor.api.get_usage_trend',
-    { start_date: startDate, end_date: endDate, group_by: groupBy, source },
+    {
+      start_date: startDate,
+      end_date: endDate,
+      group_by: groupBy,
+      source,
+      provider: filters.provider,
+      model: filters.model,
+      virtual_key_name: filters.virtualKeyName,
+    },
     undefined,
     { refreshInterval: SLOW_POLL_MS },
   )
   return { ...result, data: result.data?.message }
 }
 
-export function useAiUsageBreakdown(dimension: 'provider' | 'model' | 'virtual_key_name', startDate?: string, endDate?: string, source?: string) {
+export function useAiUsageBreakdown(
+  dimension: 'provider' | 'model' | 'virtual_key_name',
+  startDate?: string,
+  endDate?: string,
+  source?: string,
+  filters: UsageFilters = {},
+) {
   const result = useFrappeGetCall<{ message: UsageBreakdownRow[] }>(
     'proxmox_monitor.llm_usage_monitor.api.get_breakdown',
-    { dimension, start_date: startDate, end_date: endDate, source },
+    {
+      dimension,
+      start_date: startDate,
+      end_date: endDate,
+      source,
+      provider: filters.provider,
+      model: filters.model,
+      virtual_key_name: filters.virtualKeyName,
+    },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useAiUsageFilterOptions() {
+  const result = useFrappeGetCall<{ message: UsageFilterOptions }>(
+    'proxmox_monitor.llm_usage_monitor.api.get_filter_options',
+    {},
     undefined,
     { refreshInterval: SLOW_POLL_MS },
   )
@@ -220,6 +275,10 @@ export function useUptimeHistory(site: string, days = 7) {
 }
 
 export function useAiRecentRequests(
+  startDate?: string,
+  endDate?: string,
+  source?: string,
+  filters: UsageFilters = {},
   limit = 50,
   offset = 0,
   sortBy: 'request_timestamp' | 'latency_ms' | 'total_tokens' | 'total_cost' = 'request_timestamp',
@@ -227,7 +286,18 @@ export function useAiRecentRequests(
 ) {
   const result = useFrappeGetCall<{ message: { rows: LlmUsageLog[]; total_count: number } }>(
     'proxmox_monitor.llm_usage_monitor.api.get_recent_requests',
-    { limit, offset, sort_by: sortBy, order },
+    {
+      start_date: startDate,
+      end_date: endDate,
+      source,
+      provider: filters.provider,
+      model: filters.model,
+      virtual_key_name: filters.virtualKeyName,
+      limit,
+      offset,
+      sort_by: sortBy,
+      order,
+    },
     undefined,
     { refreshInterval: SLOW_POLL_MS },
   )

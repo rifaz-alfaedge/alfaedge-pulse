@@ -2,31 +2,24 @@ import { useMemo, useState } from 'react'
 import {
   useAiRecentRequests,
   useAiUsageBreakdown,
+  useAiUsageFilterOptions,
   useAiUsageSummary,
   useAiUsageTrend,
   useBifrostSettings,
 } from '../lib/hooks'
 import type { LlmUsageLog, UsageBreakdownRow } from '../lib/types'
 import { formatPercent, timeAgo } from '../lib/format'
+import { type DateRangePreset, resolveDateRange } from '../lib/dateRange'
 import { TrendChart } from './TrendChart'
 import { HeartbeatDot } from './HeartbeatDot'
 import { StatusBadge } from './StatusBadge'
-import { Tabs } from './Tabs'
-
-const RANGE_OPTIONS = [
-  { label: '7d', days: 7 },
-  { label: '30d', days: 30 },
-  { label: '90d', days: 90 },
-]
+import { DateRangeFilter } from './DateRangeFilter'
 
 type SortField = 'request_timestamp' | 'latency_ms' | 'total_tokens' | 'total_cost'
 type SortDirection = 'asc' | 'desc'
 
-function dateNDaysAgo(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - days)
-  return d.toISOString().slice(0, 10)
-}
+const filterSelectClass =
+  'rounded-lg border border-border-hairline bg-surface-page px-3 py-2 text-sm text-ink-primary outline-none focus:border-accent'
 
 function formatCost(v: number): string {
   return `$${v.toFixed(v < 1 ? 4 : 2)}`
@@ -51,18 +44,32 @@ function bucketToUnixSeconds(bucket: string): number {
  * Bifrost live, so the numbers stay available even if Bifrost's own log
  * retention doesn't go back as far as this view's selected range. */
 export function AiUsagePanel() {
-  const [rangeDays, setRangeDays] = useState(30)
+  const [preset, setPreset] = useState<DateRangePreset>('30d')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
+  const [provider, setProvider] = useState('')
+  const [model, setModel] = useState('')
+  const [virtualKey, setVirtualKey] = useState('')
   const [sortField, setSortField] = useState<SortField>('request_timestamp')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const startDate = useMemo(() => dateNDaysAgo(rangeDays), [rangeDays])
+
+  const { startDate, endDate } = useMemo(
+    () => resolveDateRange(preset, customStart, customEnd),
+    [preset, customStart, customEnd],
+  )
+  const filters = useMemo(
+    () => ({ provider: provider || undefined, model: model || undefined, virtualKeyName: virtualKey || undefined }),
+    [provider, model, virtualKey],
+  )
 
   const { data: settings } = useBifrostSettings()
-  const { data: summary } = useAiUsageSummary(startDate)
-  const { data: trend } = useAiUsageTrend(startDate)
-  const { data: providerBreakdown } = useAiUsageBreakdown('provider', startDate)
-  const { data: modelBreakdown } = useAiUsageBreakdown('model', startDate)
-  const { data: virtualKeyBreakdown } = useAiUsageBreakdown('virtual_key_name', startDate)
-  const { data: recent } = useAiRecentRequests(25, 0, sortField, sortDirection)
+  const { data: filterOptions } = useAiUsageFilterOptions()
+  const { data: summary } = useAiUsageSummary(startDate, endDate, undefined, filters)
+  const { data: trend } = useAiUsageTrend(startDate, endDate, 'day', undefined, filters)
+  const { data: providerBreakdown } = useAiUsageBreakdown('provider', startDate, endDate, undefined, filters)
+  const { data: modelBreakdown } = useAiUsageBreakdown('model', startDate, endDate, undefined, filters)
+  const { data: virtualKeyBreakdown } = useAiUsageBreakdown('virtual_key_name', startDate, endDate, undefined, filters)
+  const { data: recent } = useAiRecentRequests(startDate, endDate, undefined, filters, 25, 0, sortField, sortDirection)
 
   const allTrend = trend ?? []
   const trendX = useMemo(() => allTrend.map((p) => bucketToUnixSeconds(p.bucket)), [allTrend])
@@ -94,11 +101,51 @@ export function AiUsagePanel() {
                 : 'Waiting for the first Bifrost sync…'}
           </span>
         </div>
-        <Tabs
-          options={RANGE_OPTIONS.map((o) => o.label)}
-          value={RANGE_OPTIONS.find((o) => o.days === rangeDays)?.label ?? '30d'}
-          onChange={(label) => setRangeDays(RANGE_OPTIONS.find((o) => o.label === label)?.days ?? 30)}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangeFilter
+            preset={preset}
+            customStart={customStart}
+            customEnd={customEnd}
+            onPresetChange={setPreset}
+            onCustomChange={(start, end) => {
+              setCustomStart(start)
+              setCustomEnd(end)
+            }}
+          />
+          <select
+            aria-label="Provider"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+            className={filterSelectClass}
+          >
+            <option value="">All Providers</option>
+            {(filterOptions?.providers ?? []).map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Model"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            className={filterSelectClass}
+          >
+            <option value="">All Models</option>
+            {(filterOptions?.models ?? []).map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Virtual Key"
+            value={virtualKey}
+            onChange={(e) => setVirtualKey(e.target.value)}
+            className={filterSelectClass}
+          >
+            <option value="">All Virtual Keys</option>
+            {(filterOptions?.virtual_keys ?? []).map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {settings?.last_error && (
