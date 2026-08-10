@@ -20,7 +20,10 @@
   "status_section",
   "last_synced",
   "column_break_status",
-  "last_error"
+  "last_error",
+  "last_auto_import",
+  "column_break_auto_import_status",
+  "last_auto_import_error"
  ],
  "fields": [
   {
@@ -104,6 +107,23 @@
    "fieldname": "last_error",
    "fieldtype": "Small Text",
    "label": "Last Error",
+   "read_only": 1
+  },
+  {
+   "description": "Last time this instance was reconciled against the fleet — new Kuma-side monitors pulled in, and sites missing here pushed from other instances (see Uptime Monitor Settings > Keep Instances In Sync).",
+   "fieldname": "last_auto_import",
+   "fieldtype": "Datetime",
+   "label": "Last Sync Check",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_auto_import_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_auto_import_error",
+   "fieldtype": "Small Text",
+   "label": "Last Sync Error",
    "read_only": 1
   }
  ],

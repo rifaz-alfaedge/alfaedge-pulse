@@ -26,6 +26,8 @@ re-check those files for what changed.
 
 from __future__ import annotations
 
+import threading
+
 import socketio
 from frappe.utils import cint
 
@@ -34,6 +36,11 @@ from proxmox_monitor.uptime_kuma_client.base import UptimeKumaAPIError
 #: This app's Monitor Type options -> Kuma's own `type` slug (confirmed
 #: against src/pages/EditMonitor.vue's <option value="..."> list).
 KUMA_MONITOR_TYPE = {"HTTP(s)": "http", "TCP": "port", "Ping": "ping"}
+#: Reverse of the above, for importing existing Kuma monitors — any Kuma
+#: monitor whose `type` isn't one of these three (dns/docker/group/mqtt/
+#: etc.) isn't representable by this app's Uptime Site doctype, so it's
+#: simply not offered as importable.
+MONITOR_TYPE_FROM_KUMA = {v: k for k, v in KUMA_MONITOR_TYPE.items()}
 
 CONNECT_TIMEOUT = 15
 CALL_TIMEOUT = 15
@@ -46,7 +53,16 @@ class UptimeKumaClient:
 	needs it for admin-initiated, infrequent actions."""
 
 	def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = True):
+		self._monitor_list: dict | None = None
+		self._monitor_list_event = threading.Event()
 		self._sio = socketio.Client(ssl_verify=bool(verify_ssl))
+		# Registered before connecting: Kuma's server pushes this once, right
+		# after a successful login (see `afterLogin()` in its own
+		# server/server.js, which `await`s `server.sendMonitorList(socket)`
+		# before the login call's own ack callback fires) — confirmed against
+		# Kuma's live master source. Registering early means we never race
+		# the login ack for it, whether or not a given call ends up using it.
+		self._sio.on("monitorList", self._on_monitor_list)
 		try:
 			self._sio.connect(base_url, transports=["websocket"], wait_timeout=CONNECT_TIMEOUT)
 			result = self._sio.call("login", {"username": username, "password": password}, timeout=CALL_TIMEOUT)
@@ -59,6 +75,10 @@ class UptimeKumaClient:
 			self._safe_disconnect()
 			raise UptimeKumaAPIError(f"Could not connect to {base_url}: {e}") from e
 
+	def _on_monitor_list(self, data: dict) -> None:
+		self._monitor_list = data
+		self._monitor_list_event.set()
+
 	def _safe_disconnect(self) -> None:
 		try:
 			self._sio.disconnect()
@@ -70,6 +90,17 @@ class UptimeKumaClient:
 			return self._sio.call(event, *args, timeout=CALL_TIMEOUT)
 		except socketio.exceptions.SocketIOError as e:
 			raise UptimeKumaAPIError(f"{event} failed: {e}") from e
+
+	def list_monitors(self) -> dict:
+		"""Every monitor Kuma already knows about on this instance, keyed by
+		monitor ID (string, as Kuma/JSON sends it) — for importing monitors
+		that were created directly in Kuma rather than through this app.
+		Almost always already populated by the time login returns (see the
+		ordering note in `__init__`); the wait below only matters if that
+		guarantee is ever violated by a future Kuma version."""
+		if self._monitor_list is None:
+			self._monitor_list_event.wait(CALL_TIMEOUT)
+		return self._monitor_list or {}
 
 	def add_monitor(self, site) -> int:
 		"""Create a new monitor from an ``Uptime Site`` doc (unsaved or

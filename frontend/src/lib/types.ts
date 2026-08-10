@@ -204,6 +204,20 @@ export interface UptimeSite {
   last_checked?: string
 }
 
+/** A Kuma monitor that already exists on an instance but has no matching
+ * local Uptime Site yet — e.g. it was created directly in Kuma before that
+ * instance was ever connected to alfaEdge Pulse. See `list_importable_monitors`. */
+export interface ImportableMonitor {
+  kuma_monitor_id: number
+  site_name: string
+  monitor_type: UptimeMonitorType
+  url?: string
+  hostname?: string
+  port?: number
+  check_interval_seconds: number
+  is_active: 0 | 1
+}
+
 export interface UptimeMonitorSettings {
   poll_interval_minutes: number
   alert_window_checks: number

@@ -3,6 +3,7 @@ import { Switch } from '@rtcamp/frappe-ui-react'
 import { useAlertLogs, useBackupLogs, useDatastores, useGuests, useServers, useSettings } from './lib/hooks'
 import { ResourceCard, type DiskMeter, type Severity } from './components/ResourceCard'
 import { InstanceSeverityLists } from './components/InstanceSeverityLists'
+import { UptimeSeverityLists } from './components/UptimeSeverityLists'
 import { NodeDetailDialog, type SelectedNode } from './components/NodeDetailDialog'
 import { BackupsPanel } from './components/BackupsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
@@ -249,6 +250,7 @@ function App() {
         isHostCritical={isHostCritical}
         isHostWarning={isHostWarning}
       />
+      <UptimeSeverityLists />
 
       {mainTab === 'Overview' && (
         <>

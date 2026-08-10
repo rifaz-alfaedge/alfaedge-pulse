@@ -7,7 +7,11 @@
  "field_order": [
   "poll_interval_minutes",
   "column_break_settings",
-  "alert_window_checks"
+  "alert_window_checks",
+  "auto_import_section",
+  "auto_import_enabled",
+  "column_break_auto_import",
+  "auto_import_interval_minutes"
  ],
  "fields": [
   {
@@ -28,6 +32,31 @@
    "fieldname": "alert_window_checks",
    "fieldtype": "Int",
    "label": "Alert Window (checks)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "auto_import_section",
+   "fieldtype": "Section Break",
+   "label": "Auto-Import"
+  },
+  {
+   "default": "1",
+   "description": "Keeps every enabled instance in sync with the fleet: pulls in monitors that already exist on an instance's Kuma but aren't tracked here yet (e.g. one added directly in Kuma), and pushes sites that already exist on other instances onto one that's missing them (e.g. a newly connected instance). Turn off to only add/sync sites via \"Add Site\" or a manual \"Import Existing Monitors\" pass.",
+   "fieldname": "auto_import_enabled",
+   "fieldtype": "Check",
+   "label": "Keep Instances In Sync"
+  },
+  {
+   "fieldname": "column_break_auto_import",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "15",
+   "description": "How often each instance is checked for monitors not yet tracked here. Runs less often than polling since it needs a Socket.IO login, not just an HTTP GET.",
+   "depends_on": "auto_import_enabled",
+   "fieldname": "auto_import_interval_minutes",
+   "fieldtype": "Int",
+   "label": "Auto-Import Interval (minutes)",
    "non_negative": 1
   }
  ],

@@ -2,6 +2,58 @@
 
 All notable changes to this project are documented here.
 
+## [2.1.0] - 2026-08-10
+
+### Added
+- **Import Existing Monitors.** A new button on the Uptime tab lists every
+  monitor a Kuma instance already has that isn't tracked here yet (e.g.
+  one added directly in Kuma before that instance was ever connected) and
+  lets you pick which ones to bring in — nothing is created on Kuma's
+  side, since they already exist there.
+- **Instances are now kept in sync automatically.** Sites are a fleet-wide
+  concept, not per-instance: **Add Site** creates a site on every enabled
+  instance at once (no more picking one instance), and **Pause / Resume /
+  Delete** apply to every instance's copy. A newly connected instance (or
+  one added specifically to watch existing sites from a new location)
+  automatically catches up to whatever the fleet already has, on the same
+  self-throttled schedule as pulling in monitors added directly in Kuma —
+  both directions live under **Keep Instances In Sync** in `Uptime
+  Monitor Settings`, with no manual step required.
+- **Criticality is now a fleet-wide vote.** A site counts as Critical once
+  at least half of its monitoring instances independently agree it's
+  down (each still judges from its own last-N-checks majority first) —
+  not the moment any single location's own network hiccup says so. This
+  is the actual point of running more than one Uptime Kuma instance:
+  redundancy against one location's own connectivity issues, not just a
+  second independent alert source.
+- **A persistent Uptime Critical/Down summary now shows on every tab**,
+  the same way the Proxmox Critical/Warning summary already did — not
+  just the Uptime tab. Entries show just the site name and status; the
+  per-instance breakdown stays on the Uptime tab's own site cards.
+- **The Uptime site grid shows one card per site, not one per instance.**
+  Each card lists every instance's own current status underneath, so a
+  site up from one location and down from another is visible at a glance
+  in one place instead of two separate, identically-named cards.
+
+### Fixed
+- **Adding or editing a site could crash with `AttributeError:
+  'UptimeSite' object has no attribute 'validate'`.** A stray call
+  assumed every Frappe document has a generic `validate()` method to call
+  directly — it doesn't, unless the doctype defines one. Removed; the
+  normal insert/save validation (and the existing orphaned-monitor
+  cleanup if a local save still fails after Kuma succeeds) already covers
+  this correctly.
+- **Failed site actions showed a bare `[object Object]` instead of a
+  message.** The error thrown by a failed API call isn't a real `Error`
+  instance, so `instanceof Error` was always false and the fallback
+  stringified the whole object. Now unwraps Frappe's actual error shape
+  (including `frappe.throw()`'s user-facing message when present).
+- **A successful "Import Existing Monitors" pass closed the dialog before
+  its own result summary was ever visible** — both the result and the
+  dialog-close state updates landed in the same render, so the summary
+  never had a chance to paint. Both this and the equivalent "Add Site"
+  outcome now stay open until closed manually.
+
 ## [2.0.0] - 2026-08-10
 
 ### Added

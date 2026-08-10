@@ -1,6 +1,6 @@
 # alfaEdge Pulse
 
-**Version 2.0.0** — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version 2.1.0** — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 A standalone Frappe 16 app (no ERPNext dependency) that gives you a single,
 real-time dashboard for a Proxmox fleet — PVE hosts, every VM/CT running on
@@ -61,9 +61,14 @@ self-hosted [Bifrost](https://getbifrost.ai) gateway (see
   provider/model breakdowns, and historical trend charts, synced from
   Bifrost's own request logs into this app's permanent storage — see
   [AI Usage](#ai-usage-bifrost).
-- **Uptime monitoring across any number of Uptime Kuma instances.** Add,
-  pause, resume, and delete monitored sites from this dashboard; alerts
-  fire through this app's own Email/WhatsApp mechanism, not Kuma's — see
+- **Uptime monitoring across any number of Uptime Kuma instances, kept in
+  sync.** Add, pause, resume, and delete a site once and it applies
+  everywhere; a newly connected instance automatically catches up to the
+  sites the fleet already has. A site is only flagged Critical once a
+  real majority of its monitoring instances agree it's down — not the
+  moment any single location's own network hiccup says so — and alerts
+  fire through this app's own Email/WhatsApp mechanism, not Kuma's, with
+  a persistent Critical/Down summary shown on every tab. See
   [Uptime Monitoring](#uptime-monitoring-uptime-kuma).
 
 ## Requirements
@@ -377,37 +382,71 @@ with Kuma's own alerting left off entirely.
    If that instance already has an **API Key** configured, note it too —
    Kuma permanently disables Basic Auth on `/metrics` once any API Key
    exists on an instance.
-2. In Desk, create an **Uptime Kuma Instance** record per Kuma deployment:
-   Base URL, Username/Password (and API Key, only if the step above
-   applies to that instance).
-3. From the dashboard's **Uptime** tab, click **+ Add Site**, pick the
-   instance, and fill in the monitor details (HTTP(s)/TCP/Ping supported).
+2. In Desk, create an **Uptime Kuma Instance** record per Kuma deployment
+   (e.g. one per physical/geographic location): Base URL, Username/Password
+   (and API Key, only if the step above applies to that instance).
+3. From the dashboard's **Uptime** tab, click **+ Add Site** and fill in
+   the monitor details (HTTP(s)/TCP/Ping supported) — no need to pick an
+   instance, see below.
+
+**Instances are kept in sync, deliberately.** The reason to run more than
+one Uptime Kuma instance is almost always to watch the *same* sites from
+different locations, for redundancy against any one location's own
+network issues — so this app treats "the sites" as one shared list across
+every enabled instance, not a separate list per instance:
+
+- **Add Site** creates that monitor on every enabled instance at once.
+- **Pause / Resume / Delete** on any one card applies to every instance's
+  copy of that site.
+- **A newly connected instance (or one you're specifically adding to
+  watch existing sites from a new location) catches up automatically** —
+  any site the fleet already has gets created there too, and any monitor
+  that already exists on that instance's own Kuma (e.g. added directly in
+  Kuma before it was connected here) gets pulled in. Both directions run
+  on the same self-throttled schedule (`Uptime Monitor Settings` →
+  **Keep Instances In Sync** / **Sync Interval (minutes)**, default 15,
+  live-editable with no restart) — no manual step needed, though **Import
+  Existing Monitors** in the Uptime tab does the same pull manually and
+  immediately, if you don't want to wait for the next cycle.
+
+The dashboard's site grid shows **one card per site**, not one per
+instance — each card lists every instance's own current status
+underneath, so you can see at a glance that a site is, say, up from one
+location and down from another.
 
 **How it works:** two separate paths, deliberately kept apart —
 
-- **Adding/editing/deleting/pausing/resuming a monitor** uses Kuma's
-  internal Socket.IO API. Kuma's own docs call this API unofficial
-  ("not supported for third-party integrations... may break without
-  notice") — accepted deliberately, and scoped to just this
-  admin-initiated convenience feature.
+- **Adding/editing/deleting/pausing/resuming a monitor, and the
+  sync/import above,** use Kuma's internal Socket.IO API. Kuma's own docs
+  call this API unofficial ("not supported for third-party
+  integrations... may break without notice") — accepted deliberately,
+  and scoped to just these admin-initiated/convenience operations.
 - **Status polling** — the one thing alerting depends on — instead uses
   Kuma's official, stable Prometheus `/metrics` endpoint, polled every
   **Poll Interval (minutes)** (`Uptime Monitor Settings`, default 1,
   live-editable with no restart). Every poll is recorded into this app's
   own `Uptime Check Log`, independent of whatever heartbeat history Kuma
   itself retains. If a future Kuma upgrade ever breaks the Socket.IO
-  side, only "manage sites from this dashboard" needs a fix — monitoring
-  and alerting keep working regardless.
+  side, only the admin-initiated operations above need a fix — status
+  polling and alerting keep working regardless.
 
-A site is flagged **Critical** once more than half of its last **N**
-checks (`Uptime Monitor Settings` → **Alert Window (checks)**, default 3)
-report Down — a single flaky check never triggers an alert on its own. A
-site with fewer than a full window of checks on record is never flagged,
-to avoid a false positive on insufficient data. Maintenance/Pending
-readings from Kuma are excluded from that count entirely, not treated as
-"down." Crossing the threshold dispatches a **Site Down** alert through
-the existing Email/WhatsApp channels; dropping back below it sends the
-same "back to normal" recovery message other alert types get.
+**Criticality is a fleet-wide vote, not a single instance's opinion.**
+Each instance first judges a site from its own last **N** checks
+(`Uptime Monitor Settings` → **Alert Window (checks)**, default 3) — more
+than half Down means that instance's own verdict is Down. A site is then
+flagged **Critical** fleet-wide once **at least half** of the instances
+with a verdict agree it's Down — so one location's own flaky network
+blip, outvoted by the others, doesn't declare a site down on its own; a
+real majority of vantage points has to agree. An instance that's paused,
+or hasn't collected a full window of checks yet, doesn't get a vote
+either way. Maintenance/Pending readings are excluded from the count
+entirely, never treated as "down." Crossing the threshold dispatches a
+**Site Down** alert through the existing Email/WhatsApp channels;
+dropping back below it sends the same "back to normal" recovery message
+other alert types get — both fire once per site, not once per instance.
+Critical (and merely-Down-somewhere) sites also surface in a persistent
+summary shown above every tab, the same way Proxmox's own Critical/
+Warning summary already does — not just on the Uptime tab itself.
 
 ## Known Proxmox API limitations (not bugs in this app)
 

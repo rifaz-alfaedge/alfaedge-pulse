@@ -1,6 +1,7 @@
 import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-react-sdk'
 import type {
   BifrostSettings,
+  ImportableMonitor,
   LlmUsageLog,
   ProxmoxAlertLog,
   ProxmoxBackupLog,
@@ -246,6 +247,19 @@ export function useUptimeSites() {
     undefined,
     { refreshInterval: UI_POLL_MS },
   )
+}
+
+/** Not polled — only fetched on demand when the "Import Existing Monitors"
+ * modal opens for a given instance (`swrKey` left undefined, so passing an
+ * empty `instance` disables the call entirely rather than hitting the
+ * endpoint with a meaningless value). */
+export function useImportableMonitors(instance: string) {
+  const result = useFrappeGetCall<{ message: ImportableMonitor[] }>(
+    'proxmox_monitor.uptime_monitor.api.list_importable_monitors',
+    { instance },
+    instance ? undefined : null,
+  )
+  return { ...result, data: result.data?.message }
 }
 
 export function useUptimeMonitorSettings() {
