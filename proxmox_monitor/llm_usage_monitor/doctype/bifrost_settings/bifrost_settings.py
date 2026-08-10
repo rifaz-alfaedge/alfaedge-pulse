@@ -23,17 +23,22 @@ class BifrostSettings(Document):
 def sync_now() -> dict:
 	"""Whitelisted handler for the "Sync Now" button.
 
-	Runs one sync cycle immediately, bypassing the self-throttle guard
-	(see ``bifrost_sync.sync_bifrost_logs``) so a user doesn't have to
-	wait out ``sync_interval_minutes`` after first configuring the token.
+	Enqueues a sync in the background rather than running it inline —
+	bypassing ``sync_interval_minutes``'s throttle so a user doesn't have
+	to wait after first configuring credentials, but a first-time 30-day
+	backfill can genuinely take minutes, which would otherwise block (and
+	likely time out) the web request. See ``bifrost_sync``'s module
+	docstring for why this and the cron path share one deduped job.
 	"""
 	frappe.only_for(("System Manager", "Proxmox Monitor Manager"))
-	from proxmox_monitor.tasks.bifrost_sync import run_sync_now
+	from proxmox_monitor.tasks.bifrost_sync import enqueue_sync
 
-	try:
-		row_count = run_sync_now()
-		return {"ok": True, "message": frappe._("Synced {0} log row(s).").format(row_count)}
-	except Exception as e:
-		frappe.db.rollback()
-		frappe.log_error(title="Bifrost Monitor: manual sync failed", message=frappe.get_traceback())
-		return {"ok": False, "error": str(e)}
+	settings = frappe.get_cached_doc("Bifrost Settings")
+	if not settings.enabled:
+		return {"ok": False, "error": "Bifrost sync is disabled — enable it above first."}
+
+	enqueue_sync()
+	return {
+		"ok": True,
+		"message": frappe._("Sync started in the background — refresh in a moment to see Last Synced / Last Error."),
+	}

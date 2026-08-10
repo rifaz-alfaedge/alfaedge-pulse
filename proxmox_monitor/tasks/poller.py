@@ -133,10 +133,13 @@ def ensure_poller_running() -> None:
 		# this, as a hard backstop behind the loop's own bound.
 		timeout=MAX_LOOP_SECONDS + 120,
 		job_id=POLLER_JOB_ID,
-		# If a job with this ID is already queued/running, frappe.enqueue
-		# quietly skips re-enqueueing — exactly the dedup guard we want
-		# here, since this function is only ever called from the outside
-		# (watchdog / migrate), never from inside a running loop.
+		# job_id alone does not dedupe in Frappe -- deduplicate=True is a
+		# separate, required opt-in (confirmed by reading enqueue()'s own
+		# source). Without it, a job with this ID already queued/running
+		# wouldn't actually block a second enqueue. In practice the
+		# heartbeat check above already prevents most redundant calls, but
+		# this closes the same race window explicitly rather than by luck.
+		deduplicate=True,
 	)
 
 

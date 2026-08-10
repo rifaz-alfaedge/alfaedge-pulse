@@ -32,15 +32,37 @@ Design notes (the "why" behind the shape of this module):
   place* (same Bifrost id) — if that happens after its original timestamp
   has aged out of the checkpoint's overlap window, the main incremental
   pass will never see it again on its own.
+- **The actual sync work always runs as a deduped background job, never
+  inline in a request.** ``last_synced`` is only written once a sync
+  finishes, so without this a slow first backfill (which can run for
+  minutes) would let the next minute's cron tick start a second,
+  fully-overlapping sync — two processes racing to save the same log row
+  raises ``TimestampMismatchError`` (observed in practice). Both the cron
+  path and the "Sync Now" button enqueue the same job under a fixed
+  ``job_id`` with ``deduplicate=True`` (a separate, required opt-in —
+  ``job_id`` alone does *not* dedupe, confirmed by reading ``enqueue()``'s
+  own source), so only one sync for this app can ever be queued/running
+  at a time. This also means "Sync Now" returns immediately instead of
+  blocking the request for however long a large backfill takes.
+- **Every timestamp sent to Bifrost is explicit UTC, never a bare
+  ``.isoformat()`` of a naive datetime.** Frappe's ``now_datetime()`` and
+  friends return naive datetimes in the *site's* timezone (IST here, see
+  ``poller.py``'s own past bug with this) — serializing one directly
+  produces a string with no timezone designator at all, which isn't valid
+  RFC3339. Bifrost's Go backend appears to silently ignore an unparseable
+  ``start_time``/``end_time`` rather than erroring (observed in practice:
+  a 30-day-backfill config nonetheless pulled months of history) — so
+  this always converts to explicit UTC with a trailing ``Z`` first.
 """
 
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import frappe
-from frappe.utils import add_to_date, cint, convert_utc_to_system_timezone, get_datetime, now_datetime
+from frappe.utils import add_to_date, cint, convert_utc_to_system_timezone, get_datetime, get_system_timezone, now_datetime
 
 from proxmox_monitor.bifrost_client.base import BifrostAPIError, BifrostClient
 from frappe.utils.password import get_decrypted_password
@@ -48,10 +70,18 @@ from frappe.utils.password import get_decrypted_password
 DEFAULT_SYNC_INTERVAL_MINUTES = 15
 DEFAULT_BACKFILL_DAYS = 30
 CHECKPOINT_OVERLAP_MINUTES = 5
-PAGE_LIMIT = 1000
+# Bifrost's documented max is 1000, but each row can carry substantial
+# raw request/response text — smaller, faster pages are worth the extra
+# round-trips for a background job with no one waiting on it synchronously.
+PAGE_LIMIT = 500
 MAX_PAGES = 500
 PROCESSING_MIN_AGE = timedelta(minutes=2)
 PROCESSING_MAX_AGE = timedelta(hours=48)
+
+#: Fixed job_id so Frappe's own enqueue dedup guarantees at most one sync
+#: for this app is ever in flight — see the module docstring.
+BIFROST_SYNC_JOB_ID = "proxmox_monitor_bifrost_sync"
+BIFROST_SYNC_JOB_TIMEOUT = 3600
 
 
 def sync_bifrost_logs() -> None:
@@ -60,7 +90,7 @@ def sync_bifrost_logs() -> None:
 	Wired to the existing every-minute cron in hooks.py alongside the
 	Proxmox watchdog. Most invocations are a no-op (the throttle guard
 	below returns immediately); only one in every ``sync_interval_minutes``
-	actually talks to Bifrost.
+	actually enqueues a sync.
 	"""
 	try:
 		settings = frappe.get_cached_doc("Bifrost Settings")
@@ -71,15 +101,35 @@ def sync_bifrost_logs() -> None:
 			elapsed_minutes = (now_datetime() - get_datetime(settings.last_synced)).total_seconds() / 60
 			if elapsed_minutes < interval:
 				return
-		_run_sync(settings)
+		enqueue_sync()
 	except Exception:
-		frappe.db.rollback()
 		frappe.log_error(title="Bifrost Monitor: sync cycle failed unexpectedly", message=frappe.get_traceback())
 
 
+def enqueue_sync() -> None:
+	"""Queue the actual sync as a background "long" job, deduped by a fixed
+	job_id — called from both the cron path above and the "Sync Now"
+	button, so the two can never run concurrently against each other (or
+	against a still-running previous cycle)."""
+	frappe.enqueue(
+		"proxmox_monitor.tasks.bifrost_sync.run_sync_now",
+		queue="long",
+		timeout=BIFROST_SYNC_JOB_TIMEOUT,
+		job_id=BIFROST_SYNC_JOB_ID,
+		# job_id alone does NOT dedupe in Frappe — deduplicate=True is a
+		# separate, required opt-in (confirmed by reading enqueue()'s own
+		# source: without it, multiple jobs can share one job_id and all
+		# get queued). This is the actual fix for the race this module's
+		# docstring describes.
+		deduplicate=True,
+	)
+
+
 def run_sync_now() -> int:
-	"""Manual "Sync Now" entrypoint — bypasses the throttle and raises on
-	failure so the whitelisted button handler can show it to the user."""
+	"""The actual sync work. Bypasses the time-based throttle (the caller
+	already decided this run should happen) — but never call this directly
+	from a request handler, since a first-time backfill can run long; go
+	through ``enqueue_sync`` instead so it runs in the background."""
 	settings = frappe.get_cached_doc("Bifrost Settings")
 	if not settings.enabled:
 		raise BifrostAPIError("Bifrost sync is disabled — enable it in Bifrost Settings first.")
@@ -138,8 +188,8 @@ def _pull_and_upsert(client: BifrostClient, start_time: datetime, end_time: date
 		page = client.get(
 			"/api/logs",
 			params={
-				"start_time": start_time.isoformat(),
-				"end_time": end_time.isoformat(),
+				"start_time": _to_utc_rfc3339(start_time),
+				"end_time": _to_utc_rfc3339(end_time),
 				"sort_by": "timestamp",
 				"order": "asc",
 				"limit": PAGE_LIMIT,
@@ -196,21 +246,44 @@ def _upsert_log(row: dict) -> None:
 	docname = f"Bifrost-{row['id']}"
 	fields = _map_bifrost_row(row)
 	if frappe.db.exists("LLM Usage Log", docname):
-		doc = frappe.get_doc("LLM Usage Log", docname)
-		doc.update(fields)
-		doc.save(ignore_permissions=True)
-	else:
-		doc = frappe.new_doc("LLM Usage Log")
-		doc.update({"source": "Bifrost", "external_id": row["id"], **fields})
+		# A plain SQL UPDATE, not doc.get_doc()+.save() — this doctype has
+		# no custom validate/hooks to run, so there's nothing that update
+		# would give us. Just as importantly, .save() enforces optimistic
+		# locking (rejects the write if `modified` changed since the doc
+		# was fetched), which a high-throughput sync has no business
+		# paying for, and which briefly-overlapping runs (see the module
+		# docstring — now prevented at the source by enqueue_sync's job
+		# dedup) tripped as TimestampMismatchError in practice.
+		frappe.db.set_value("LLM Usage Log", docname, fields, update_modified=True)
+		return
+
+	doc = frappe.new_doc("LLM Usage Log")
+	doc.update({"source": "Bifrost", "external_id": row["id"], **fields})
+	try:
 		doc.insert(ignore_permissions=True)
+	except frappe.DuplicateEntryError:
+		# Lost a race to create this exact row to another process — fall
+		# back to updating it rather than failing this row's whole batch.
+		frappe.db.set_value("LLM Usage Log", docname, fields, update_modified=True)
 
 
 def _map_bifrost_row(row: dict) -> dict:
-	"""Flatten one Bifrost `/api/logs` row into LLM Usage Log's fields."""
+	"""Flatten one Bifrost `/api/logs` row into LLM Usage Log's fields.
+
+	Every numeric field is coalesced to 0 rather than passed through as a
+	raw ``None`` — Bifrost omits detail sub-objects/keys it has nothing to
+	report for (e.g. a provider that doesn't break out cached/reasoning
+	tokens), but this doctype's Int/Float columns are NOT NULL like every
+	other numeric Frappe field, so an unguarded ``None`` fails the insert
+	outright (observed in practice) rather than just recording a 0.
+	"""
 	token_usage = row.get("token_usage") or {}
 	prompt_details = token_usage.get("prompt_tokens_details") or {}
 	completion_details = token_usage.get("completion_tokens_details") or {}
 	cost = token_usage.get("cost") or {}
+
+	def num(value):
+		return value if value is not None else 0
 
 	return {
 		"provider": row.get("provider"),
@@ -219,22 +292,22 @@ def _map_bifrost_row(row: dict) -> dict:
 		"status": row.get("status"),
 		"object_type": row.get("object"),
 		"is_stream": 1 if row.get("stream") else 0,
-		"number_of_retries": row.get("number_of_retries") or 0,
+		"number_of_retries": num(row.get("number_of_retries")),
 		"request_timestamp": _parse_bifrost_timestamp(row["timestamp"]),
 		"created_at": _parse_bifrost_timestamp(row["created_at"]) if row.get("created_at") else None,
-		"latency_ms": row.get("latency"),
-		"prompt_tokens": token_usage.get("prompt_tokens"),
-		"completion_tokens": token_usage.get("completion_tokens"),
-		"total_tokens": token_usage.get("total_tokens"),
-		"cached_read_tokens": prompt_details.get("cached_read_tokens"),
-		"cached_write_tokens": prompt_details.get("cached_write_tokens"),
-		"reasoning_tokens": completion_details.get("reasoning_tokens"),
-		"audio_tokens": prompt_details.get("audio_tokens"),
-		"image_tokens": prompt_details.get("image_tokens"),
-		"total_cost": row.get("cost"),
-		"input_tokens_cost": cost.get("input_tokens_cost"),
-		"output_tokens_cost": cost.get("output_tokens_cost"),
-		"reasoning_tokens_cost": cost.get("reasoning_tokens_cost"),
+		"latency_ms": num(row.get("latency")),
+		"prompt_tokens": num(token_usage.get("prompt_tokens")),
+		"completion_tokens": num(token_usage.get("completion_tokens")),
+		"total_tokens": num(token_usage.get("total_tokens")),
+		"cached_read_tokens": num(prompt_details.get("cached_read_tokens")),
+		"cached_write_tokens": num(prompt_details.get("cached_write_tokens")),
+		"reasoning_tokens": num(completion_details.get("reasoning_tokens")),
+		"audio_tokens": num(prompt_details.get("audio_tokens")),
+		"image_tokens": num(prompt_details.get("image_tokens")),
+		"total_cost": num(row.get("cost")),
+		"input_tokens_cost": num(cost.get("input_tokens_cost")),
+		"output_tokens_cost": num(cost.get("output_tokens_cost")),
+		"reasoning_tokens_cost": num(cost.get("reasoning_tokens_cost")),
 		"raw_log": json.dumps(row, indent=2),
 	}
 
@@ -254,3 +327,17 @@ def _parse_bifrost_timestamp(value: str) -> datetime:
 	if parsed.tzinfo is None:
 		parsed = parsed.replace(tzinfo=timezone.utc)
 	return convert_utc_to_system_timezone(parsed).replace(tzinfo=None)
+
+
+def _to_utc_rfc3339(value: datetime) -> str:
+	"""The inverse of ``_parse_bifrost_timestamp``: our checkpoint/window
+	datetimes are naive-in-system-timezone (Frappe's storage convention —
+	see ``now_datetime``), but Bifrost's `/api/logs` expects a proper
+	RFC3339 string. A bare ``.isoformat()`` of a naive datetime has no
+	timezone designator at all — not valid RFC3339 — which Bifrost's Go
+	backend appears to silently ignore rather than reject (see the module
+	docstring), so this always attaches the site's real offset and
+	converts to UTC (with a trailing ``Z``, not `+00:00`) explicitly.
+	"""
+	aware = value.replace(tzinfo=ZoneInfo(get_system_timezone()))
+	return aware.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")

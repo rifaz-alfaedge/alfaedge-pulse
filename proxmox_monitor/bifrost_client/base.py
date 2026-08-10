@@ -31,7 +31,12 @@ class BifrostAPIError(Exception):
 class BifrostClient:
 	"""Authenticated HTTP client for one Bifrost instance's Management API."""
 
-	default_timeout = 30
+	# A page of /api/logs can be a genuinely large response (each row
+	# optionally carries full raw_request/raw_response text) — 30s proved
+	# too tight against a real self-hosted instance in practice (observed
+	# read timeouts), especially once the date-range bug this app also
+	# fixed meant early requests were scanning far more than intended.
+	default_timeout = 60
 
 	def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = True):
 		self.base_url = base_url.rstrip("/")
