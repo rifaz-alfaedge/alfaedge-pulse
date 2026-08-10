@@ -9,7 +9,8 @@
   "enabled",
   "base_url",
   "column_break_connection",
-  "management_api_token",
+  "username",
+  "password",
   "verify_ssl",
   "sync_section",
   "sync_interval_minutes",
@@ -46,10 +47,16 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "A Bifrost Management API token (generated in Bifrost's own UI) — separate from any provider/virtual key. Stored encrypted.",
-   "fieldname": "management_api_token",
+   "description": "Self-hosted Bifrost has no separate API key — this is your Bifrost dashboard admin login, used as HTTP Basic Auth for the Management API.",
+   "fieldname": "username",
+   "fieldtype": "Data",
+   "label": "Admin Username",
+   "reqd": 1
+  },
+  {
+   "fieldname": "password",
    "fieldtype": "Password",
-   "label": "Management API Token",
+   "label": "Admin Password",
    "reqd": 1
   },
   {

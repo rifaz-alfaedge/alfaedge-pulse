@@ -7,6 +7,12 @@ Built on plain ``requests``, matching ``proxmox_client.base``'s reasoning:
 the surface we need is a handful of GET endpoints under ``/api/logs``, so a
 dedicated Bifrost SDK dependency isn't worth it. Unlike Proxmox's `/api2/json`
 envelope, Bifrost's responses are the payload directly — no unwrapping needed.
+
+Auth: self-hosted (non-Enterprise) Bifrost has no separate "Management API
+key" concept — confirmed directly from a live self-hosted instance's own
+docs, which state plainly to "use Basic auth with your admin credentials"
+(username:password, base64-encoded). Scoped API keys are an Enterprise-only
+upsell feature, not available on the open-source edition this app targets.
 """
 
 from __future__ import annotations
@@ -27,11 +33,11 @@ class BifrostClient:
 
 	default_timeout = 30
 
-	def __init__(self, base_url: str, management_api_token: str, verify_ssl: bool = True):
+	def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = True):
 		self.base_url = base_url.rstrip("/")
 		self.verify_ssl = bool(verify_ssl)
 		self.session = requests.Session()
-		self.session.headers["Authorization"] = f"Bearer {management_api_token}"
+		self.session.auth = (username, password)
 
 	def get(self, path: str, params: dict | None = None) -> dict:
 		"""GET a Bifrost Management API path and return its JSON body.

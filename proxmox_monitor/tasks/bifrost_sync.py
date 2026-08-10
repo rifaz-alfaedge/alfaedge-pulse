@@ -87,11 +87,11 @@ def run_sync_now() -> int:
 
 
 def _run_sync(settings) -> int:
-	token = get_decrypted_password("Bifrost Settings", "Bifrost Settings", "management_api_token", raise_exception=False)
-	if not token or not settings.base_url:
-		raise BifrostAPIError("Base URL / Management API Token are not fully configured in Bifrost Settings.")
+	password = get_decrypted_password("Bifrost Settings", "Bifrost Settings", "password", raise_exception=False)
+	if not password or not settings.username or not settings.base_url:
+		raise BifrostAPIError("Base URL / Admin Username / Admin Password are not fully configured in Bifrost Settings.")
 
-	client = BifrostClient(settings.base_url, token, bool(settings.verify_ssl))
+	client = BifrostClient(settings.base_url, settings.username, password, bool(settings.verify_ssl))
 	sync_start = now_datetime()
 	if settings.last_synced_through:
 		checkpoint = get_datetime(settings.last_synced_through)

@@ -337,17 +337,18 @@ In-depth cost/token/provider analytics for a self-hosted
 [Bifrost](https://getbifrost.ai) LLM gateway, on the **AI Usage** tab.
 
 **Setup:**
-1. Generate a **Management API token** in Bifrost's own UI (Settings →
-   API Keys) — this is separate from any provider/virtual key, and never
-   passes through this app to any provider.
+1. Self-hosted Bifrost has no separate API key to generate — scoped API
+   keys are an Enterprise-only feature. Just use your existing **Bifrost
+   dashboard admin username and password**.
 2. Open *Desk → Bifrost Settings*, set **Base URL** (e.g.
-   `https://llm.alfaedge.in`) and the token, and save.
+   `https://llm.alfaedge.in`) and that admin username/password, and save.
 3. Click **Sync Now** for an immediate first pull, or wait for the
    background job (every **Sync Interval (minutes)**, default 15, live-
    editable with no restart) to pick it up on its own.
 
 **How it works:** a background job pulls `GET /api/logs` from Bifrost's
-Management API — paginated, filtered by time range, sorted ascending —
+Management API — authenticated with HTTP Basic Auth using that admin
+username/password, paginated, filtered by time range, sorted ascending —
 and upserts each row into a new `LLM Usage Log` doctype, keyed by
 Bifrost's own log ID so re-processing the same row (a 5-minute overlap
 window is re-pulled every cycle, deliberately) never creates a

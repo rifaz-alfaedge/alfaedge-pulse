@@ -10,10 +10,12 @@ from frappe.model.document import Document
 class BifrostSettings(Document):
 	"""Single DocType holding connection config for the Bifrost LLM gateway sync.
 
-	Read by ``proxmox_monitor.tasks.bifrost_sync``. Holds a Bifrost
-	Management API token (generated in Bifrost's own UI) — never a
-	provider/virtual key, and never any of the underlying OpenAI/
-	Anthropic/etc. credentials, which stay inside Bifrost itself.
+	Read by ``proxmox_monitor.tasks.bifrost_sync``. Holds the Bifrost
+	dashboard admin username/password, used as HTTP Basic Auth for the
+	Management API — self-hosted Bifrost has no separate API key (that's
+	an Enterprise-only feature). Never a provider/virtual key, and never
+	any of the underlying OpenAI/Anthropic/etc. credentials, which stay
+	inside Bifrost itself.
 	"""
 
 
