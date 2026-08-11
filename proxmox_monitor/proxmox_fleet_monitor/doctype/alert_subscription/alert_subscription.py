@@ -11,14 +11,19 @@ from frappe.model.document import Document
 class AlertSubscription(Document):
 	"""One engineer's notification profile: their own Email/WhatsApp
 	contact info (in addition to Proxmox Monitor Settings' global
-	recipients), plus a table of servers/instances they want to watch.
+	recipients), plus a table of servers/instances they want to watch,
+	and a separate table of Uptime Kuma sites they want to watch.
 	Telegram is deliberately not offered here — it's a fleet-wide-only
 	channel, configured solely in Proxmox Monitor Settings.
 
 	One document per Frappe User (autoname: field:user). Deliberately
 	non-cascading: watching a server only matches alerts fired directly
 	against that server, never its guests/datastores — see
-	``_get_matching_subscriptions`` in ``alerts/dispatch.py``.
+	``_get_matching_subscriptions`` in ``alerts/dispatch.py``. Uptime
+	sites are matched by site_name there, not by the exact Uptime Site
+	docname chosen below — sites are shared across every connected
+	instance (see ``uptime_monitor.api``'s module docstring), so which
+	instance's copy you pick here doesn't change what you're watching.
 	"""
 
 	def before_insert(self):

@@ -161,16 +161,31 @@ def dispatch_recovery(
 def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> list:
 	"""Alert Subscription (parent, contact info) rows to additionally notify
 	for this alert/recovery, found via their Alert Subscription Item
-	scenario rows.
+	(Proxmox Guest) or Alert Subscription Uptime Site (Uptime Site) rows.
 
 	Per-instance subscriptions only ever target a Proxmox Guest (VM/CT) —
 	watching a server itself, or a datastore, is handled purely by the
 	global recipients in Proxmox Monitor Settings, not individual
-	subscriptions.
+	subscriptions. Uptime Site alerts are matched on their site_name, not
+	the literal reference_name docname — a "Site Down" alert always fires
+	against one deterministic sibling doc (see
+	``uptime_kuma_poller._reconcile_site_criticality``), but a subscriber
+	may have picked a *different* instance's copy of the same site when
+	subscribing, and both should match.
 	"""
-	if reference_doctype != "Proxmox Guest":
+	if reference_doctype == "Proxmox Guest":
+		rows = frappe.get_all("Alert Subscription Item", filters={"instance": reference_name}, fields=["parent"])
+	elif reference_doctype == "Uptime Site":
+		site_name = frappe.db.get_value("Uptime Site", reference_name, "site_name")
+		if not site_name:
+			return []
+		sibling_names = frappe.get_all("Uptime Site", filters={"site_name": site_name}, pluck="name")
+		rows = frappe.get_all(
+			"Alert Subscription Uptime Site", filters={"site": ["in", sibling_names]}, fields=["parent"]
+		)
+	else:
 		return []
-	rows = frappe.get_all("Alert Subscription Item", filters={"instance": reference_name}, fields=["parent"])
+
 	if not rows:
 		return []
 	return frappe.get_all(

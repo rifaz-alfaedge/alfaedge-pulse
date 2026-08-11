@@ -20,6 +20,15 @@ frappe.ui.form.on("Alert Subscription", {
 			return { filters: { server: row.server || "" } };
 		};
 
+		// Sites are shared across every connected Uptime Kuma instance (one
+		// Uptime Site doc per instance), so the plain default query would
+		// offer the same site once per instance. This custom query collapses
+		// them to one representative per site_name — it only changes which
+		// options are offered, nothing about how a pick gets saved.
+		frm.fields_dict["uptime_sites"].grid.get_field("site").get_query = () => {
+			return { query: "proxmox_monitor.uptime_monitor.api.uptime_site_query" };
+		};
+
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Send Test Alert"), () => {
 				frappe.call({

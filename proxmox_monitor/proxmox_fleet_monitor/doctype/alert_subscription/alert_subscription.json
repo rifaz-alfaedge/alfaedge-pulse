@@ -15,7 +15,9 @@
   "enable_whatsapp",
   "whatsapp_number",
   "scenarios_section",
-  "scenarios"
+  "scenarios",
+  "uptime_sites_section",
+  "uptime_sites"
  ],
  "fields": [
   {
@@ -76,6 +78,17 @@
    "fieldtype": "Table",
    "label": "Servers / Instances",
    "options": "Alert Subscription Item"
+  },
+  {
+   "fieldname": "uptime_sites_section",
+   "fieldtype": "Section Break",
+   "label": "Uptime Sites"
+  },
+  {
+   "fieldname": "uptime_sites",
+   "fieldtype": "Table",
+   "label": "Uptime Sites",
+   "options": "Alert Subscription Uptime Site"
   }
  ],
  "icon": "fa fa-bell-o",

@@ -6,12 +6,21 @@ endpoint, and the cross-instance-consensus alerting rule built on top of it.
 
 Design notes:
 
-- **A plain self-throttled function on the existing every-minute cron**,
-  same pattern as ``tasks.bifrost_sync`` — see that module's docstring for
-  why this isn't the bounded-loop/heartbeat pattern ``poller.py`` uses.
-  At the default 1-minute interval this throttle is a no-op (the cron
-  tick and the configured interval coincide), but the field stays
-  Desk-editable without a code/hooks.py change if ever slowed down.
+- **The bounded-loop/heartbeat pattern from ``poller.py``, not a plain
+  cron tick** — see that module's docstring for the full reasoning.
+  ``poll_all_instances`` (one full cycle) is unchanged; ``run_uptime_poll_loop``
+  just calls it every ``poll_interval_seconds`` from inside a background
+  job that loops internally, giving genuine sub-minute polling using only
+  the RQ worker Frappe already runs — no new infrastructure. Bounded to
+  ``MAX_LOOP_SECONDS`` per invocation (not a true infinite loop) so a
+  graceful `bench restart` never has to wait it out; a watchdog
+  (``ensure_uptime_poller_running``, wired to the 1-minute cron and
+  ``after_migrate``) restarts it once its heartbeat goes stale — both
+  after a crash and after each bounded invocation's normal exit. Below
+  the old 1-minute-cron design, ``poll_interval_seconds`` was mostly a
+  no-op (the cron tick and configured interval always coincided at the
+  cron floor); now it's read fresh every cycle and genuinely drives how
+  often polling happens, all the way down to single-digit seconds.
 - **We build our own heartbeat history** (``Uptime Check Log``) from
   Kuma's official, stable ``/metrics`` endpoint rather than relying on
   Kuma's own retention or its unofficial Socket.IO heartbeat API — see
@@ -22,17 +31,16 @@ Design notes:
   calculation entirely** — no ``Uptime Check Log`` row is even written
   for them, so "more than half of the last N checks" only ever considers
   genuine Up/Down results, never "was paused/in a maintenance window."
-- **Criticality is a two-tier vote, not a single number.** Each instance
+- **Criticality is a two-tier check, not a single number.** Each instance
   first decides its own verdict from its own last N checks (more than
   half down — unchanged, per-instance rule). A site then counts as
-  fleet-wide Critical once *at least half* of the instances that have a
-  verdict agree it's down — deliberately a looser ">=" than the strict
-  ">" used for the per-instance vote, matching what was asked for. This
-  is the whole reason to run multiple instances: one location's own
-  network hiccup outvoting itself shouldn't declare a site down; a real
-  majority of vantage points agreeing should. See
-  ``_reconcile_site_criticality``. Every ``Uptime Site`` sibling for a
-  given site_name is kept in sync to the same is_critical value — it's a
+  fleet-wide Critical only once *every* instance that has a verdict
+  agrees it's down — deliberately unanimous, not a majority: this is the
+  whole reason to run multiple instances, so one location's own network
+  hiccup can't declare a site down on its own — every vantage point has
+  to agree first. See ``_reconcile_site_criticality``. Every ``Uptime
+  Site`` sibling for a given site_name is kept in sync to the same
+  is_critical value — it's a
   per-site fact, not a per-instance one, once instances are meant to
   mirror each other (see ``uptime_monitor.api``'s module docstring).
 - **The alert edge-trigger reuses ``poller.py``'s ``_handle_transition``
@@ -63,6 +71,9 @@ Design notes:
 
 from __future__ import annotations
 
+import signal
+import time
+
 import frappe
 from frappe.utils import cint, get_datetime, now_datetime
 from frappe.utils.password import get_decrypted_password
@@ -72,7 +83,7 @@ from proxmox_monitor.uptime_kuma_client.base import UptimeKumaAPIError
 from proxmox_monitor.uptime_kuma_client.metrics_client import fetch_metrics
 from proxmox_monitor.uptime_monitor.api import auto_import_new_monitors, sync_missing_sites_to_instance
 
-DEFAULT_POLL_INTERVAL_MINUTES = 1
+DEFAULT_POLL_INTERVAL_SECONDS = 60
 DEFAULT_ALERT_WINDOW_CHECKS = 3
 DEFAULT_AUTO_IMPORT_INTERVAL_MINUTES = 15
 
@@ -82,15 +93,102 @@ STATUS_UP = 1
 STATUS_DOWN = 0
 _STATUS_LABEL = {STATUS_UP: "Up", STATUS_DOWN: "Down", 2: "Pending", 3: "Maintenance"}
 
+UPTIME_POLLER_JOB_ID = "proxmox_monitor_uptime_poller"
+UPTIME_HEARTBEAT_CACHE_KEY = "proxmox_monitor:uptime_poller_heartbeat"
+
+# See poller.py's MAX_LOOP_SECONDS for the full reasoning — same bound,
+# same "long" queue, comfortably inside its stopwaitsecs.
+MAX_LOOP_SECONDS = 300
+
+
+# ---------------------------------------------------------------------------
+# Loop lifecycle — mirrors poller.py's ensure_poller_running/run_poll_loop
+# ---------------------------------------------------------------------------
+
+
+def ensure_uptime_poller_running() -> None:
+	"""Watchdog: (re)start the uptime poll loop if its heartbeat has gone stale.
+
+	Wired to the same 1-minute cron as the Proxmox watchdog, and to
+	``after_migrate`` so the loop comes up automatically after installing
+	or updating the app. Also what picks the loop back up after each
+	bounded ``run_uptime_poll_loop`` invocation ends normally.
+	"""
+	if frappe.cache().get_value(UPTIME_HEARTBEAT_CACHE_KEY):
+		return  # loop is alive and ticking; nothing to do
+
+	frappe.enqueue(
+		"proxmox_monitor.tasks.uptime_kuma_poller.run_uptime_poll_loop",
+		queue="long",
+		# A little headroom over MAX_LOOP_SECONDS for the final cycle to
+		# finish; RQ force-kills the job if it ever runs past this, as a
+		# hard backstop behind the loop's own bound.
+		timeout=MAX_LOOP_SECONDS + 120,
+		job_id=UPTIME_POLLER_JOB_ID,
+		# job_id alone does not dedupe in Frappe — deduplicate=True is a
+		# separate, required opt-in. Without it, a job with this ID
+		# already queued/running wouldn't actually block a second enqueue.
+		deduplicate=True,
+	)
+
+
+def run_uptime_poll_loop() -> None:
+	"""One bounded run of the uptime poll loop (up to MAX_LOOP_SECONDS), then returns normally.
+
+	Not meant to be called directly outside of ``ensure_uptime_poller_running``,
+	which is also what re-launches this once it returns.
+	"""
+	stop_requested = False
+
+	def _request_stop(signum, frame):
+		nonlocal stop_requested
+		stop_requested = True
+
+	# Belt-and-braces: if a SIGTERM *does* get forwarded into this job
+	# (behaviour varies by RQ/worker configuration), exit within the
+	# current sleep tick rather than waiting out the full bound below.
+	previous_handler = signal.signal(signal.SIGTERM, _request_stop)
+	start_time = time.monotonic()
+	try:
+		while not stop_requested and (time.monotonic() - start_time) < MAX_LOOP_SECONDS:
+			interval = cint(frappe.db.get_single_value("Uptime Monitor Settings", "poll_interval_seconds"))
+			interval = max(interval, 1) if interval else DEFAULT_POLL_INTERVAL_SECONDS
+
+			# Heartbeat TTL is a few cycles wide so a single slow cycle (e.g.
+			# one unreachable instance taking the full request timeout)
+			# doesn't make the watchdog think the loop has died and spawn a
+			# duplicate.
+			frappe.cache().set_value(UPTIME_HEARTBEAT_CACHE_KEY, "1", expires_in_sec=max(interval * 4, 60))
+
+			try:
+				poll_all_instances()
+			except Exception:
+				# A failure here means something broke outside the
+				# per-instance try/except in poll_all_instances (e.g.
+				# reading Settings itself) — log it but keep the loop
+				# alive rather than let one bad cycle end the whole poller.
+				frappe.log_error(title="Uptime Monitor: poll cycle failed", message=frappe.get_traceback())
+
+			# Sleep in 1s increments (rather than one time.sleep(interval)
+			# call) so a SIGTERM, if forwarded into this job, lands within
+			# ~1s instead of waiting out the full poll interval.
+			for _ in range(interval):
+				if stop_requested:
+					break
+				time.sleep(1)
+	finally:
+		signal.signal(signal.SIGTERM, previous_handler)
+
 
 def poll_all_instances() -> None:
-	"""Cron entrypoint. Never lets one instance's failure block another's
-	(mirrors ``poller.py``'s per-server isolation in ``sync_all_servers``).
-	Criticality is reconciled fleet-wide once at the end, after every
-	instance's own poll — it needs this cycle's checks from all of them
-	already recorded before it can count votes."""
+	"""One full poll cycle, called every ``poll_interval_seconds`` by
+	``run_uptime_poll_loop``. Never lets one instance's failure block
+	another's (mirrors ``poller.py``'s per-server isolation in
+	``sync_all_servers``). Criticality is reconciled fleet-wide once at
+	the end, after every instance's own poll — it needs this cycle's
+	checks from all of them already recorded before it can count votes."""
 	settings = frappe.get_cached_doc("Uptime Monitor Settings")
-	interval_minutes = cint(settings.poll_interval_minutes) or DEFAULT_POLL_INTERVAL_MINUTES
+	interval_seconds = cint(settings.poll_interval_seconds) or DEFAULT_POLL_INTERVAL_SECONDS
 	window = cint(settings.alert_window_checks) or DEFAULT_ALERT_WINDOW_CHECKS
 	auto_import_enabled = bool(cint(settings.auto_import_enabled))
 	auto_import_interval = cint(settings.auto_import_interval_minutes) or DEFAULT_AUTO_IMPORT_INTERVAL_MINUTES
@@ -103,7 +201,7 @@ def poll_all_instances() -> None:
 				frappe.db.rollback()
 				frappe.log_error(title=f"Uptime Monitor: auto-import failed for {instance.name}", message=frappe.get_traceback())
 		try:
-			_poll_instance(instance.name, interval_minutes)
+			_poll_instance(instance.name, interval_seconds)
 		except Exception:
 			frappe.db.rollback()
 			frappe.log_error(title=f"Uptime Monitor: poll failed for {instance.name}", message=frappe.get_traceback())
@@ -135,11 +233,11 @@ def _maybe_auto_import(instance_name: str, interval_minutes: int) -> None:
 	frappe.db.commit()
 
 
-def _poll_instance(instance_name: str, interval_minutes: int) -> None:
+def _poll_instance(instance_name: str, interval_seconds: int) -> None:
 	doc = frappe.get_doc("Uptime Kuma Instance", instance_name)
 	if doc.last_synced:
-		elapsed_minutes = (now_datetime() - get_datetime(doc.last_synced)).total_seconds() / 60
-		if elapsed_minutes < interval_minutes:
+		elapsed_seconds = (now_datetime() - get_datetime(doc.last_synced)).total_seconds()
+		if elapsed_seconds < interval_seconds:
 			return
 
 	password = get_decrypted_password("Uptime Kuma Instance", instance_name, "password", raise_exception=False)
@@ -216,13 +314,13 @@ def _instance_verdict(site_doc_name: str, window: int) -> bool | None:
 
 
 def _reconcile_site_criticality(window: int) -> None:
-	"""Cross-instance consensus: a site counts as fleet-wide Critical once
-	*at least half* of the instances that have an opinion on it (see
-	``_instance_verdict``) report it Down — not the moment any single
+	"""Cross-instance consensus: a site counts as fleet-wide Critical only
+	once *every* instance that has an opinion on it (see
+	``_instance_verdict``) reports it Down — not the moment any single
 	location's own check flips, which could just be that location's own
 	network hiccup (the whole reason to run multiple instances at all). A
 	paused site's instance doesn't get a vote either (its checks have
-	gone stale, not down). Runs once per cron tick, after every enabled
+	gone stale, not down). Runs once per poll cycle, after every enabled
 	instance's own poll above, since it needs this cycle's checks from all
 	of them already recorded. Every sibling for a site_name is kept in
 	sync to the same is_critical value, and the alert fires once per site
@@ -248,7 +346,7 @@ def _reconcile_site_criticality(window: int) -> None:
 				down_votes += 1
 
 		was_critical = bool(cint(siblings[0].is_critical))
-		is_critical = total_votes > 0 and (down_votes / total_votes) >= 0.5
+		is_critical = total_votes > 0 and down_votes == total_votes
 
 		if is_critical != was_critical:
 			for sibling in siblings:
@@ -261,6 +359,6 @@ def _reconcile_site_criticality(window: int) -> None:
 			"Uptime Site",
 			siblings[0].name,
 			"Site Down",
-			f"{site_name} is down (flagged Down by at least half of its monitoring instances).",
+			f"{site_name} is down (flagged Down by all of its monitoring instances).",
 			recovery_message=f"{site_name} is back up.",
 		)

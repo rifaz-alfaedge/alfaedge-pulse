@@ -35,6 +35,32 @@ WRITE_ROLES = ("System Manager", "Proxmox Monitor Manager")
 READ_ROLES = ("System Manager", "Proxmox Monitor Manager", "Proxmox Monitor Viewer")
 
 
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def uptime_site_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Link-field picker for Alert Subscription's "Uptime Sites" table —
+	one row per distinct site_name, not one per instance (a site otherwise
+	shows up once per connected instance, since each instance has its own
+	Uptime Site doc for it). Deliberately does *not* touch
+	show_title_field_in_link/title rendering — that's a separate, already-
+	working doctype-level setting; this only changes which options are
+	offered, the same as any other Link field's custom query. ``min(name)``
+	picks a deterministic representative — the same "alphabetically-first
+	sibling" convention already used when dispatching a Site Down alert
+	(see uptime_kuma_poller._reconcile_site_criticality)."""
+	return frappe.db.sql(
+		"""
+		select min(name) as name, site_name
+		from `tabUptime Site`
+		where site_name like %(txt)s
+		group by site_name
+		order by site_name
+		limit %(page_len)s offset %(start)s
+		""",
+		{"txt": f"%{txt}%", "start": cint(start), "page_len": cint(page_len)},
+	)
+
+
 def _get_client(instance_name: str) -> UptimeKumaClient:
 	instance = frappe.get_doc("Uptime Kuma Instance", instance_name)
 	password = get_decrypted_password("Uptime Kuma Instance", instance_name, "password", raise_exception=False)
@@ -502,3 +528,80 @@ def get_uptime_history(site: str, days: int = 7) -> list[dict]:
 		}
 		for r in rows
 	]
+
+
+def sync_check_interval_to_all_sites() -> dict:
+	"""Pushes Uptime Monitor Settings' heartbeat_interval_seconds onto every
+	Uptime Site's own check_interval_seconds — both locally and on Kuma
+	itself, via edit_monitor. Deliberately a separate setting from
+	poll_interval_seconds: this is how often *Kuma* actually performs its
+	underlying check (what Kuma's own UI calls "Heartbeat Interval"), not
+	how often *we* poll /metrics for a result — the two don't need to
+	agree, and forcing them to made poll_interval_seconds do two
+	unrelated jobs at once. Enqueued as a background job (see
+	uptime_monitor_settings.py's on_update) since it makes live Socket.IO
+	calls; also callable directly for the manual "Sync Check Interval Now"
+	button. Only sites already out of sync are touched, so a no-op run
+	costs nothing beyond one query.
+
+	One connection is reused for every out-of-sync site *on the same
+	instance*, not opened fresh per site — each connection needs its own
+	login round-trip, and 14 of those back-to-back against one instance
+	was enough to make some of them time out (see socketio_client.py's
+	CALL_TIMEOUT), turning what should be one flaky call into several."""
+	target = cint(frappe.get_cached_doc("Uptime Monitor Settings").heartbeat_interval_seconds) or 60
+	out_of_sync = frappe.get_all(
+		"Uptime Site", filters={"check_interval_seconds": ["!=", target]}, fields=["name", "instance", "site_name"]
+	)
+
+	by_instance: dict[str, list] = {}
+	for row in out_of_sync:
+		by_instance.setdefault(row.instance, []).append(row)
+
+	updated = []
+	errors = []
+	for instance, rows in by_instance.items():
+		try:
+			client = _get_client(instance)
+		except Exception:
+			frappe.log_error(
+				title=f"Uptime Monitor: failed to connect to {instance} for check interval sync",
+				message=frappe.get_traceback(),
+			)
+			errors.extend(row.name for row in rows)
+			continue
+
+		try:
+			for row in rows:
+				try:
+					site = frappe.get_doc("Uptime Site", row.name)
+					site.check_interval_seconds = target
+					client.edit_monitor(site.kuma_monitor_id, site)
+					frappe.db.set_value("Uptime Site", site.name, "check_interval_seconds", target)
+					frappe.db.commit()
+					updated.append(site.name)
+				except Exception:
+					frappe.log_error(
+						title=f"Uptime Monitor: failed to sync check interval for '{row.site_name}' on {instance}",
+						message=frappe.get_traceback(),
+					)
+					errors.append(row.name)
+		finally:
+			client.disconnect()
+
+	return {"updated": updated, "errors": errors}
+
+
+@frappe.whitelist()
+def sync_check_interval_now() -> dict:
+	"""Manual trigger (Uptime Monitor Settings' "Sync Check Interval Now"
+	button) — enqueues the same job on_update fires automatically, so a
+	slow multi-site/multi-instance run never blocks the Desk save."""
+	frappe.only_for(WRITE_ROLES)
+	frappe.enqueue(
+		"proxmox_monitor.uptime_monitor.api.sync_check_interval_to_all_sites",
+		queue="long",
+		job_id="proxmox_monitor_sync_check_interval",
+		deduplicate=True,
+	)
+	return {"ok": True, "message": frappe._("Sync started in the background — refresh in a moment to see results.")}

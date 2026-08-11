@@ -311,20 +311,31 @@ recovery notification — backups often only run on a ~24h cadence, so
 ### Alert Subscriptions
 
 Beyond the global recipients above, individual engineers can self-subscribe
-to specific VM/CT alerts via *Desk → Alert Subscription* — one document per
-user. Set your own Email/WhatsApp contact info once at the top (Telegram is
-fleet-wide-only — see above — and isn't offered here), then add rows to
-the **Servers / Instances** table below: pick a Proxmox
-Server, then pick one of its VMs/CTs. Add as many rows as you like to
-watch multiple instances. Subscriptions are **additive** — they don't
-replace or affect the global recipients above. Each engineer only sees
-and manages their own subscription document (`Proxmox Monitor Manager`/
-System Manager can see everyone's, for audit). Use the **Send Test Alert**
-button on a saved subscription to verify your own channel/contact setup.
-Subscriptions are VM/CT-only — watching a server itself, or a datastore,
-is handled purely by the global recipients above, not per-user
-subscriptions. Only PVE servers are offered in the Server picker — PBS
-hosts don't run VMs/CTs, so they have nothing to subscribe to.
+to specific VM/CT alerts, and to specific Uptime Kuma sites, via
+*Desk → Alert Subscription* — one document per user. Set your own
+Email/WhatsApp contact info once at the top (Telegram is fleet-wide-only —
+see above — and isn't offered here), then:
+- add rows to the **Servers / Instances** table: pick a Proxmox Server,
+  then one of its VMs/CTs;
+- and/or add rows to the **Uptime Sites** table: pick any one instance's
+  copy of the site you want to watch — sites are shared across every
+  connected Uptime Kuma instance (see
+  [Uptime Monitoring](#uptime-monitoring-uptime-kuma)), so subscribing via
+  one instance's copy watches that site everywhere, not just that
+  instance.
+
+Add as many rows to either table as you like. Subscriptions are
+**additive** — they don't replace or affect the global recipients above.
+Each engineer only sees and manages their own subscription document
+(`Proxmox Monitor Manager`/System Manager can see everyone's, for audit).
+Use the **Send Test Alert** button on a saved subscription to verify your
+own channel/contact setup. VM/CT subscriptions don't cascade — watching a
+server itself, or a datastore, is handled purely by the global recipients
+above, not per-user subscriptions; only PVE servers are offered in the
+Server picker, since PBS hosts don't run VMs/CTs. **Site Down** (and its
+recovery notification) already goes out over Email/WhatsApp using the
+same approved template as every other alert type — see
+[Alerting](#alerting) — no separate uptime-specific template is needed.
 
 **Subscriptions reach Dev/Staging/Backup instances too.** Per-guest
 resource alerting (Critical Resource/Resource Warning) is normally scoped
@@ -423,24 +434,39 @@ location and down from another.
   and scoped to just these admin-initiated/convenience operations.
 - **Status polling** — the one thing alerting depends on — instead uses
   Kuma's official, stable Prometheus `/metrics` endpoint, polled every
-  **Poll Interval (minutes)** (`Uptime Monitor Settings`, default 1,
-  live-editable with no restart). Every poll is recorded into this app's
-  own `Uptime Check Log`, independent of whatever heartbeat history Kuma
-  itself retains. If a future Kuma upgrade ever breaks the Socket.IO
-  side, only the admin-initiated operations above need a fix — status
-  polling and alerting keep working regardless.
+  **Poll Interval (seconds)** (`Uptime Monitor Settings`, default 60,
+  live-editable with no restart — takes effect within one poll cycle of
+  saving). This runs as its own background loop rather than a cron tick,
+  the same pattern as the Proxmox poller (see its own section above), so
+  it isn't capped at Frappe's one-minute cron floor — a few seconds is a
+  genuinely honored interval, not just "every tick." Every poll is
+  recorded into this app's own `Uptime Check Log`, independent of
+  whatever heartbeat history Kuma itself retains. If a future Kuma
+  upgrade ever breaks the Socket.IO side, only the admin-initiated
+  operations above need a fix — status polling and alerting keep working
+  regardless.
+- **Poll Interval is deliberately separate from Heartbeat Interval**
+  (`Uptime Monitor Settings`, default 15) — the former is purely how
+  often *we* read a result; the latter is how often *Kuma itself* actually
+  performs its underlying check (the same field Kuma's own monitor editor
+  calls "Heartbeat Interval"). They don't need to agree, and conflating
+  them into one setting made it do two unrelated jobs at once. Changing
+  Heartbeat Interval pushes the new value onto every Uptime Site's own
+  check interval, both locally and on Kuma itself, one connection reused
+  per instance rather than one per site (**Sync Check Interval Now**
+  button, or automatically whenever Heartbeat Interval changes).
 
-**Criticality is a fleet-wide vote, not a single instance's opinion.**
+**Criticality is a fleet-wide check, not a single instance's opinion.**
 Each instance first judges a site from its own last **N** checks
 (`Uptime Monitor Settings` → **Alert Window (checks)**, default 3) — more
 than half Down means that instance's own verdict is Down. A site is then
-flagged **Critical** fleet-wide once **at least half** of the instances
-with a verdict agree it's Down — so one location's own flaky network
-blip, outvoted by the others, doesn't declare a site down on its own; a
-real majority of vantage points has to agree. An instance that's paused,
-or hasn't collected a full window of checks yet, doesn't get a vote
-either way. Maintenance/Pending readings are excluded from the count
-entirely, never treated as "down." Crossing the threshold dispatches a
+flagged **Critical** fleet-wide only once **every** instance with a
+verdict agrees it's Down — so one location's own flaky network blip
+doesn't declare a site down on its own; every vantage point has to agree
+first. An instance that's paused, or hasn't collected a full window of
+checks yet, doesn't get a vote either way. Maintenance/Pending readings
+are excluded from the count entirely, never treated as "down." Crossing
+the threshold dispatches a
 **Site Down** alert through the existing Email/WhatsApp channels;
 dropping back below it sends the same "back to normal" recovery message
 other alert types get — both fire once per site, not once per instance.

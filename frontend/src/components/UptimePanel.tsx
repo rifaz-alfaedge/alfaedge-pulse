@@ -1,7 +1,14 @@
 import { useState } from 'react'
 import { Dialog } from '@rtcamp/frappe-ui-react'
 import { useFrappePostCall } from 'frappe-react-sdk'
-import { useImportableMonitors, useUptimeHistory, useUptimeInstances, useUptimeSites, useUptimeSummary } from '../lib/hooks'
+import {
+  useImportableMonitors,
+  useUptimeHistory,
+  useUptimeInstances,
+  useUptimeMonitorSettings,
+  useUptimeSites,
+  useUptimeSummary,
+} from '../lib/hooks'
 import type { ImportableMonitor, UptimeKumaInstance, UptimeMonitorType } from '../lib/types'
 import { type SiteGroup, groupSites } from '../lib/uptimeGroups'
 import { timeAgo } from '../lib/format'
@@ -26,6 +33,7 @@ const labelClass = 'mb-1.5 block text-xs font-medium uppercase tracking-wide tex
 export function UptimePanel() {
   const { data: instances, mutate: mutateInstances } = useUptimeInstances()
   const { data: sites, mutate: mutateSites } = useUptimeSites()
+  const { data: monitorSettings } = useUptimeMonitorSettings()
   const [showAddModal, setShowAddModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [historyGroup, setHistoryGroup] = useState<SiteGroup | null>(null)
@@ -34,6 +42,12 @@ export function UptimePanel() {
   const allSites = sites ?? []
   const siteGroups = groupSites(allSites)
   const instanceLabel = (name: string) => allInstances.find((i) => i.name === name)?.instance_name ?? name
+  const pollIntervalSeconds = monitorSettings?.poll_interval_seconds || 60
+  // What a *new* site's own check_interval_seconds should default to —
+  // Kuma's own heartbeat cadence, not how often we happen to poll for a
+  // result (that's pollIntervalSeconds above, used only for the
+  // freshness dot).
+  const heartbeatIntervalSeconds = monitorSettings?.heartbeat_interval_seconds || 60
 
   const refresh = () => {
     mutateSites()
@@ -48,7 +62,9 @@ export function UptimePanel() {
             No Uptime Kuma instances configured yet — add one from Desk (<em>Uptime Kuma Instance</em>) to get started.
           </p>
         ) : (
-          allInstances.map((instance) => <InstanceChip key={instance.name} instance={instance} />)
+          allInstances.map((instance) => (
+            <InstanceChip key={instance.name} instance={instance} pollIntervalSeconds={pollIntervalSeconds} />
+          ))
         )}
       </div>
 
@@ -95,6 +111,7 @@ export function UptimePanel() {
       {showAddModal && (
         <AddSiteModal
           instances={allInstances}
+          defaultCheckIntervalSeconds={heartbeatIntervalSeconds}
           onClose={() => {
             setShowAddModal(false)
             refresh()
@@ -117,10 +134,10 @@ export function UptimePanel() {
   )
 }
 
-function InstanceChip({ instance }: { instance: UptimeKumaInstance }) {
+function InstanceChip({ instance, pollIntervalSeconds }: { instance: UptimeKumaInstance; pollIntervalSeconds: number }) {
   return (
     <div className="flex items-center gap-2 rounded-full border border-border-hairline bg-surface-card px-4 py-2 text-sm">
-      <HeartbeatDot lastSynced={instance.last_synced} pollIntervalSeconds={60} critical={!!instance.last_error} />
+      <HeartbeatDot lastSynced={instance.last_synced} pollIntervalSeconds={pollIntervalSeconds} critical={!!instance.last_error} />
       <span className="font-medium text-ink-primary">{instance.instance_name}</span>
       {instance.last_error ? (
         <span className="text-xs text-status-critical" title={instance.last_error}>
@@ -253,9 +270,11 @@ function ActionButton({
 
 function AddSiteModal({
   instances,
+  defaultCheckIntervalSeconds,
   onClose,
 }: {
   instances: UptimeKumaInstance[]
+  defaultCheckIntervalSeconds: number
   onClose: () => void
 }) {
   const { call: addSite, loading } = useFrappePostCall<{ created: string[]; errors: string[] }>(
@@ -266,7 +285,7 @@ function AddSiteModal({
   const [url, setUrl] = useState('')
   const [hostname, setHostname] = useState('')
   const [port, setPort] = useState('')
-  const [checkInterval, setCheckInterval] = useState('60')
+  const [checkInterval, setCheckInterval] = useState(String(defaultCheckIntervalSeconds))
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ created: string[]; errors: string[] } | null>(null)
 

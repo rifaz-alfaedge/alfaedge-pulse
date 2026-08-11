@@ -88,9 +88,13 @@ app_license = "mit"
 
 after_install = "proxmox_monitor.install.after_install"
 
-# Starts (or confirms) the background poll loop after every migrate, so it
-# comes back up on its own after a bench update/restart without a manual step.
-after_migrate = "proxmox_monitor.tasks.poller.ensure_poller_running"
+# Starts (or confirms) the background poll loops after every migrate, so
+# they come back up on their own after a bench update/restart without a
+# manual step.
+after_migrate = [
+	"proxmox_monitor.tasks.poller.ensure_poller_running",
+	"proxmox_monitor.tasks.uptime_kuma_poller.ensure_uptime_poller_running",
+]
 
 # Uninstallation
 # ------------
@@ -153,25 +157,26 @@ has_permission = {
 # Scheduled Tasks
 # ---------------
 
-# The actual ~20s polling happens inside a background job that loops for
-# up to MAX_LOOP_SECONDS at a time (see proxmox_monitor.tasks.poller) rather
-# than here — Frappe's scheduler can't go below one-minute granularity.
-# This cron entry is the watchdog: every minute (the fastest Frappe's
-# scheduler allows) it checks whether that loop's heartbeat is still
+# The actual sub-minute polling (Proxmox and Uptime both) happens inside
+# background jobs that loop for up to MAX_LOOP_SECONDS at a time (see
+# proxmox_monitor.tasks.poller and .tasks.uptime_kuma_poller) rather than
+# here — Frappe's scheduler can't go below one-minute granularity. These
+# two cron entries are watchdogs: every minute (the fastest Frappe's
+# scheduler allows) each checks whether its own loop's heartbeat is still
 # fresh, and (re)starts it if not — both after a crash/restart, and after
 # each bounded loop invocation's normal, expected exit.
 scheduler_events = {
 	"cron": {
 		"* * * * *": [
 			"proxmox_monitor.tasks.poller.ensure_poller_running",
-			# Both of these are plain, self-throttled functions (not bounded
-			# loops like the Proxmox poller) — each checks its own Settings
-			# doctype's interval and no-ops most ticks. See their module
-			# docstrings for why a fixed */N cron key isn't used instead:
-			# it would make the interval un-editable from Desk without a
-			# code change.
+			"proxmox_monitor.tasks.uptime_kuma_poller.ensure_uptime_poller_running",
+			# A plain, self-throttled function (not a bounded loop) — checks
+			# its own Settings doctype's interval and no-ops most ticks. See
+			# its module docstring for why a fixed */N cron key isn't used
+			# instead: it would make the interval un-editable from Desk
+			# without a code change. Minutes-granularity is fine for this
+			# one (unlike polling, nothing needs a sub-minute Bifrost sync).
 			"proxmox_monitor.tasks.bifrost_sync.sync_bifrost_logs",
-			"proxmox_monitor.tasks.uptime_kuma_poller.poll_all_instances",
 		],
 	},
 }

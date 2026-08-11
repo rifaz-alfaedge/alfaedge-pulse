@@ -219,7 +219,8 @@ export interface ImportableMonitor {
 }
 
 export interface UptimeMonitorSettings {
-  poll_interval_minutes: number
+  poll_interval_seconds: number
+  heartbeat_interval_seconds: number
   alert_window_checks: number
 }
 

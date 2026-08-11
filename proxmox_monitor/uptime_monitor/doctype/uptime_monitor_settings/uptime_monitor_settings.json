@@ -5,9 +5,13 @@
  "document_type": "System",
  "engine": "InnoDB",
  "field_order": [
-  "poll_interval_minutes",
+  "poll_interval_seconds",
   "column_break_settings",
   "alert_window_checks",
+  "heartbeat_section",
+  "heartbeat_interval_seconds",
+  "column_break_heartbeat",
+  "sync_check_interval_now",
   "auto_import_section",
   "auto_import_enabled",
   "column_break_auto_import",
@@ -15,11 +19,11 @@
  ],
  "fields": [
   {
-   "default": "1",
-   "description": "How often the background job polls every enabled Uptime Kuma Instance's /metrics endpoint. Takes effect on its own within a minute of saving — no restart needed.",
-   "fieldname": "poll_interval_minutes",
+   "default": "60",
+   "description": "How often alfaEdge Pulse itself checks the current heartbeat of each site from every enabled Uptime Kuma Instance's /metrics endpoint — genuinely down to a few seconds, not just once a minute (it runs its own loop, not a cron tick). Takes effect within one poll cycle of saving, no restart needed. Purely about how often *we* read a result — see Heartbeat Interval below for how often *Kuma itself* actually checks.",
+   "fieldname": "poll_interval_seconds",
    "fieldtype": "Int",
-   "label": "Poll Interval (minutes)",
+   "label": "Poll Interval (seconds)",
    "non_negative": 1
   },
   {
@@ -33,6 +37,29 @@
    "fieldtype": "Int",
    "label": "Alert Window (checks)",
    "non_negative": 1
+  },
+  {
+   "fieldname": "heartbeat_section",
+   "fieldtype": "Section Break",
+   "label": "Uptime Heartbeat (Kuma)"
+  },
+  {
+   "default": "15",
+   "description": "How often Kuma itself actually checks each site — same field as \"Heartbeat Interval\" in Kuma's own monitor editor. Separate from Poll Interval above on purpose: this is what Kuma uses to decide Up/Down, that's just how often we read the result. Changing this pushes the new interval onto every Uptime Site, both here and on Kuma itself (a live edit call per site) — see \"Sync Check Interval Now\".",
+   "fieldname": "heartbeat_interval_seconds",
+   "fieldtype": "Int",
+   "label": "Heartbeat Interval (seconds)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_heartbeat",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Re-pushes the Heartbeat Interval above onto every Uptime Site (locally and on Kuma) — runs automatically whenever Heartbeat Interval changes, so this is only needed to force an immediate re-check.",
+   "fieldname": "sync_check_interval_now",
+   "fieldtype": "Button",
+   "label": "Sync Check Interval Now"
   },
   {
    "fieldname": "auto_import_section",

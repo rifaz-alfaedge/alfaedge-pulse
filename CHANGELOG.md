@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here.
 
+## [2.2.0] - 2026-08-11
+
+### Changed
+- **Fleet-wide Uptime criticality now requires unanimous agreement, not a
+  majority.** A site is flagged Critical only once *every* monitoring
+  instance with a verdict agrees it's down — previously at least half
+  agreeing was enough. Each instance's own per-check rule (more than half
+  of its own last N checks) is unchanged; only the cross-instance
+  aggregation changed.
+
+### Added
+- **Uptime Kuma polling now runs as its own background loop, not a
+  once-a-minute cron tick** — the same pattern already used for the
+  Proxmox poller. Poll Interval (seconds) is a genuinely honored
+  interval now, down to a few seconds, not capped at Frappe's one-minute
+  scheduler floor. The "long" queue worker is now 2 processes instead of
+  1, since this and the Proxmox poller are both perpetual background
+  loops competing for the same queue — one worker meant one loop (or any
+  other "long" job) could stall for minutes waiting its turn.
+- **Poll Interval and Heartbeat Interval are now separate settings**
+  (`Uptime Monitor Settings`) — Poll Interval is purely how often *we*
+  read a result; the new Heartbeat Interval is how often *Kuma itself*
+  actually checks (synced onto every Uptime Site and pushed to Kuma).
+  Previously one field did both jobs at once.
+- **Alert Subscription can now watch Uptime Sites.** A new "Uptime Sites"
+  table alongside the existing "Servers / Instances" one lets an engineer
+  self-subscribe to specific Uptime Kuma sites, on top of the global
+  recipients in Proxmox Monitor Settings. Matched by site — subscribing
+  via any one instance's copy of a site watches it everywhere, since
+  sites are shared across every connected instance. No new WhatsApp
+  template was needed: **Site Down** and its recovery notification
+  already send through the same approved UTILITY template every other
+  alert type uses.
+
 ## [2.1.0] - 2026-08-10
 
 ### Added

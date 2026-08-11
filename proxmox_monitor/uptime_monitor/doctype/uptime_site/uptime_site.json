@@ -185,7 +185,9 @@
   }
  ],
  "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
  "sort_field": "site_name",
  "sort_order": "ASC",
- "states": []
+ "states": [],
+ "title_field": "site_name"
 }
