@@ -308,7 +308,14 @@ def _map_bifrost_row(row: dict) -> dict:
 		"input_tokens_cost": num(cost.get("input_tokens_cost")),
 		"output_tokens_cost": num(cost.get("output_tokens_cost")),
 		"reasoning_tokens_cost": num(cost.get("reasoning_tokens_cost")),
-		"raw_log": json.dumps(row, indent=2),
+		# Only kept for non-success rows — this is what actually blows up
+		# storage: Bifrost's raw row includes the full request/response
+		# body, and a successful completion's can run into the hundreds of
+		# KB (observed in practice: 41k success rows alone reached 8.7GB).
+		# Every field anyone actually reads is already flattened above; the
+		# raw payload only earns its keep for debugging a failure. Compact
+		# (no indent) since this is a hidden field nobody reads by eye.
+		"raw_log": json.dumps(row, separators=(",", ":")) if row.get("status") != "success" else None,
 	}
 
 

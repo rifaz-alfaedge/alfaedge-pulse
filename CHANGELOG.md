@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## [2.3.0] - 2026-08-12
+
+### Fixed
+- **LLM Usage Log's `raw_log` field was the single largest driver of
+  database growth** — it stored Bifrost's full raw request/response
+  payload for *every* synced request, including successful ones, which
+  can run into the hundreds of KB each. It's now only kept for
+  error/processing rows, where it's actually useful for debugging;
+  everything worth reading off a successful request was already
+  flattened into this doctype's other fields. Existing bloat should be
+  cleaned up manually per-site (`UPDATE ... SET raw_log = NULL WHERE
+  status = 'success'` + `OPTIMIZE TABLE`) since this only stops new
+  growth, it doesn't retroactively shrink what's already stored.
+
+### Added
+- **Uptime Check Log now has a retention policy** — *Uptime Monitor
+  Settings* → **Check Log Retention (days)**, default 90 (matching the
+  dashboard's own max history window). Purged daily in batches. Without
+  this the table only ever grows, and now that polling can run every few
+  seconds instead of once a minute, it would have hit the same kind of
+  unbounded growth as the `raw_log` issue above.
+
 ## [2.2.0] - 2026-08-11
 
 ### Changed

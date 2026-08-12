@@ -179,6 +179,12 @@ scheduler_events = {
 			"proxmox_monitor.tasks.bifrost_sync.sync_bifrost_logs",
 		],
 	},
+	"daily": [
+		# Caps Uptime Check Log's growth — see the function's own docstring
+		# for why this exists (LLM Usage Log already hit this exact problem
+		# once). Daily is plenty; this isn't latency-sensitive like polling.
+		"proxmox_monitor.tasks.uptime_kuma_poller.purge_old_check_logs",
+	],
 }
 
 # Testing

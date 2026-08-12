@@ -255,7 +255,7 @@
    "label": "Raw Payload"
   },
   {
-   "description": "The full raw log row from the source system's API, for anything not flattened into the fields above.",
+   "description": "The full raw log row from the source system's API, for anything not flattened into the fields above. Only populated for non-success rows (errors/processing) — a successful request's full raw payload can run into the hundreds of KB and everything worth reading off it is already flattened above, so storing it for every row was the single largest driver of this doctype's storage footprint.",
    "fieldname": "raw_log",
    "fieldtype": "Code",
    "hidden": 1,

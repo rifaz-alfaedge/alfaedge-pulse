@@ -75,7 +75,7 @@ import signal
 import time
 
 import frappe
-from frappe.utils import cint, get_datetime, now_datetime
+from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 from frappe.utils.password import get_decrypted_password
 
 from proxmox_monitor.tasks.poller import _handle_transition
@@ -86,6 +86,15 @@ from proxmox_monitor.uptime_monitor.api import auto_import_new_monitors, sync_mi
 DEFAULT_POLL_INTERVAL_SECONDS = 60
 DEFAULT_ALERT_WINDOW_CHECKS = 3
 DEFAULT_AUTO_IMPORT_INTERVAL_MINUTES = 15
+DEFAULT_CHECK_LOG_RETENTION_DAYS = 90
+
+# Deleted in slices rather than one statement — this table gets a row per
+# site per instance per poll cycle, so at a busy interval a full purge can
+# be millions of rows; one giant DELETE would hold a long-running
+# transaction/lock over the same table _poll_instance is trying to insert
+# into concurrently. 5,000 was picked to keep each slice's lock brief
+# without needing thousands of round trips either.
+_PURGE_BATCH_SIZE = 5000
 
 # Confirmed against Uptime Kuma's own source (server/prometheus.js):
 # "Monitor Status (1 = UP, 0 = DOWN, 2 = PENDING, 3 = MAINTENANCE)".
@@ -362,3 +371,37 @@ def _reconcile_site_criticality(window: int) -> None:
 			f"{site_name} is down (flagged Down by all of its monitoring instances).",
 			recovery_message=f"{site_name} is back up.",
 		)
+
+
+def purge_old_check_logs() -> None:
+	"""Deletes Uptime Check Log rows older than Check Log Retention (days).
+
+	Wired to Frappe's daily scheduler event (see hooks.py) — this table
+	only ever grows (one row per site per instance per poll cycle, and
+	polling can now run every few seconds — see this module's docstring),
+	so without a cap it becomes the next version of the LLM Usage Log
+	bloat this app has already hit once. Alerting never looks past the
+	last few checks (Alert Window), so nothing functional depends on
+	history sticking around past what the dashboard's own history view
+	ever offers (7/30/90 days — see frontend/src/components/UptimePanel.tsx).
+	Deleted in batches — see _PURGE_BATCH_SIZE."""
+	retention_days = cint(
+		frappe.db.get_single_value("Uptime Monitor Settings", "check_log_retention_days")
+	) or DEFAULT_CHECK_LOG_RETENTION_DAYS
+	cutoff = add_to_date(now_datetime(), days=-retention_days)
+
+	total_deleted = 0
+	while True:
+		names = frappe.get_all(
+			"Uptime Check Log", filters={"checked_at": ["<", cutoff]}, limit_page_length=_PURGE_BATCH_SIZE, pluck="name"
+		)
+		if not names:
+			break
+		frappe.db.delete("Uptime Check Log", {"name": ["in", names]})
+		frappe.db.commit()
+		total_deleted += len(names)
+		if len(names) < _PURGE_BATCH_SIZE:
+			break
+
+	if total_deleted:
+		frappe.logger().info(f"Uptime Monitor: purged {total_deleted} check log row(s) older than {retention_days} days")

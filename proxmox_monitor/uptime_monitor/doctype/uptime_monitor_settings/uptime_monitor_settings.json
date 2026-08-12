@@ -15,7 +15,9 @@
   "auto_import_section",
   "auto_import_enabled",
   "column_break_auto_import",
-  "auto_import_interval_minutes"
+  "auto_import_interval_minutes",
+  "retention_section",
+  "check_log_retention_days"
  ],
  "fields": [
   {
@@ -84,6 +86,19 @@
    "fieldname": "auto_import_interval_minutes",
    "fieldtype": "Int",
    "label": "Auto-Import Interval (minutes)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "retention_section",
+   "fieldtype": "Section Break",
+   "label": "Retention"
+  },
+  {
+   "default": "90",
+   "description": "Uptime Check Log rows older than this are purged daily. Alerting only ever looks at the last few checks (Alert Window above), so this is purely about keeping the table from growing forever — history views/charts beyond this window won't have data to show.",
+   "fieldname": "check_log_retention_days",
+   "fieldtype": "Int",
+   "label": "Check Log Retention (days)",
    "non_negative": 1
   }
  ],
