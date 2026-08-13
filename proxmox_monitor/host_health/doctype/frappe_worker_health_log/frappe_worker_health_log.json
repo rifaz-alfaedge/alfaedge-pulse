@@ -1,0 +1,176 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-13 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "monitored_host",
+  "bench_name",
+  "timestamp",
+  "worker_section",
+  "registered_workers",
+  "live_worker_count",
+  "orphan_worker_count",
+  "orphan_critical_streak",
+  "column_break_worker",
+  "live_worker_pids",
+  "queue_section",
+  "queue_depths",
+  "failed_job_section",
+  "failed_job_count",
+  "failed_job_critical_streak"
+ ],
+ "fields": [
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1
+  },
+  {
+   "description": "A host can run more than one bench; this disambiguates which one a row belongs to.",
+   "fieldname": "bench_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Bench Name",
+   "reqd": 1
+  },
+  {
+   "description": "Genuine append-only history — dashboard charts orphan_worker_count / queue depth over time from it. The \"current\" state for a host+bench is just its latest row by timestamp (see the (monitored_host, bench_name, timestamp) index) — no separate current-state doctype.",
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Timestamp",
+   "reqd": 1
+  },
+  {
+   "fieldname": "worker_section",
+   "fieldtype": "Section Break",
+   "label": "Workers"
+  },
+  {
+   "description": "Count from RQ's Worker.all() against this bench's Redis connection.",
+   "fieldname": "registered_workers",
+   "fieldtype": "Int",
+   "label": "Registered Workers (Redis)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "live_worker_count",
+   "fieldtype": "Int",
+   "label": "Live Worker Processes (OS)",
+   "non_negative": 1
+  },
+  {
+   "description": "Registered in Redis but no matching live PID. Compared against Host Monitor Settings' orphan worker thresholds.",
+   "fieldname": "orphan_worker_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Orphan Worker Count",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "Consecutive polls at/above the critical threshold, no dip — same confirmation-check semantics as _track_severity. Computed at ingest time from the prior row for this (monitored_host, bench_name), since there's no persistent doc to mutate in-memory on an append-only table. The warning threshold drives dashboard color only — there's no separate \"Worker Warning\" alert type, only this critical-tier streak is tracked/alerted on.",
+   "fieldname": "orphan_critical_streak",
+   "fieldtype": "Int",
+   "label": "Orphan Critical Streak",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_worker",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Raw list from the agent payload, kept for diagnostics/drill-down on the host detail view.",
+   "fieldname": "live_worker_pids",
+   "fieldtype": "JSON",
+   "label": "Live Worker PIDs"
+  },
+  {
+   "fieldname": "queue_section",
+   "fieldtype": "Section Break",
+   "label": "Queues"
+  },
+  {
+   "description": "e.g. {\"default\": 12, \"short\": 0, \"long\": 3}. A queue length climbing across successive rows with orphan/registered counts flat is the \"workers stuck, not down\" signal.",
+   "fieldname": "queue_depths",
+   "fieldtype": "JSON",
+   "label": "Queue Depths"
+  },
+  {
+   "fieldname": "failed_job_section",
+   "fieldtype": "Section Break",
+   "label": "Failed Jobs"
+  },
+  {
+   "description": "Count of currently-failing jobs for this bench in this push's payload — also drives Frappe Failed Job Log upserts. Compared against Host Monitor Settings' failed job thresholds.",
+   "fieldname": "failed_job_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Failed Job Count",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "Same critical-tier-only confirmation-check semantics as Orphan Critical Streak.",
+   "fieldname": "failed_job_critical_streak",
+   "fieldtype": "Int",
+   "label": "Failed Job Critical Streak",
+   "non_negative": 1
+  }
+ ],
+ "icon": "fa fa-server",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Frappe Worker Health Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "timestamp",
+ "sort_order": "DESC",
+ "states": []
+}

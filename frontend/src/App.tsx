@@ -4,11 +4,13 @@ import { useAlertLogs, useBackupLogs, useDatastores, useGuests, useServers, useS
 import { ResourceCard, type DiskMeter, type Severity } from './components/ResourceCard'
 import { InstanceSeverityLists } from './components/InstanceSeverityLists'
 import { UptimeSeverityLists } from './components/UptimeSeverityLists'
+import { HostHealthSeverityLists } from './components/HostHealthSeverityLists'
 import { NodeDetailDialog, type SelectedNode } from './components/NodeDetailDialog'
 import { BackupsPanel } from './components/BackupsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
 import { AiUsagePanel } from './components/AiUsagePanel'
 import { UptimePanel } from './components/UptimePanel'
+import { HostHealthPanel } from './components/HostHealthPanel'
 import { HeartbeatDot } from './components/HeartbeatDot'
 import { SearchInput } from './components/SearchInput'
 import { Tabs } from './components/Tabs'
@@ -24,7 +26,7 @@ function driveLabel(d: ProxmoxDatastore): string {
   return d.datastore_name
 }
 
-const MAIN_TABS = ['Overview', 'Backups', 'Alerts', 'AI Usage', 'Uptime'] as const
+const MAIN_TABS = ['Overview', 'Backups', 'Alerts', 'AI Usage', 'Uptime', 'Host Health'] as const
 const DEFAULT_WARNING_THRESHOLD = 85
 const DEFAULT_CRITICAL_THRESHOLD = 95
 const DEFAULT_POLL_SECONDS = 20
@@ -251,6 +253,7 @@ function App() {
         isHostWarning={isHostWarning}
       />
       <UptimeSeverityLists />
+      <HostHealthSeverityLists />
 
       {mainTab === 'Overview' && (
         <>
@@ -399,6 +402,7 @@ function App() {
       {mainTab === 'Alerts' && <AlertsPanel alertLogs={allAlertLogs} />}
       {mainTab === 'AI Usage' && <AiUsagePanel />}
       {mainTab === 'Uptime' && <UptimePanel />}
+      {mainTab === 'Host Health' && <HostHealthPanel />}
 
       <NodeDetailDialog
         selected={selected}

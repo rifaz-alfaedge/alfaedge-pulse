@@ -17,7 +17,9 @@
   "scenarios_section",
   "scenarios",
   "uptime_sites_section",
-  "uptime_sites"
+  "uptime_sites",
+  "monitored_hosts_section",
+  "monitored_hosts"
  ],
  "fields": [
   {
@@ -89,6 +91,17 @@
    "fieldtype": "Table",
    "label": "Uptime Sites",
    "options": "Alert Subscription Uptime Site"
+  },
+  {
+   "fieldname": "monitored_hosts_section",
+   "fieldtype": "Section Break",
+   "label": "Host Health"
+  },
+  {
+   "fieldname": "monitored_hosts",
+   "fieldtype": "Table",
+   "label": "Monitored Hosts",
+   "options": "Alert Subscription Monitored Host"
   }
  ],
  "icon": "fa fa-bell-o",

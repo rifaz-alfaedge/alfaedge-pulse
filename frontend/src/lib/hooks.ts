@@ -1,14 +1,20 @@
 import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-react-sdk'
 import type {
   BifrostSettings,
+  FrappeFailedJobLog,
+  FrappeWorkerHealthLog,
+  HostMonitorSettings,
   ImportableMonitor,
   LlmUsageLog,
+  MonitoredHost,
+  MonitoredHostSite,
   ProxmoxAlertLog,
   ProxmoxBackupLog,
   ProxmoxDatastore,
   ProxmoxGuest,
   ProxmoxMonitorSettings,
   ProxmoxServer,
+  ServiceStatusLog,
   UptimeHistoryPoint,
   UptimeKumaInstance,
   UptimeMonitorSettings,
@@ -286,6 +292,108 @@ export function useUptimeHistory(site: string, days = 7) {
     { refreshInterval: SLOW_POLL_MS },
   )
   return { ...result, data: result.data?.message }
+}
+
+// ---------------------------------------------------------------------------
+// Host Health — service/worker/failed-job status changes on every agent
+// push (~20-30s, see host_health/agent), so the "live" doctypes below use
+// UI_POLL_MS like the rest of the dashboard; Host Monitor Settings and the
+// site-inventory child table change as rarely as any other settings/
+// inventory data, so those two use SLOW_POLL_MS.
+// ---------------------------------------------------------------------------
+
+const MONITORED_HOST_FIELDS: (keyof MonitoredHost)[] = [
+  'name', 'proxmox_guest', 'hostname', 'enabled', 'last_seen', 'is_online',
+  'worker_health_critical', 'failed_job_critical', 'scheduler_last_run', 'scheduler_overdue',
+]
+
+export function useMonitoredHosts() {
+  return useFrappeGetDocList<MonitoredHost>(
+    'Monitored Host',
+    {
+      fields: MONITORED_HOST_FIELDS,
+      filters: [['enabled', '=', 1]],
+      limit: 0,
+      orderBy: { field: 'hostname', order: 'asc' },
+    },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+}
+
+/** Monitored Host Site is a child table — Frappe's own permission engine
+ * always checks a child doctype's permission against its *parent*
+ * doctype's context, which the generic list API has no way to supply when
+ * listing every row fleet-wide (confirmed live: `Insufficient Permission`
+ * for a real non-Administrator account). Goes through a small whitelisted
+ * wrapper instead (`host_health/api.py::get_hosted_sites`) that checks
+ * read-on-Monitored-Host explicitly — see that function's own docstring. */
+export function useMonitoredHostSites() {
+  const result = useFrappeGetCall<{ message: MonitoredHostSite[] }>(
+    'proxmox_monitor.host_health.api.get_hosted_sites',
+    {},
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useServiceStatusLogs() {
+  return useFrappeGetDocList<ServiceStatusLog>(
+    'Service Status Log',
+    {
+      fields: [
+        'name', 'monitored_host', 'service_name', 'unit_name', 'current_state',
+        'is_down', 'down_streak', 'last_state_change', 'last_checked',
+      ],
+      limit: 0,
+      orderBy: { field: 'service_name', order: 'asc' },
+    },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+}
+
+/** Append-only — only the most recent row per (monitored_host, bench_name)
+ * is what the dashboard needs "live," so this pulls a bounded recent
+ * window (newest first) and the panel groups client-side down to one row
+ * per bench, rather than querying per-host/bench individually. */
+export function useFrappeWorkerHealthLogs(limit = 300) {
+  return useFrappeGetDocList<FrappeWorkerHealthLog>(
+    'Frappe Worker Health Log',
+    {
+      fields: [
+        'name', 'monitored_host', 'bench_name', 'timestamp', 'registered_workers', 'live_worker_count',
+        'orphan_worker_count', 'orphan_critical_streak', 'queue_depths', 'failed_job_count', 'failed_job_critical_streak',
+      ],
+      limit,
+      orderBy: { field: 'timestamp', order: 'desc' },
+    },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+}
+
+/** Only open (unresolved) rows — the actionable ones for a live dashboard.
+ * Resolved history is drill-down-only territory, not needed fleet-wide. */
+export function useFrappeFailedJobLogs() {
+  return useFrappeGetDocList<FrappeFailedJobLog>(
+    'Frappe Failed Job Log',
+    {
+      fields: ['name', 'monitored_host', 'bench_name', 'queue_name', 'rq_job_id', 'failed_at', 'first_seen', 'last_seen', 'resolved'],
+      filters: [['resolved', '=', 0]],
+      limit: 0,
+      orderBy: { field: 'last_seen', order: 'desc' },
+    },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+}
+
+export function useHostMonitorSettings() {
+  return useFrappeGetDoc<HostMonitorSettings>('Host Monitor Settings', 'Host Monitor Settings', undefined, {
+    refreshInterval: SLOW_POLL_MS,
+  })
 }
 
 export function useAiRecentRequests(

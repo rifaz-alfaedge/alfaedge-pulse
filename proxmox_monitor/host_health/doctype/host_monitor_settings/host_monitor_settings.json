@@ -1,0 +1,143 @@
+{
+ "actions": [],
+ "creation": "2026-08-13 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "polling_section",
+  "heartbeat_timeout_seconds",
+  "confirmation_checks",
+  "column_break_poll",
+  "scheduler_heartbeat_timeout_minutes",
+  "thresholds_section",
+  "orphan_worker_warning_threshold",
+  "orphan_worker_critical_threshold",
+  "column_break_thresh",
+  "failed_job_warning_threshold",
+  "failed_job_critical_threshold",
+  "default_services_section",
+  "default_expected_services"
+ ],
+ "fields": [
+  { "fieldname": "polling_section", "fieldtype": "Section Break", "label": "Polling" },
+  {
+   "fieldname": "heartbeat_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "Heartbeat Timeout (seconds)",
+   "default": "90",
+   "reqd": 1,
+   "non_negative": 1,
+   "description": "A Monitored Host is flagged unreachable once its agent hasn't pushed a payload for this long. Should be roughly 3x the agent's own push interval, not 1x, to tolerate a single missed push."
+  },
+  {
+   "fieldname": "confirmation_checks",
+   "fieldtype": "Int",
+   "label": "Confirmation Checks",
+   "default": "3",
+   "reqd": 1,
+   "non_negative": 1,
+   "description": "Consecutive polls a service/worker condition must stay bad, with no dip, before an alert fires. Same semantics as Proxmox Monitor Settings."
+  },
+  { "fieldname": "column_break_poll", "fieldtype": "Column Break" },
+  {
+   "fieldname": "scheduler_heartbeat_timeout_minutes",
+   "fieldtype": "Int",
+   "label": "Scheduler Heartbeat Timeout (minutes)",
+   "default": "15",
+   "reqd": 1,
+   "non_negative": 1,
+   "description": "A bench's Frappe scheduler is flagged stalled if no Scheduled Job has executed within this window."
+  },
+  { "fieldname": "thresholds_section", "fieldtype": "Section Break", "label": "Worker / Job Thresholds" },
+  {
+   "fieldname": "orphan_worker_warning_threshold",
+   "fieldtype": "Int",
+   "label": "Orphan Worker Warning Threshold",
+   "default": "1",
+   "non_negative": 1,
+   "description": "Orphaned RQ worker registrations (present in Redis, no live PID) at/above this count colors the dashboard tile as a warning — dashboard display only, there is no separate \"Worker Warning\" alert type. See Critical Threshold below for what actually alerts."
+  },
+  {
+   "fieldname": "orphan_worker_critical_threshold",
+   "fieldtype": "Int",
+   "label": "Orphan Worker Critical Threshold",
+   "default": "3",
+   "non_negative": 1,
+   "description": "At/above this count, held for Confirmation Checks polls, raises the Worker Degraded alert."
+  },
+  { "fieldname": "column_break_thresh", "fieldtype": "Column Break" },
+  {
+   "fieldname": "failed_job_warning_threshold",
+   "fieldtype": "Int",
+   "label": "Failed Job Warning Threshold",
+   "default": "5",
+   "non_negative": 1,
+   "description": "Open (unresolved) rows in Frappe Failed Job Log for a single bench at/above this count colors the dashboard tile as a warning — dashboard display only, there is no separate \"Worker Warning\" alert type. See Critical Threshold below for what actually alerts."
+  },
+  {
+   "fieldname": "failed_job_critical_threshold",
+   "fieldtype": "Int",
+   "label": "Failed Job Critical Threshold",
+   "default": "20",
+   "non_negative": 1,
+   "description": "At/above this count, held for Confirmation Checks polls, raises the Failed Job Threshold alert."
+  },
+  {
+   "fieldname": "default_services_section",
+   "fieldtype": "Section Break",
+   "label": "Default Expected Services"
+  },
+  {
+   "fieldname": "default_expected_services",
+   "fieldtype": "Table",
+   "label": "Default Expected Services",
+   "options": "Expected Service",
+   "description": "Baseline service list applied to every new Monitored Host (e.g. ssh, nginx, mariadb, redis-server). Override per-host on the Monitored Host record itself."
+  }
+ ],
+ "icon": "fa fa-cog",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Host Monitor Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

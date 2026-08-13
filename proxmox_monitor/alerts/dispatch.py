@@ -161,7 +161,9 @@ def dispatch_recovery(
 def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> list:
 	"""Alert Subscription (parent, contact info) rows to additionally notify
 	for this alert/recovery, found via their Alert Subscription Item
-	(Proxmox Guest) or Alert Subscription Uptime Site (Uptime Site) rows.
+	(Proxmox Guest), Alert Subscription Uptime Site (Uptime Site), or
+	Alert Subscription Monitored Host (Monitored Host / Service Status Log)
+	rows.
 
 	Per-instance subscriptions only ever target a Proxmox Guest (VM/CT) —
 	watching a server itself, or a datastore, is handled purely by the
@@ -182,6 +184,22 @@ def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> 
 		sibling_names = frappe.get_all("Uptime Site", filters={"site_name": site_name}, pluck="name")
 		rows = frappe.get_all(
 			"Alert Subscription Uptime Site", filters={"site": ["in", sibling_names]}, fields=["parent"]
+		)
+	elif reference_doctype == "Monitored Host":
+		rows = frappe.get_all(
+			"Alert Subscription Monitored Host", filters={"monitored_host": reference_name}, fields=["parent"]
+		)
+	elif reference_doctype == "Service Status Log":
+		# Service Down references the log row itself (upserted in place,
+		# stable docname — see host_health/ingest.py), not the host, so a
+		# subscriber who watches the *host* needs one hop through the log
+		# row's own monitored_host field to still match its per-service
+		# alerts.
+		monitored_host = frappe.db.get_value("Service Status Log", reference_name, "monitored_host")
+		if not monitored_host:
+			return []
+		rows = frappe.get_all(
+			"Alert Subscription Monitored Host", filters={"monitored_host": monitored_host}, fields=["parent"]
 		)
 	else:
 		return []

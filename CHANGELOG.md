@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented here.
 
+## [3.0.0] - 2026-08-13
+
+### Added
+- **New Host Health module** — real-time monitoring of OS-level services
+  (sshd, nginx, mariadb, redis-server) and Frappe/RQ bench internals
+  (workers, orphaned workers, failed jobs, queue depth, scheduler
+  heartbeat) across every Proxmox guest, fed by a small push agent
+  (systemd timer, ~25s interval) rather than SSH-pull polling. A guest
+  that stops pushing is itself the down-signal (heartbeat timeout), not a
+  failed connection attempt.
+  - New doctypes: *Monitored Host*, *Monitored Host Site*, *Expected
+    Service*, *Service Status Log*, *Frappe Worker Health Log*, *Frappe
+    Failed Job Log*, *Host Monitor Settings*.
+  - New API-key-authenticated ingest endpoint
+    (`host_health.ingest.push_status`) using Frappe's own built-in
+    `api_key`/`api_secret` mechanism — every Monitored Host gets its own
+    independent, revocable key pair via a shared, zero-permission agent
+    identity.
+  - Five new alert types (Service Down, Worker Degraded, Failed Job
+    Threshold, Scheduler Stalled, Host Unreachable), routed through the
+    exact same alert dispatch/dedup/recovery mechanism (and the same
+    approved WhatsApp UTILITY template) as every other alert in this
+    app — no parallel alerting system.
+  - Per-bench **site inventory** (site name + URL, when explicitly
+    configured via `site_config.json`) — inventory only for now, no
+    reachability monitoring yet.
+  - New "Host Health" dashboard tab, plus a fleet-wide always-visible
+    Critical Hosts / Services Down summary.
+- **The push agent now lives in its own app, `pulse_agent`**
+  (github.com/rifaz-alfaedge/pulse-agent), installed separately on each
+  monitored guest — not bundled into this app. The guest fleet runs a mix
+  of Frappe/Python versions, and this app's own dependency/version
+  constraints (tied to whatever the central Pulse site itself runs)
+  aren't something every monitored guest should have to satisfy just to
+  report its own health.
+
 ## [2.3.0] - 2026-08-12
 
 ### Fixed

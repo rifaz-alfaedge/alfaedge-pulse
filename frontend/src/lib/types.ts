@@ -235,3 +235,85 @@ export interface UptimeHistoryPoint {
   uptime_percent: number | null
   avg_response_time_ms: number
 }
+
+// Mirrors proxmox_monitor/host_health/doctype — see those .json files
+// for the source of truth.
+
+export type ServiceState = 'active' | 'inactive' | 'failed' | 'activating' | 'deactivating' | 'unknown'
+
+export interface MonitoredHost {
+  name: string
+  proxmox_guest: string
+  hostname?: string
+  enabled: 0 | 1
+  last_seen?: string
+  is_online: 0 | 1
+  worker_health_critical: 0 | 1
+  failed_job_critical: 0 | 1
+  scheduler_last_run?: string
+  scheduler_overdue: 0 | 1
+}
+
+/** Row of the `hosted_sites` child table — inventory only (no status field)
+ * for this release, see Monitored Host Site's own doctype notes. `parent`
+ * is the owning Monitored Host's `name`, queried directly rather than via
+ * a per-host `useFrappeGetDoc` call since this child doctype's own rows
+ * are ordinary DB rows like any other. */
+export interface MonitoredHostSite {
+  name: string
+  parent: string
+  bench_name?: string
+  site_name: string
+  site_url?: string
+}
+
+export interface ServiceStatusLog {
+  name: string
+  monitored_host: string
+  service_name: string
+  unit_name: string
+  current_state: ServiceState
+  is_down: 0 | 1
+  down_streak: number
+  last_state_change?: string
+  last_checked?: string
+}
+
+/** Append-only — one row per agent push per (monitored_host, bench_name).
+ * `queue_depths` is a Frappe JSON field, serialized as a raw JSON string
+ * over the API (not auto-parsed), e.g. `'{"default": 2, "long": 0}'`. */
+export interface FrappeWorkerHealthLog {
+  name: string
+  monitored_host: string
+  bench_name: string
+  timestamp: string
+  registered_workers: number
+  live_worker_count: number
+  orphan_worker_count: number
+  orphan_critical_streak: number
+  queue_depths?: string
+  failed_job_count: number
+  failed_job_critical_streak: number
+}
+
+export interface FrappeFailedJobLog {
+  name: string
+  monitored_host: string
+  bench_name: string
+  queue_name?: string
+  rq_job_id: string
+  failed_at?: string
+  first_seen?: string
+  last_seen?: string
+  resolved: 0 | 1
+}
+
+export interface HostMonitorSettings {
+  heartbeat_timeout_seconds: number
+  confirmation_checks: number
+  scheduler_heartbeat_timeout_minutes: number
+  orphan_worker_warning_threshold: number
+  orphan_worker_critical_threshold: number
+  failed_job_warning_threshold: number
+  failed_job_critical_threshold: number
+}

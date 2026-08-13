@@ -1,0 +1,140 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-13 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "monitored_host",
+  "service_name",
+  "unit_name",
+  "column_break_svc",
+  "current_state",
+  "is_down",
+  "streak_section",
+  "down_streak",
+  "last_state_change",
+  "last_checked"
+ ],
+ "fields": [
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1
+  },
+  {
+   "description": "Upserted in place by the ingest handler, keyed on (monitored_host, service_name) — not appended to as history. The primary upsert lookup happens there; this doctype's own validate() only keeps a cheap defensive uniqueness backstop.",
+   "fieldname": "service_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Service Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "unit_name",
+   "fieldtype": "Data",
+   "label": "systemd Unit"
+  },
+  {
+   "fieldname": "column_break_svc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "current_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Current State",
+   "options": "active\ninactive\nfailed\nactivating\ndeactivating\nunknown"
+  },
+  {
+   "default": "0",
+   "description": "Set true only once down_streak reaches Host Monitor Settings' Confirmation Checks, mirroring _track_severity. Cleared the instant current_state returns to active — streak resets to 0, no partial credit.",
+   "fieldname": "is_down",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Down",
+   "read_only": 1
+  },
+  {
+   "fieldname": "streak_section",
+   "fieldtype": "Section Break",
+   "label": "Streak Tracking"
+  },
+  {
+   "default": "0",
+   "description": "Consecutive non-active polls with no dip. Reset to 0 on any active reading.",
+   "fieldname": "down_streak",
+   "fieldtype": "Int",
+   "label": "Down Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_state_change",
+   "fieldtype": "Datetime",
+   "label": "Last State Change",
+   "read_only": 1
+  },
+  {
+   "description": "Timestamp of the agent payload this row was last updated from.",
+   "fieldname": "last_checked",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Checked",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-cogs",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Service Status Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

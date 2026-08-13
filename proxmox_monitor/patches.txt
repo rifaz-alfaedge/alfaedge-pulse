@@ -7,3 +7,4 @@
 proxmox_monitor.patches.backfill_guest_last_backup
 proxmox_monitor.patches.add_llm_usage_log_indexes
 proxmox_monitor.patches.add_uptime_check_log_indexes
+proxmox_monitor.patches.add_frappe_worker_health_log_indexes

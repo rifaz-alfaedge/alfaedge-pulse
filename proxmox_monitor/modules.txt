@@ -1,3 +1,4 @@
 Proxmox Fleet Monitor
 LLM Usage Monitor
 Uptime Monitor
+Host Health

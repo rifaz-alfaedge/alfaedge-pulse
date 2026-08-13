@@ -177,6 +177,12 @@ scheduler_events = {
 			# without a code change. Minutes-granularity is fine for this
 			# one (unlike polling, nothing needs a sub-minute Bifrost sync).
 			"proxmox_monitor.tasks.bifrost_sync.sync_bifrost_logs",
+			# Host Health is push-based (an agent posts to it), not polled —
+			# nothing here to (re)start. This is purely a staleness check
+			# (Host Unreachable / Scheduler Stalled) — see its own module
+			# docstring for why once-a-minute is already enough, no bounded
+			# loop needed.
+			"proxmox_monitor.tasks.host_health_watchdog.check_host_heartbeats",
 		],
 	},
 	"daily": [

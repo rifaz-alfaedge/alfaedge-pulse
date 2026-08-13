@@ -16,6 +16,12 @@ const THEME_BY_STATUS: Record<string, 'green' | 'gray' | 'orange' | 'red'> = {
   Down: 'red',
   Pending: 'orange',
   Maintenance: 'gray',
+  // Host Health — systemd ActiveState values (Service Status Log.current_state)
+  active: 'green',
+  inactive: 'gray',
+  failed: 'red',
+  activating: 'orange',
+  deactivating: 'orange',
 }
 
 export function StatusBadge({ status }: { status: string }) {
