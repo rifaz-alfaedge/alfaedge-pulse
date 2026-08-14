@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Dialog } from '@rtcamp/frappe-ui-react'
+import { useFrappePostCall } from 'frappe-react-sdk'
 import {
-  useFailedJobGroups,
   useFrappeFailedJobLogs,
   useFrappeWorkerHealthLogs,
   useGuests,
@@ -11,14 +11,8 @@ import {
   useServers,
   useServiceStatusLogs,
 } from '../lib/hooks'
-import type {
-  FailedJobGroup,
-  FrappeFailedJobLog,
-  FrappeWorkerHealthLog,
-  MonitoredHost,
-  MonitoredHostSite,
-  ServiceStatusLog,
-} from '../lib/types'
+import type { FrappeFailedJobLog, FrappeWorkerHealthLog, MonitoredHost, MonitoredHostSite, ServiceStatusLog } from '../lib/types'
+import { getErrorMessage } from '../lib/errors'
 import { timeAgo } from '../lib/format'
 import { HeartbeatDot } from './HeartbeatDot'
 import { StatusBadge } from './StatusBadge'
@@ -52,87 +46,6 @@ function parseQueueDepths(json?: string): Record<string, number> {
   }
 }
 
-/** First non-blank line of a traceback, truncated — enough to recognize
- * the failure at a glance without wrapping a whole stack trace into a
- * card; the full sample is available via the flat drill-down list below. */
-function firstLine(text?: string): string {
-  const line = (text ?? '').split('\n').find((l) => l.trim().length > 0) ?? ''
-  return line.length > 140 ? `${line.slice(0, 140)}…` : line
-}
-
-/** Fleet-wide root-cause view — 23 raw failed-job rows collapsing into N
- * cards, one per distinct (exc_type, job_name) signature (see
- * host_health/api.py::get_failed_job_groups). Each card expands to the
- * matching rows from the flat log for host/bench/time drill-down, reusing
- * `occurrences` already fetched for the per-host dialogs below rather than
- * a second query. */
-function FailedJobGroups({
-  groups,
-  occurrences,
-  hostByName,
-}: {
-  groups: FailedJobGroup[]
-  occurrences: FrappeFailedJobLog[]
-  hostByName: Map<string, MonitoredHost>
-}) {
-  const [expanded, setExpanded] = useState<string | null>(null)
-  if (groups.length === 0) return null
-
-  return (
-    <div className="mb-6">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-ink-muted">
-        Failed Job Root Causes ({groups.length})
-      </h3>
-      <div className="space-y-2">
-        {groups.map((g) => {
-          const isOpen = expanded === g.failure_signature
-          const rows = occurrences.filter((j) => j.failure_signature === g.failure_signature)
-          return (
-            <div key={g.failure_signature} className="overflow-hidden rounded-xl border border-border-hairline bg-surface-card">
-              <button
-                type="button"
-                onClick={() => setExpanded(isOpen ? null : g.failure_signature)}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-primary/5"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-ink-primary">
-                    {g.exc_type || 'Unknown'} <span className="font-normal text-ink-muted">· {g.job_name || 'unknown method'}</span>
-                  </div>
-                  <div className="truncate text-xs text-ink-muted">{firstLine(g.sample_exc_info)}</div>
-                </div>
-                <div className="flex shrink-0 items-center gap-3 text-xs text-ink-muted">
-                  <span className="text-status-critical">
-                    {g.occurrence_count} occurrence{g.occurrence_count === 1 ? '' : 's'}
-                  </span>
-                  <span>
-                    {g.affected_host_count} host{g.affected_host_count === 1 ? '' : 's'}
-                  </span>
-                  <span>{timeAgo(g.last_seen)}</span>
-                </div>
-              </button>
-              {isOpen && (
-                <div className="max-h-48 overflow-y-auto border-t border-border-hairline">
-                  {rows.map((j) => (
-                    <div
-                      key={j.name}
-                      className="flex items-center justify-between gap-3 border-b border-border-hairline px-4 py-2 text-xs last:border-0"
-                    >
-                      <span className="truncate text-ink-primary">
-                        {hostByName.get(j.monitored_host)?.hostname || j.monitored_host} · {j.bench_name} · {j.queue_name || '—'}
-                      </span>
-                      <span className="text-ink-muted">{timeAgo(j.failed_at)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 /** Full Host Health dashboard tab — chip row + card grid + a per-host
  * detail dialog, mirroring UptimePanel's shape. The fleet-wide "what's
  * currently unhealthy" summary lives in HostHealthSeverityLists (shown on
@@ -144,7 +57,6 @@ export function HostHealthPanel() {
   const { data: services } = useServiceStatusLogs()
   const { data: workerLogs } = useFrappeWorkerHealthLogs()
   const { data: failedJobs } = useFrappeFailedJobLogs()
-  const { data: failedJobGroups } = useFailedJobGroups()
   const { data: settings } = useHostMonitorSettings()
   const { data: guests } = useGuests()
   const { data: servers } = useServers()
@@ -155,11 +67,9 @@ export function HostHealthPanel() {
   const allServices = services ?? []
   const allWorkerLogs = workerLogs ?? []
   const allFailedJobs = failedJobs ?? []
-  const allFailedJobGroups = failedJobGroups ?? []
   const heartbeatTimeoutSeconds = settings?.heartbeat_timeout_seconds || DEFAULT_HEARTBEAT_TIMEOUT_SECONDS
 
   const latestBenches = useMemo(() => latestPerBench(allWorkerLogs), [allWorkerLogs])
-  const hostByName = new Map(allHosts.map((h) => [h.name, h]))
   const guestByName = new Map((guests ?? []).map((g) => [g.name, g]))
   const serverByName = new Map((servers ?? []).map((s) => [s.name, s]))
   const roleFor = (host: MonitoredHost) => {
@@ -201,8 +111,6 @@ export function HostHealthPanel() {
           </button>
         ))}
       </div>
-
-      <FailedJobGroups groups={allFailedJobGroups} occurrences={allFailedJobs} hostByName={hostByName} />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {allHosts.map((host) => (
@@ -335,6 +243,39 @@ function HostDetailDialog({
   const orphanSeries = benchHistory.map((w) => w.orphan_worker_count)
   const latestForBench = benchHistory.at(-1)
 
+  // useFrappePostCall's `call` actually resolves to the raw
+  // `{ message: T }` envelope Frappe wraps every whitelisted return value
+  // in (frappe/handler.py: `frappe.response["message"] = data`) — its own
+  // type declarations claim `Promise<T>`, but that's not what happens at
+  // runtime, confirmed by a real downloaded file containing the literal
+  // text "[object Object]" before this was unwrapped.
+  const { call: getFailedJobLogText, loading: downloadingLog } = useFrappePostCall<{ message: string }>(
+    'proxmox_monitor.host_health.api.get_failed_job_log_text',
+  )
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+
+  // Full tracebacks aren't part of the polled failedJobs list (kept light
+  // for the ~10s refresh cycle) — fetched fresh, grouped by root cause,
+  // and formatted server-side (see host_health/api.py) only when actually
+  // requested, then handed to the browser as a plain-text file download.
+  const downloadLog = async () => {
+    setDownloadError(null)
+    try {
+      const response = await getFailedJobLogText({ monitored_host: host.name })
+      const blob = new Blob([response.message], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(host.hostname || host.name).replace(/[^a-zA-Z0-9._-]/g, '_')}-failed-jobs.log`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setDownloadError(getErrorMessage(e))
+    }
+  }
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()} options={{ title: host.hostname || host.name, size: '2xl' }}>
       <div className="flex flex-col gap-5 py-2">
@@ -406,9 +347,20 @@ function HostDetailDialog({
 
         {failedJobs.length > 0 && (
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-ink-muted">
-              Open Failed Jobs ({failedJobs.length})
-            </h3>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
+                Open Failed Jobs ({failedJobs.length})
+              </h3>
+              <button
+                type="button"
+                onClick={downloadLog}
+                disabled={downloadingLog}
+                className="rounded-lg border border-border-hairline px-2.5 py-1 text-xs text-ink-secondary hover:bg-ink-primary/5 disabled:opacity-50"
+              >
+                {downloadingLog ? 'Preparing…' : 'Download Log'}
+              </button>
+            </div>
+            {downloadError && <p className="mb-2 text-xs text-status-critical">{downloadError}</p>}
             <div className="max-h-48 overflow-y-auto rounded-lg border border-border-hairline">
               {failedJobs.map((j) => (
                 <div key={j.name} className="flex items-center justify-between gap-3 border-b border-border-hairline px-3 py-2 text-xs last:border-0">

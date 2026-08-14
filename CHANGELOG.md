@@ -5,20 +5,26 @@ All notable changes to this project are documented here.
 ## [3.1.0] - 2026-08-14
 
 ### Added
-- **Root-cause grouping for Failed Job Log.** The Host Health dashboard's
-  failed-jobs view now collapses raw RQ failures into distinct root causes
-  instead of a flat list — new "Failed Job Root Causes" section, one card
-  per `failure_signature` (exception type + enqueued method), each
-  expandable to the matching individual occurrences across the fleet.
-  - `Frappe Failed Job Log` gains `job_name` (the RQ job's method dotted
-    path, newly captured by `pulse_agent`), `exc_type` (parsed server-side
-    from the raw traceback's last line), and `failure_signature`
-    (`sha256(exc_type + job_name)`, indexed) — computed inline at ingest
-    time, no extra polling.
-  - New `host_health.api.get_failed_job_groups` endpoint for the grouped
-    aggregation (occurrence count, affected-host count, first/last seen,
-    a representative traceback sample) — a shape the generic list API can't
-    express.
+- **Root-cause grouping for Failed Job Log.** Raw RQ failures are now
+  collapsed into distinct root causes by exception type + enqueued method,
+  instead of the operator having to make sense of a flat list. From a
+  host's detail dialog on the Host Health tab, **Download Log** produces a
+  plain-text log grouping that host's open failures by root cause with the
+  full traceback for every occurrence underneath — built for real
+  debugging, not just a dashboard count.
+  - `Frappe Failed Job Log` gains `job_name`, `exc_type`, and
+    `failure_signature` (`sha256(exc_type + job_name)`, indexed), computed
+    inline at ingest time, no extra polling. `job_name` is newly captured
+    by `pulse_agent` — specifically *not* the RQ job's `func_name`, which
+    is the same constant dispatcher string
+    (`frappe.utils.background_jobs.execute_job`) for every job Frappe ever
+    enqueues; the real per-job identity lives in that dispatcher's own
+    `job_name`/`method` kwargs instead (see `pulse_agent`'s v0.1.0
+    changelog).
+  - New `host_health.api.get_failed_job_log_text` endpoint, generating that
+    grouped, downloadable log server-side per host — fetched on demand
+    only when "Download Log" is clicked, not part of the dashboard's
+    regular poll.
   - Existing "Failed Job Threshold" alerting is unchanged in this release —
     still raw per-bench open-row count, not signature-aware; a candidate for
     a future phase once real grouped data exists to design against.

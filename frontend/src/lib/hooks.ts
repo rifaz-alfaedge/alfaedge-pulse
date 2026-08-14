@@ -1,7 +1,6 @@
 import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-react-sdk'
 import type {
   BifrostSettings,
-  FailedJobGroup,
   FrappeFailedJobLog,
   FrappeWorkerHealthLog,
   HostMonitorSettings,
@@ -402,21 +401,6 @@ export function useFrappeFailedJobLogs() {
     undefined,
     { refreshInterval: UI_POLL_MS },
   )
-}
-
-/** Root-cause grouping for the failed-jobs view — needs server-side
- * aggregation (counts, affected-host count, one representative sample per
- * signature) the generic list API can't express, so this goes through a
- * dedicated wrapper instead (`host_health/api.py::get_failed_job_groups`),
- * same shape as `useMonitoredHostSites` above. */
-export function useFailedJobGroups() {
-  const result = useFrappeGetCall<{ message: FailedJobGroup[] }>(
-    'proxmox_monitor.host_health.api.get_failed_job_groups',
-    {},
-    undefined,
-    { refreshInterval: UI_POLL_MS },
-  )
-  return { ...result, data: result.data?.message }
 }
 
 export function useHostMonitorSettings() {

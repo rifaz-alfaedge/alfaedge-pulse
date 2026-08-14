@@ -41,26 +41,38 @@ def get_hosted_sites() -> list[dict]:
 	)
 
 
+def _parse_exc_message(exc_info: str | None) -> str:
+	"""Companion to ingest.py's ``_parse_exc_type`` — same last-line
+	convention (``ExceptionType: message``), just returning the other half.
+	Empty string, not a guess, if that line doesn't look like one."""
+	for line in reversed((exc_info or "").splitlines()):
+		line = line.strip()
+		if not line:
+			continue
+		exc_type, _, message = line.partition(":")
+		if message and " " not in exc_type.strip():
+			return message.strip()
+		return ""
+	return ""
+
+
 @frappe.whitelist()
-def get_failed_job_groups(resolved: int = 0) -> list[dict]:
-	"""Root-cause grouping for the Host Health dashboard's failed-jobs view —
-	unlike ``get_hosted_sites`` above, ``Frappe Failed Job Log`` isn't a
-	child table and has its own real permissions block, so a plain
-	``useFrappeGetDocList`` already reads it fine; the reason this needs a
-	dedicated endpoint is that "N raw rows collapsed into groups by
-	``failure_signature``, with per-group aggregates" isn't a shape the
-	generic list API can express. Aggregation happens in Python rather than
-	SQL ``GROUP BY`` because we also need one representative row (the most
-	recent occurrence's ``exc_info``) per group, not just counts — cheap at
-	this doctype's actual scale (dozens to low hundreds of open rows), and
-	consistent with how the rest of this app favours ``frappe.get_all`` over
-	raw SQL."""
+def get_failed_job_log_text(monitored_host: str, resolved: int = 0) -> str:
+	"""Plain-text, downloadable failed-job log for one host's detail dialog.
+	Two parts: a plain-English summary (what broke, how often, in words a
+	non-Python-reader can act on) up top, then every occurrence's full
+	traceback below for whoever actually needs to debug it — rather than
+	either dumping 30+ raw tracebacks on the dashboard itself or leading
+	with a wall of stack traces here. Root causes grouped by
+	``failure_signature`` (see ``host_health/ingest.py``). Text formatting
+	happens here rather than in the frontend so there's one place that
+	defines what the log looks like, whether it's opened from the dashboard
+	or (later) any other client."""
 	frappe.has_permission("Frappe Failed Job Log", "read", throw=True)
 	rows = frappe.get_all(
 		"Frappe Failed Job Log",
-		filters={"resolved": cint(resolved)},
+		filters={"monitored_host": monitored_host, "resolved": cint(resolved)},
 		fields=[
-			"monitored_host",
 			"bench_name",
 			"queue_name",
 			"job_name",
@@ -71,44 +83,54 @@ def get_failed_job_groups(resolved: int = 0) -> list[dict]:
 			"first_seen",
 			"last_seen",
 		],
+		# Newest-first, so occurrences[0] is always each group's most recent
+		# occurrence — used below as that group's representative exc_type/
+		# job_name/message without a second pass to find it.
 		order_by="last_seen desc",
 		limit_page_length=0,
 		ignore_permissions=True,
 	)
 
-	groups: dict[str, dict] = {}
+	groups: dict[str, list[dict]] = {}
 	for row in rows:
-		signature = row["failure_signature"]
-		group = groups.get(signature)
-		if not group:
-			# Rows are already ordered last_seen desc, so the first row seen
-			# per signature is its most recent occurrence — used as-is for
-			# the group's representative exc_type/job_name/sample traceback.
-			group = groups[signature] = {
-				"failure_signature": signature,
-				"exc_type": row["exc_type"],
-				"job_name": row["job_name"],
-				"sample_exc_info": row["exc_info"],
-				"occurrence_count": 0,
-				"affected_hosts": set(),
-				"first_seen": row["first_seen"],
-				"last_seen": row["last_seen"],
-			}
-		group["occurrence_count"] += 1
-		group["affected_hosts"].add(row["monitored_host"])
-		if row["first_seen"] and row["first_seen"] < group["first_seen"]:
-			group["first_seen"] = row["first_seen"]
+		groups.setdefault(row["failure_signature"], []).append(row)
+	ordered = sorted(groups.values(), key=lambda occurrences: len(occurrences), reverse=True)
 
-	return [
-		{
-			"failure_signature": g["failure_signature"],
-			"exc_type": g["exc_type"],
-			"job_name": g["job_name"],
-			"sample_exc_info": g["sample_exc_info"],
-			"occurrence_count": g["occurrence_count"],
-			"affected_host_count": len(g["affected_hosts"]),
-			"first_seen": g["first_seen"],
-			"last_seen": g["last_seen"],
-		}
-		for g in sorted(groups.values(), key=lambda g: g["occurrence_count"], reverse=True)
+	hostname = frappe.db.get_value("Monitored Host", monitored_host, "hostname") or monitored_host
+	lines = [
+		"alfaEdge Pulse — Failed Job Log",
+		f"Host: {hostname}",
+		f"Generated: {frappe.utils.pretty_date(frappe.utils.now_datetime())}",
+		"",
+		f"{len(rows)} open failed job{'s' if len(rows) != 1 else ''}, "
+		f"{len(ordered)} distinct root cause{'s' if len(ordered) != 1 else ''}",
+		"",
+		"SUMMARY",
+		"-------",
 	]
+	for i, occurrences in enumerate(ordered, start=1):
+		latest = occurrences[0]
+		earliest_first_seen = min(o["first_seen"] for o in occurrences if o["first_seen"])
+		message = _parse_exc_message(latest["exc_info"])
+		lines.append(f"{i}. {latest['exc_type'] or 'Unknown error'} in {latest['job_name'] or 'unknown method'}")
+		lines.append(
+			f"   {len(occurrences)} occurrence{'s' if len(occurrences) != 1 else ''}"
+			f" · first seen {frappe.utils.pretty_date(earliest_first_seen)}"
+			f" · last seen {frappe.utils.pretty_date(latest['last_seen'])}"
+		)
+		if message:
+			lines.append(f"   “{message}”")
+		lines.append("")
+
+	lines += ["", "FULL TRACEBACKS", "---------------"]
+	for i, occurrences in enumerate(ordered, start=1):
+		latest = occurrences[0]
+		lines += ["", f"[{i}] {latest['exc_type'] or 'Unknown error'} in {latest['job_name'] or 'unknown method'}"]
+		for j, occurrence in enumerate(occurrences, start=1):
+			lines += [
+				"",
+				f"  Occurrence {j} — {occurrence['bench_name']} · {occurrence['queue_name'] or '—'} · failed {occurrence['failed_at']}",
+				occurrence["exc_info"] or "  (no traceback captured)",
+			]
+
+	return "\n".join(lines)

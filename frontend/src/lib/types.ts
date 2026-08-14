@@ -311,17 +311,6 @@ export interface FrappeFailedJobLog {
   resolved: 0 | 1
 }
 
-export interface FailedJobGroup {
-  failure_signature: string
-  exc_type?: string
-  job_name?: string
-  sample_exc_info?: string
-  occurrence_count: number
-  affected_host_count: number
-  first_seen?: string
-  last_seen?: string
-}
-
 export interface HostMonitorSettings {
   heartbeat_timeout_seconds: number
   confirmation_checks: number
