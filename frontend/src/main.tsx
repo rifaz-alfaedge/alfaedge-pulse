@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { FrappeProvider } from 'frappe-react-sdk'
 import App from './App'
+import { applySystemOrStoredTheme, watchSystemTheme } from './lib/theme'
 import './index.css'
 
 declare global {
@@ -15,12 +16,11 @@ declare global {
 // see theme.css's `@custom-variant dark (&:is(.dark *))`) both key off a
 // `.dark` class on an ancestor element, not the `prefers-color-scheme`
 // media query directly. Without this, none of those classes ever
-// activate, no matter the OS theme — so we mirror the OS preference onto
-// `<html>` ourselves, once at startup and on every change.
-const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
-const syncColorScheme = () => document.documentElement.classList.toggle('dark', darkModeQuery.matches)
-syncColorScheme()
-darkModeQuery.addEventListener('change', syncColorScheme)
+// activate, no matter the OS theme — so we mirror it onto `<html>`
+// ourselves (see lib/theme.ts), once at startup and on every OS change,
+// unless the header's ThemeToggle has stored an explicit manual choice.
+applySystemOrStoredTheme()
+watchSystemTheme()
 
 // In production this is served from the same origin as the Frappe site
 // (via the /alfaedge-pulse www route), so no explicit url is needed — the SDK

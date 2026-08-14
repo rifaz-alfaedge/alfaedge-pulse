@@ -56,6 +56,53 @@ def _parse_exc_message(exc_info: str | None) -> str:
 	return ""
 
 
+def _grouped_failed_jobs(monitored_host: str, resolved: int, fields: list[str]) -> list[list[dict]]:
+	"""Shared fetch+group step for both endpoints below — one row per
+	individual RQ job occurrence, grouped by ``failure_signature`` (root
+	cause, see ``host_health/ingest.py``), largest group first. Rows within
+	a group come back newest-first, so `group[0]` is always that group's
+	most recent occurrence — used as the representative exc_type/job_name/
+	message without a second pass to find it."""
+	rows = frappe.get_all(
+		"Frappe Failed Job Log",
+		filters={"monitored_host": monitored_host, "resolved": cint(resolved)},
+		fields=[*fields, "failure_signature"],
+		order_by="last_seen desc",
+		limit_page_length=0,
+		ignore_permissions=True,
+	)
+	groups: dict[str, list[dict]] = {}
+	for row in rows:
+		groups.setdefault(row["failure_signature"], []).append(row)
+	return sorted(groups.values(), key=lambda occurrences: len(occurrences), reverse=True)
+
+
+@frappe.whitelist()
+def get_failed_job_groups(monitored_host: str, resolved: int = 0) -> list[dict]:
+	"""Lightweight, human-readable root-cause summary for one host's detail
+	dialog — grouped and parsed the same way as ``get_failed_job_log_text``
+	below, but as small JSON (no raw tracebacks) meant to render straight in
+	the dashboard UI, for a reader who wants the gist without downloading a
+	file. `first_seen`/`last_seen` come back as raw datetimes, formatted
+	client-side (`timeAgo`) same as every other timestamp in this app,
+	rather than baking a server-side date format into the response."""
+	frappe.has_permission("Frappe Failed Job Log", "read", throw=True)
+	ordered = _grouped_failed_jobs(
+		monitored_host, resolved, ["job_name", "exc_type", "exc_info", "first_seen", "last_seen"]
+	)
+	return [
+		{
+			"exc_type": occurrences[0]["exc_type"] or "Unknown error",
+			"job_name": occurrences[0]["job_name"] or "unknown method",
+			"message": _parse_exc_message(occurrences[0]["exc_info"]),
+			"occurrence_count": len(occurrences),
+			"first_seen": min(o["first_seen"] for o in occurrences if o["first_seen"]),
+			"last_seen": occurrences[0]["last_seen"],
+		}
+		for occurrences in ordered
+	]
+
+
 @frappe.whitelist()
 def get_failed_job_log_text(monitored_host: str, resolved: int = 0) -> str:
 	"""Plain-text, downloadable failed-job log for one host's detail dialog.
@@ -69,32 +116,10 @@ def get_failed_job_log_text(monitored_host: str, resolved: int = 0) -> str:
 	defines what the log looks like, whether it's opened from the dashboard
 	or (later) any other client."""
 	frappe.has_permission("Frappe Failed Job Log", "read", throw=True)
-	rows = frappe.get_all(
-		"Frappe Failed Job Log",
-		filters={"monitored_host": monitored_host, "resolved": cint(resolved)},
-		fields=[
-			"bench_name",
-			"queue_name",
-			"job_name",
-			"exc_type",
-			"failure_signature",
-			"exc_info",
-			"failed_at",
-			"first_seen",
-			"last_seen",
-		],
-		# Newest-first, so occurrences[0] is always each group's most recent
-		# occurrence — used below as that group's representative exc_type/
-		# job_name/message without a second pass to find it.
-		order_by="last_seen desc",
-		limit_page_length=0,
-		ignore_permissions=True,
+	ordered = _grouped_failed_jobs(
+		monitored_host, resolved, ["bench_name", "queue_name", "job_name", "exc_type", "exc_info", "failed_at", "first_seen", "last_seen"]
 	)
-
-	groups: dict[str, list[dict]] = {}
-	for row in rows:
-		groups.setdefault(row["failure_signature"], []).append(row)
-	ordered = sorted(groups.values(), key=lambda occurrences: len(occurrences), reverse=True)
+	rows = [o for occurrences in ordered for o in occurrences]
 
 	hostname = frappe.db.get_value("Monitored Host", monitored_host, "hostname") or monitored_host
 	lines = [

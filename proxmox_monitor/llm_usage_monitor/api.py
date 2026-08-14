@@ -49,28 +49,48 @@ def _default_range(start_date: str | None, end_date: str | None, days: int = 30)
 	return start, end
 
 
+def _parse_list(value: str | list | None) -> list[str] | None:
+	"""Provider/model/virtual-key filters arrive as a JSON-encoded array in
+	the query string (whitelisted GET params are always strings on the
+	wire) — the frontend's MultiSelectFilter sends `JSON.stringify(array)`.
+	Also accepts an already-decoded list, since `bench execute` or a test
+	might call this directly with a real Python list. Empty/absent means
+	"no filter," matching this app's existing None-means-no-filter
+	convention (see other exact-match filters throughout this codebase)."""
+	if not value:
+		return None
+	if isinstance(value, list):
+		return value or None
+	parsed = frappe.parse_json(value)
+	return parsed or None
+
+
 def _apply_filters(
 	conditions: str,
 	values: dict,
 	source: str | None,
-	provider: str | None,
-	model: str | None,
-	virtual_key_name: str | None,
+	provider: list[str] | None,
+	model: list[str] | None,
+	virtual_key_name: list[str] | None,
 ) -> str:
-	"""Shared exact-match filter clause for the raw-SQL aggregates below —
-	kept as a single function so the AI Usage tab's filter bar (source,
-	provider, model, virtual key) behaves identically across every chart."""
+	"""Shared filter clause for the raw-SQL aggregates below — kept as a
+	single function so the AI Usage tab's filter bar (source, provider,
+	model, virtual key) behaves identically across every chart. `source`
+	stays a single scalar (no multi-select control exists for it in the
+	frontend today); provider/model/virtual_key_name are lists, matched via
+	`IN` — ORed within a filter, ANDed across filters, same as the two
+	`frappe.get_list` filter dicts below."""
 	if source:
 		conditions += " and source = %(source)s"
 		values["source"] = source
 	if provider:
-		conditions += " and provider = %(provider)s"
+		conditions += " and provider in %(provider)s"
 		values["provider"] = provider
 	if model:
-		conditions += " and model = %(model)s"
+		conditions += " and model in %(model)s"
 		values["model"] = model
 	if virtual_key_name:
-		conditions += " and virtual_key_name = %(virtual_key_name)s"
+		conditions += " and virtual_key_name in %(virtual_key_name)s"
 		values["virtual_key_name"] = virtual_key_name
 	return conditions
 
@@ -80,14 +100,15 @@ def get_usage_summary(
 	start_date: str | None = None,
 	end_date: str | None = None,
 	source: str | None = None,
-	provider: str | None = None,
-	model: str | None = None,
-	virtual_key_name: str | None = None,
+	provider: str | list | None = None,
+	model: str | list | None = None,
+	virtual_key_name: str | list | None = None,
 ) -> dict:
 	"""Total requests/tokens/cost, average latency, and success rate for a
 	date range — the AI Usage tab's summary tiles."""
 	_check_permission()
 	start, end = _default_range(start_date, end_date)
+	provider, model, virtual_key_name = _parse_list(provider), _parse_list(model), _parse_list(virtual_key_name)
 
 	conditions = "request_timestamp between %(start)s and %(end)s"
 	values = {"start": start, "end": end}
@@ -122,9 +143,9 @@ def get_usage_trend(
 	end_date: str | None = None,
 	group_by: str = "day",
 	source: str | None = None,
-	provider: str | None = None,
-	model: str | None = None,
-	virtual_key_name: str | None = None,
+	provider: str | list | None = None,
+	model: str | list | None = None,
+	virtual_key_name: str | list | None = None,
 ) -> list[dict]:
 	"""Daily (or hourly) cost/token/request series for the trend chart,
 	computed from our own table — not Bifrost's histogram endpoints —
@@ -133,6 +154,7 @@ def get_usage_trend(
 	_check_permission()
 	start, end = _default_range(start_date, end_date)
 	bucket_expr = "date_format(request_timestamp, '%%Y-%%m-%%d %%H:00:00')" if group_by == "hour" else "date(request_timestamp)"
+	provider, model, virtual_key_name = _parse_list(provider), _parse_list(model), _parse_list(virtual_key_name)
 
 	conditions = "request_timestamp between %(start)s and %(end)s"
 	values = {"start": start, "end": end}
@@ -170,9 +192,9 @@ def get_breakdown(
 	start_date: str | None = None,
 	end_date: str | None = None,
 	source: str | None = None,
-	provider: str | None = None,
-	model: str | None = None,
-	virtual_key_name: str | None = None,
+	provider: str | list | None = None,
+	model: str | list | None = None,
+	virtual_key_name: str | list | None = None,
 	limit: int = 15,
 ) -> list[dict]:
 	"""Cost/token/request share by provider, model, or virtual key, highest cost first."""
@@ -181,6 +203,7 @@ def get_breakdown(
 	if not column:
 		frappe.throw(frappe._("Invalid dimension: {0}").format(dimension))
 	start, end = _default_range(start_date, end_date)
+	provider, model, virtual_key_name = _parse_list(provider), _parse_list(model), _parse_list(virtual_key_name)
 
 	conditions = "request_timestamp between %(start)s and %(end)s"
 	values = {"start": start, "end": end, "limit": cint(limit) or 15}
@@ -219,9 +242,9 @@ def get_recent_requests(
 	start_date: str | None = None,
 	end_date: str | None = None,
 	source: str | None = None,
-	provider: str | None = None,
-	model: str | None = None,
-	virtual_key_name: str | None = None,
+	provider: str | list | None = None,
+	model: str | list | None = None,
+	virtual_key_name: str | list | None = None,
 	limit: int = 50,
 	offset: int = 0,
 	sort_by: str = "request_timestamp",
@@ -232,16 +255,17 @@ def get_recent_requests(
 	sort_by = sort_by if sort_by in ALLOWED_SORT_FIELDS else "request_timestamp"
 	order = "asc" if str(order).lower() == "asc" else "desc"
 	start, end = _default_range(start_date, end_date)
+	provider, model, virtual_key_name = _parse_list(provider), _parse_list(model), _parse_list(virtual_key_name)
 
 	filters: dict = {"request_timestamp": ["between", [start, end]]}
 	if source:
 		filters["source"] = source
 	if provider:
-		filters["provider"] = provider
+		filters["provider"] = ["in", provider]
 	if model:
-		filters["model"] = model
+		filters["model"] = ["in", model]
 	if virtual_key_name:
-		filters["virtual_key_name"] = virtual_key_name
+		filters["virtual_key_name"] = ["in", virtual_key_name]
 
 	rows = frappe.get_list(
 		"LLM Usage Log",

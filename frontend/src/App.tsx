@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Switch } from '@rtcamp/frappe-ui-react'
-import { useAlertLogs, useBackupLogs, useDatastores, useGuests, useServers, useSettings } from './lib/hooks'
+import {
+  useAlertLogs,
+  useBackupLogs,
+  useDatastores,
+  useGuests,
+  useMonitoredHosts,
+  useServers,
+  useSettings,
+} from './lib/hooks'
+import { hostHealthStatus, isHostCritical, isHostWarning } from './lib/severity'
 import { ResourceCard, type DiskMeter, type Severity } from './components/ResourceCard'
-import { InstanceSeverityLists } from './components/InstanceSeverityLists'
-import { UptimeSeverityLists } from './components/UptimeSeverityLists'
-import { HostHealthSeverityLists } from './components/HostHealthSeverityLists'
+import { AlertsPopup } from './components/AlertsPopup'
+import { MultiSelectFilter } from './components/MultiSelectFilter'
+import { UptimeSummaryTile } from './components/UptimeSummaryTile'
+import { ThemeToggle } from './components/ThemeToggle'
 import { NodeDetailDialog, type SelectedNode } from './components/NodeDetailDialog'
 import { BackupsPanel } from './components/BackupsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
@@ -26,7 +36,10 @@ function driveLabel(d: ProxmoxDatastore): string {
   return d.datastore_name
 }
 
-const MAIN_TABS = ['Overview', 'Backups', 'Alerts', 'AI Usage', 'Uptime', 'Host Health'] as const
+// Host Health and Uptime always lead — the two "is anything actively
+// wrong right now" tabs — followed by AI Usage, the renamed Overview
+// ("Usage Metrics"), Backups, and Alerts last.
+const MAIN_TABS = ['Host Health', 'Uptime', 'AI Usage', 'Usage Metrics', 'Backups', 'Alerts'] as const
 const DEFAULT_WARNING_THRESHOLD = 85
 const DEFAULT_CRITICAL_THRESHOLD = 95
 const DEFAULT_POLL_SECONDS = 20
@@ -83,13 +96,14 @@ function App() {
   const { data: backupLogs } = useBackupLogs()
   const { data: alertLogs } = useAlertLogs()
   const { data: settings } = useSettings()
+  const { data: monitoredHosts } = useMonitoredHosts()
 
   const warningThreshold = settings?.warning_threshold_percent ?? DEFAULT_WARNING_THRESHOLD
   const criticalThreshold = settings?.critical_threshold_percent ?? DEFAULT_CRITICAL_THRESHOLD
   const pollIntervalSeconds = settings?.poll_interval_seconds ?? DEFAULT_POLL_SECONDS
 
-  const [mainTab, setMainTab] = useState<(typeof MAIN_TABS)[number]>('Overview')
-  const [serverFilter, setServerFilter] = useState<string>('All')
+  const [mainTab, setMainTab] = useState<(typeof MAIN_TABS)[number]>('Host Health')
+  const [serverFilter, setServerFilter] = useState<string[]>([])
   const [criticalOnly, setCriticalOnly] = useState(false)
   const [offlineOnly, setOfflineOnly] = useState(false)
   const [guestSearch, setGuestSearch] = useState('')
@@ -103,34 +117,33 @@ function App() {
   const allDatastores = datastores ?? []
   const allBackupLogs = backupLogs ?? []
   const allAlertLogs = alertLogs ?? []
+  const allMonitoredHosts = monitoredHosts ?? []
+  const hostHealthByGuest = new Map(allMonitoredHosts.map((h) => [h.proxmox_guest, h]))
 
   const pveHosts = allServers.filter((s) => s.server_type === 'PVE')
   const pbsInstances = allServers.filter((s) => s.server_type === 'PBS')
 
   const serverFilterOptions = useMemo(
-    () => ['All', ...allServers.map((s) => s.server_name)],
+    () => [...allServers.map((s) => s.server_name)].sort((a, b) => a.localeCompare(b)),
     [allServers],
   )
 
-  // A host's own is_critical only reflects CPU/RAM (see poller.py) — disk
-  // criticality lives on its individual drives (Proxmox Datastore), so the
-  // card/summary/filter all need "is this host critical" to mean "itself
-  // or any of its drives," not just the server doctype's own flag.
-  const isHostCritical = (server: ProxmoxServer) =>
-    !!server.is_critical || allDatastores.some((d) => d.server === server.name && d.is_critical)
-  // Same idea one tier down — a host's own Warning status comes through
-  // `status` (poller.py reuses that field's existing Warning option rather
-  // than a separate flag), while a drive's Warning still needs its own
-  // Proxmox Datastore row.
-  const isHostWarning = (server: ProxmoxServer) =>
-    server.status === 'Warning' || allDatastores.some((d) => d.server === server.name && d.is_warning)
+  const hostIsCritical = (server: ProxmoxServer) => isHostCritical(server, allDatastores)
+  const hostIsWarning = (server: ProxmoxServer) => isHostWarning(server, allDatastores)
   const hostSeverity = (server: ProxmoxServer): Severity =>
-    isHostCritical(server) ? 'critical' : isHostWarning(server) ? 'warning' : 'ok'
-  const guestSeverity = (guest: ProxmoxGuest): Severity =>
-    guest.is_critical ? 'critical' : guest.is_warning ? 'warning' : 'ok'
+    hostIsCritical(server) ? 'critical' : hostIsWarning(server) ? 'warning' : 'ok'
+  // Combines Proxmox resource state AND Host Health — a guest whose Monitored
+  // Host is Down/Critical reads as critical here even if its CPU/RAM/disk
+  // are all fine, so Host Health actually drives the card's border/pulse
+  // rather than being purely informational (see lib/severity.ts).
+  const guestSeverity = (guest: ProxmoxGuest): Severity => {
+    const hostHealth = hostHealthByGuest.get(guest.name)
+    const hostHealthCritical = hostHealth ? hostHealthStatus(hostHealth) !== 'Online' : false
+    return guest.is_critical || hostHealthCritical ? 'critical' : guest.is_warning ? 'warning' : 'ok'
+  }
 
   const visibleHosts = filterAndSortServers(
-    [...pveHosts, ...pbsInstances], serverFilter, criticalOnly, offlineOnly, isHostCritical,
+    [...pveHosts, ...pbsInstances], serverFilter, criticalOnly, offlineOnly, hostIsCritical,
   )
   const matchingGuests = sortGuestsByMetric(
     filterAndSortGuests(allGuests, allServers, serverFilter, criticalOnly, guestSearch),
@@ -172,7 +185,7 @@ function App() {
   }, [hasMoreGuests])
 
   const criticalCount =
-    allServers.filter(isHostCritical).length + allGuests.filter((g) => g.is_critical).length
+    allServers.filter(hostIsCritical).length + allGuests.filter((g) => g.is_critical).length
   const offlineCount = allServers.filter((s) => s.status === 'Offline').length
   const openAlertCount = allAlertLogs.filter((a) => !a.resolved).length
   const mostRecentSync = [...allServers, ...allGuests]
@@ -206,15 +219,24 @@ function App() {
             <span>Live · refreshes every few seconds</span>
           </div>
         </div>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
+          <MultiSelectFilter
+            label="Servers"
+            options={serverFilterOptions}
+            selected={serverFilter}
+            onChange={(next) => {
+              setMainTab('Usage Metrics')
+              setServerFilter(next)
+            }}
+          />
           <SummaryStat
             label="Critical"
             value={criticalCount}
             tone={criticalCount > 0 ? 'critical' : 'ok'}
-            active={mainTab === 'Overview' && criticalOnly}
+            active={mainTab === 'Usage Metrics' && criticalOnly}
             onClick={() => {
-              setMainTab('Overview')
-              setServerFilter('All')
+              setMainTab('Usage Metrics')
+              setServerFilter([])
               setOfflineOnly(false)
               setCriticalOnly((v) => !v)
             }}
@@ -223,10 +245,10 @@ function App() {
             label="Offline"
             value={offlineCount}
             tone={offlineCount > 0 ? 'warning' : 'ok'}
-            active={mainTab === 'Overview' && offlineOnly}
+            active={mainTab === 'Usage Metrics' && offlineOnly}
             onClick={() => {
-              setMainTab('Overview')
-              setServerFilter('All')
+              setMainTab('Usage Metrics')
+              setServerFilter([])
               setCriticalOnly(false)
               setOfflineOnly((v) => !v)
             }}
@@ -238,27 +260,17 @@ function App() {
             active={mainTab === 'Alerts'}
             onClick={() => setMainTab('Alerts')}
           />
+          <ThemeToggle />
         </div>
       </header>
 
       <div className="mb-8">
-        <Tabs options={[...MAIN_TABS]} value={mainTab} onChange={(v) => setMainTab(v as (typeof MAIN_TABS)[number])} />
+        <Tabs options={[...MAIN_TABS]} value={mainTab} onChange={(v) => setMainTab(v as (typeof MAIN_TABS)[number])} size="lg" />
       </div>
 
-      <InstanceSeverityLists
-        servers={allServers}
-        guests={allGuests}
-        datastores={allDatastores}
-        isHostCritical={isHostCritical}
-        isHostWarning={isHostWarning}
-      />
-      <UptimeSeverityLists />
-      <HostHealthSeverityLists />
-
-      {mainTab === 'Overview' && (
+      {mainTab === 'Usage Metrics' && (
         <>
-          <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-            <Tabs options={serverFilterOptions} value={serverFilter} onChange={setServerFilter} />
+          <div className="mb-8 flex flex-wrap items-center justify-end gap-4">
             <div className="flex items-center gap-5">
               {offlineOnly && (
                 <span className="text-xs font-medium text-status-warning">Showing offline hosts only</span>
@@ -273,6 +285,13 @@ function App() {
                 size="sm"
               />
             </div>
+          </div>
+
+          {/* Same grid as the host cards below (one cell per breakpoint) so
+           * this tile reads as a peer of them, sized like a card rather
+           * than stretching full-width as a thin banner. */}
+          <div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <UptimeSummaryTile onOpen={() => setMainTab('Uptime')} />
           </div>
 
           <section className="mb-14">
@@ -378,6 +397,7 @@ function App() {
                       memory={g.memory_usage}
                       disks={[{ label: 'Disk', value: g.disk_usage }]}
                       meterOrder={GUEST_METER_ORDER[guestSortField]}
+                      hostHealth={hostHealthByGuest.get(g.name)}
                       lastSynced={g.last_synced}
                       pollIntervalSeconds={pollIntervalSeconds}
                       warningThreshold={warningThreshold}
@@ -404,6 +424,8 @@ function App() {
       {mainTab === 'Uptime' && <UptimePanel />}
       {mainTab === 'Host Health' && <HostHealthPanel />}
 
+      <AlertsPopup />
+
       <NodeDetailDialog
         selected={selected}
         onClose={() => setSelected(null)}
@@ -424,13 +446,13 @@ const roleRank = (role?: string) => (role !== undefined && role in ROLE_ORDER ? 
 
 function filterAndSortServers(
   servers: ProxmoxServer[],
-  serverFilter: string,
+  serverFilter: string[],
   criticalOnly: boolean,
   offlineOnly: boolean,
   isCritical: (s: ProxmoxServer) => boolean,
 ) {
   return servers
-    .filter((s) => serverFilter === 'All' || s.server_name === serverFilter)
+    .filter((s) => serverFilter.length === 0 || serverFilter.includes(s.server_name))
     .filter((s) => !criticalOnly || isCritical(s))
     .filter((s) => !offlineOnly || s.status === 'Offline')
     .sort((a, b) =>
@@ -443,7 +465,7 @@ function filterAndSortServers(
 function filterAndSortGuests(
   guests: ProxmoxGuest[],
   servers: ProxmoxServer[],
-  serverFilter: string,
+  serverFilter: string[],
   criticalOnly: boolean,
   search: string,
 ) {
@@ -451,7 +473,10 @@ function filterAndSortGuests(
   const serverRoleByDocName = new Map(servers.map((s) => [s.name, s.role]))
   const needle = search.trim().toLowerCase()
   return guests
-    .filter((g) => serverFilter === 'All' || serverNameByDocName.get(g.server) === serverFilter)
+    .filter((g) => {
+      const name = serverNameByDocName.get(g.server)
+      return serverFilter.length === 0 || (name !== undefined && serverFilter.includes(name))
+    })
     .filter((g) => !criticalOnly || g.is_critical)
     .filter((g) => !needle || g.guest_name.toLowerCase().includes(needle) || String(g.vmid).includes(needle))
     .sort((a, b) =>

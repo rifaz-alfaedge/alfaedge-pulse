@@ -311,6 +311,18 @@ export interface FrappeFailedJobLog {
   resolved: 0 | 1
 }
 
+/** One root cause for a single host — see
+ * `host_health.api.get_failed_job_groups`. `first_seen`/`last_seen` are raw
+ * datetimes, formatted client-side (`timeAgo`) same as everywhere else. */
+export interface FailedJobGroup {
+  exc_type: string
+  job_name: string
+  message: string
+  occurrence_count: number
+  first_seen?: string
+  last_seen?: string
+}
+
 export interface HostMonitorSettings {
   heartbeat_timeout_seconds: number
   confirmation_checks: number

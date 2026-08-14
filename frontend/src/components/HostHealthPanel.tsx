@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Dialog } from '@rtcamp/frappe-ui-react'
 import { useFrappePostCall } from 'frappe-react-sdk'
 import {
+  useFailedJobGroups,
   useFrappeFailedJobLogs,
   useFrappeWorkerHealthLogs,
   useGuests,
@@ -48,7 +49,7 @@ function parseQueueDepths(json?: string): Record<string, number> {
 
 /** Full Host Health dashboard tab — chip row + card grid + a per-host
  * detail dialog, mirroring UptimePanel's shape. The fleet-wide "what's
- * currently unhealthy" summary lives in HostHealthSeverityLists (shown on
+ * currently unhealthy" summary lives in the SeveritySidebar (shown on
  * every tab, not just this one); this panel is the full host grid and
  * per-host drill-down. */
 export function HostHealthPanel() {
@@ -241,7 +242,10 @@ function HostDetailDialog({
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
   const x = benchHistory.map((w) => Math.floor(new Date(w.timestamp.replace(' ', 'T')).getTime() / 1000))
   const orphanSeries = benchHistory.map((w) => w.orphan_worker_count)
+  const failedJobSeries = benchHistory.map((w) => w.failed_job_count)
   const latestForBench = benchHistory.at(-1)
+
+  const { data: failedJobGroups } = useFailedJobGroups(host.name)
 
   // useFrappePostCall's `call` actually resolves to the raw
   // `{ message: T }` envelope Frappe wraps every whitelisted return value
@@ -339,7 +343,13 @@ function HostDetailDialog({
               {x.length === 0 ? (
                 <p className="py-6 text-center text-sm text-ink-muted">No history yet for this bench.</p>
               ) : (
-                <TrendChart x={x} series={[{ label: 'Orphan workers', data: orphanSeries, colorVar: '--color-status-warning' }]} />
+                <TrendChart
+                  x={x}
+                  series={[
+                    { label: 'Failed jobs', data: failedJobSeries, colorVar: '--color-status-critical' },
+                    { label: 'Orphan workers', data: orphanSeries, colorVar: '--color-status-warning' },
+                  ]}
+                />
               )}
             </div>
           </div>
@@ -349,7 +359,7 @@ function HostDetailDialog({
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
-                Open Failed Jobs ({failedJobs.length})
+                Failed Job Root Causes ({(failedJobGroups ?? []).length || failedJobs.length})
               </h3>
               <button
                 type="button"
@@ -361,14 +371,24 @@ function HostDetailDialog({
               </button>
             </div>
             {downloadError && <p className="mb-2 text-xs text-status-critical">{downloadError}</p>}
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-border-hairline">
-              {failedJobs.map((j) => (
-                <div key={j.name} className="flex items-center justify-between gap-3 border-b border-border-hairline px-3 py-2 text-xs last:border-0">
-                  <span className="truncate text-ink-primary">
-                    {j.exc_type ? `${j.exc_type} · ` : ''}
-                    {j.bench_name} · {j.queue_name || '—'}
-                  </span>
-                  <span className="text-ink-muted">{timeAgo(j.failed_at)}</span>
+            {/* Human-readable summary — the same grouping "Download Log" writes
+             * to a file (host_health/api.py::get_failed_job_groups mirrors
+             * get_failed_job_log_text's own grouping), but rendered right here
+             * for a reader who just wants the gist without downloading
+             * anything. Full tracebacks stay download-only — too long to
+             * usefully inline. */}
+            <div className="max-h-64 divide-y divide-border-hairline overflow-y-auto rounded-lg border border-border-hairline">
+              {(failedJobGroups ?? []).map((g) => (
+                <div key={`${g.exc_type}-${g.job_name}`} className="px-3 py-2.5 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate font-medium text-ink-primary">
+                      {g.exc_type} <span className="font-normal text-ink-muted">· {g.job_name}</span>
+                    </span>
+                    <span className="shrink-0 text-status-critical">
+                      {g.occurrence_count}× · last {timeAgo(g.last_seen)}
+                    </span>
+                  </div>
+                  {g.message && <p className="mt-0.5 truncate text-ink-secondary">“{g.message}”</p>}
                 </div>
               ))}
             </div>

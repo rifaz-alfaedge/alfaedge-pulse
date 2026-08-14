@@ -1,7 +1,9 @@
 import { HeartbeatDot } from './HeartbeatDot'
-import { MeterRow } from './MeterRow'
+import { MeterRow, meterNeedsAttention } from './MeterRow'
 import { StatusBadge } from './StatusBadge'
 import { timeAgo } from '../lib/format'
+import { hostHealthStatus } from '../lib/severity'
+import type { MonitoredHost } from '../lib/types'
 
 export type ResourceKind = 'host' | 'pbs' | 'guest'
 export type Severity = 'ok' | 'warning' | 'critical'
@@ -35,6 +37,10 @@ export interface ResourceCardProps {
    * Omitted entirely for host/PBS cards, which keep the fixed CPU→RAM→
    * Swap→drives order. */
   meterOrder?: Array<'cpu' | 'ram' | 'disk'>
+  /** Only ever set for guest cards (Host Health has no concept of a
+   * physical Proxmox Server) — omitted whenever this guest has no matching
+   * Monitored Host record (Host Health is opt-in, not universal). */
+  hostHealth?: MonitoredHost
   onClick: () => void
 }
 
@@ -68,6 +74,7 @@ export function ResourceCard({
   criticalThreshold,
   tags,
   meterOrder,
+  hostHealth,
   onClick,
 }: ResourceCardProps) {
   const baseMeters: Record<'cpu' | 'ram' | 'disk', DiskMeter> = {
@@ -78,10 +85,18 @@ export function ResourceCard({
   const order = meterOrder ?? (['cpu', 'ram', 'disk'] as const)
   const extraDisks = disks.slice(1)
 
+  // Only the meters that actually need attention render — a card with
+  // nothing wrong doesn't need every ring taking up space all the time.
+  // Missing data (N/A) is treated the same as "fine" here for the same
+  // reason (see `meterNeedsAttention`).
+  const allMeters = [...order.map((key) => ({ id: key, ...baseMeters[key] })), ...extraDisks.map((d) => ({ id: d.label, ...d }))]
+  const noteworthyMeters = allMeters.filter((m) => meterNeedsAttention(m.value, warningThreshold))
+
   const accentClass =
     severity === 'critical' ? 'border-l-4 border-l-status-critical'
     : severity === 'warning' ? 'border-l-4 border-l-status-warning'
     : ''
+  const pulseClass = severity === 'critical' ? 'card-critical-pulse' : ''
 
   return (
     <div
@@ -89,12 +104,12 @@ export function ResourceCard({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick()}
-      className={`cursor-pointer rounded-2xl border border-border-hairline bg-surface-card p-6 shadow-sm transition-shadow hover:shadow-md ${accentClass}`}
+      className={`cursor-pointer rounded-2xl border border-border-hairline bg-surface-card p-6 shadow-sm transition-shadow hover:shadow-md ${accentClass} ${pulseClass}`}
     >
       <div className="mb-5 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-base font-medium text-ink-primary">
-            <span aria-hidden>{KIND_ICON[kind]}</span>
+            <span aria-hidden className="text-sm">{KIND_ICON[kind]}</span>
             <span className="truncate">{title}</span>
           </div>
           {subtitle && <p className="mt-0.5 truncate text-sm text-ink-secondary">{subtitle}</p>}
@@ -105,20 +120,27 @@ export function ResourceCard({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-around gap-x-6 gap-y-6 py-2">
-        {order.map((key) => (
-          <MeterRow
-            key={key}
-            label={baseMeters[key].label}
-            value={baseMeters[key].value}
-            warningThreshold={warningThreshold}
-            criticalThreshold={criticalThreshold}
-          />
-        ))}
-        {extraDisks.map((d) => (
-          <MeterRow key={d.label} label={d.label} value={d.value} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
-        ))}
-      </div>
+      {noteworthyMeters.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 py-4 text-sm text-status-good">
+          <span aria-hidden>✓</span>
+          <span>All metrics normal</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-around gap-x-6 gap-y-6 py-2">
+          {noteworthyMeters.map((m) => (
+            <MeterRow key={m.id} label={m.label} value={m.value} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
+          ))}
+        </div>
+      )}
+
+      {hostHealth && (
+        <div className="mt-4 flex items-center justify-between gap-2 border-t border-border-hairline pt-4 text-sm">
+          <span className="flex items-center gap-1.5 text-ink-secondary">
+            <span aria-hidden>🩺</span> Host Health
+          </span>
+          <StatusBadge status={hostHealthStatus(hostHealth)} />
+        </div>
+      )}
 
       <div className="mt-5 flex items-center justify-between text-xs text-ink-muted">
         <span>synced {timeAgo(lastSynced)}</span>

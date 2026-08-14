@@ -28,7 +28,7 @@ const labelClass = 'mb-1.5 block text-xs font-medium uppercase tracking-wide tex
  * connected instance from one dashboard, and see the cross-instance-
  * consensus alert rule's live effect (see tasks/uptime_kuma_poller.py)
  * without needing to open Kuma itself. The fleet-wide Critical/Down
- * summary lives in UptimeSeverityLists (shown on every tab, not just this
+ * summary lives in the SeveritySidebar (shown on every tab, not just this
  * one) — this panel is just the full site grid and per-site management. */
 export function UptimePanel() {
   const { data: instances, mutate: mutateInstances } = useUptimeInstances()

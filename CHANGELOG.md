@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented here.
 
+## [3.2.0] - 2026-08-14
+
+### Added
+- **Dashboard redesign.** The six separate Critical/Warning summary cards
+  (Instances, Sites, Hosts/Services) that used to sit above every tab's
+  content are gone, replaced by a single bottom-right **Alerts** popup —
+  two independently clickable filter chips (⛔ Critical / ⚠️ Warning),
+  merged across Proxmox, Uptime, and Host Health, each tagged with its
+  source subsystem.
+- **Primary navigation now reads as primary** — the Overview/Backups/
+  Alerts/... tab bar is visually larger than every panel's own internal
+  filter-pill rows (new `Tabs` `size="lg"` variant, scoped to just this bar).
+- **Multi-select filters**, backed by a new shared `MultiSelectFilter`
+  component:
+  - The dashboard header's per-server filter (was a single-select pill row,
+    now a header dropdown next to **Critical**, sorted A→Z).
+  - AI Usage's Provider/Model/Virtual Key filters (date range stays
+    single-select). Backend filtering moved from exact-match to `IN`-clause
+    across `llm_usage_monitor/api.py`'s four endpoints.
+- **Overview → renamed "Usage Metrics"**, and tab order is now Host
+  Health, Uptime, AI Usage, Usage Metrics, Backups, Alerts — Host Health is
+  also the new default landing tab.
+- **Overview/Usage Metrics card revamp**: meter rings are smaller and only
+  render for metrics currently at warning/critical (a fully healthy card
+  shows "✓ All metrics normal" instead of every ring all the time); guest
+  cards show a Host Health status row when a Monitored Host is linked, and
+  Host Health now also drives the card's own critical border/pulse
+  animation, not just Proxmox CPU/RAM/disk; a new card-weight Uptime
+  summary tile sits above the host/guest grid.
+- **Host Health detail dialog**: the bench-health trend chart now also
+  plots failed-job count (previously only orphan-worker count, which
+  stayed flat at zero for most benches and looked broken); the flat failed-
+  jobs list is replaced by the same human-readable root-cause summary
+  "Download Log" writes to a file — grouped by exception type + method,
+  with occurrence count and the actual error message — inline, with no
+  download required (new `host_health.api.get_failed_job_groups`).
+- **Dark/light mode toggle** in the header — previously followed the OS
+  preference only with no manual override; a click now remembers the
+  explicit choice (`localStorage`) and stops following the OS until
+  cleared.
+
 ## [3.1.0] - 2026-08-14
 
 ### Added

@@ -1,6 +1,7 @@
 import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-react-sdk'
 import type {
   BifrostSettings,
+  FailedJobGroup,
   FrappeFailedJobLog,
   FrappeWorkerHealthLog,
   HostMonitorSettings,
@@ -136,12 +137,23 @@ export function useBifrostSettings() {
 }
 
 /** Shared shape for the AI Usage tab's provider/model/virtual-key filter
- * bar — every hook below accepts the same three optional exact-match
- * filters, on top of its own required params. */
+ * bar — every hook below accepts the same three optional multi-select
+ * filters, on top of its own required params. Empty/absent means "All",
+ * same convention as the single-value strings this replaced. */
 export interface UsageFilters {
-  provider?: string
-  model?: string
-  virtualKeyName?: string
+  provider?: string[]
+  model?: string[]
+  virtualKeyName?: string[]
+}
+
+/** Whitelisted GET params are always strings on the wire — a multi-select
+ * array is JSON-encoded here and decoded server-side via
+ * `frappe.parse_json` (see `llm_usage_monitor/api.py::_parse_list`).
+ * `undefined` (not `'[]'`) for an empty selection, so it's indistinguishable
+ * from "not passed at all" to the backend's existing None-means-no-filter
+ * checks. */
+function serializeFilterList(values?: string[]): string | undefined {
+  return values && values.length > 0 ? JSON.stringify(values) : undefined
 }
 
 export function useAiUsageSummary(startDate?: string, endDate?: string, source?: string, filters: UsageFilters = {}) {
@@ -151,9 +163,9 @@ export function useAiUsageSummary(startDate?: string, endDate?: string, source?:
       start_date: startDate,
       end_date: endDate,
       source,
-      provider: filters.provider,
-      model: filters.model,
-      virtual_key_name: filters.virtualKeyName,
+      provider: serializeFilterList(filters.provider),
+      model: serializeFilterList(filters.model),
+      virtual_key_name: serializeFilterList(filters.virtualKeyName),
     },
     undefined,
     { refreshInterval: SLOW_POLL_MS },
@@ -175,9 +187,9 @@ export function useAiUsageTrend(
       end_date: endDate,
       group_by: groupBy,
       source,
-      provider: filters.provider,
-      model: filters.model,
-      virtual_key_name: filters.virtualKeyName,
+      provider: serializeFilterList(filters.provider),
+      model: serializeFilterList(filters.model),
+      virtual_key_name: serializeFilterList(filters.virtualKeyName),
     },
     undefined,
     { refreshInterval: SLOW_POLL_MS },
@@ -199,9 +211,9 @@ export function useAiUsageBreakdown(
       start_date: startDate,
       end_date: endDate,
       source,
-      provider: filters.provider,
-      model: filters.model,
-      virtual_key_name: filters.virtualKeyName,
+      provider: serializeFilterList(filters.provider),
+      model: serializeFilterList(filters.model),
+      virtual_key_name: serializeFilterList(filters.virtualKeyName),
     },
     undefined,
     { refreshInterval: SLOW_POLL_MS },
@@ -403,6 +415,22 @@ export function useFrappeFailedJobLogs() {
   )
 }
 
+/** Human-readable root-cause summary for one host's failed jobs — the
+ * inline counterpart to `host_health.api.get_failed_job_log_text`'s
+ * downloadable file, for a reader who wants the gist without downloading
+ * anything. Only ever called with a real host name (the dialog that uses
+ * this only mounts once a host is selected), so no undefined-skip guard
+ * needed here. */
+export function useFailedJobGroups(monitoredHost: string) {
+  const result = useFrappeGetCall<{ message: FailedJobGroup[] }>(
+    'proxmox_monitor.host_health.api.get_failed_job_groups',
+    { monitored_host: monitoredHost },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
 export function useHostMonitorSettings() {
   return useFrappeGetDoc<HostMonitorSettings>('Host Monitor Settings', 'Host Monitor Settings', undefined, {
     refreshInterval: SLOW_POLL_MS,
@@ -425,9 +453,9 @@ export function useAiRecentRequests(
       start_date: startDate,
       end_date: endDate,
       source,
-      provider: filters.provider,
-      model: filters.model,
-      virtual_key_name: filters.virtualKeyName,
+      provider: serializeFilterList(filters.provider),
+      model: serializeFilterList(filters.model),
+      virtual_key_name: serializeFilterList(filters.virtualKeyName),
       limit,
       offset,
       sort_by: sortBy,

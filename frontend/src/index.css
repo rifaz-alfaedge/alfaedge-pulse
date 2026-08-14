@@ -85,7 +85,7 @@ body {
 }
 
 /* Same technique as heartbeat-pulse-critical above, sized for the larger
- * (108px) meter rings in MeterRow.tsx — draws the eye to a CPU/RAM/Storage
+ * (84px) meter rings in MeterRow.tsx — draws the eye to a CPU/RAM/Storage
  * reading that's crossed the critical threshold. */
 @keyframes meter-pulse-critical {
   0% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0.5); }
@@ -95,4 +95,19 @@ body {
 
 .meter-critical-pulse {
   animation: meter-pulse-critical 1.4s ease-out infinite;
+}
+
+/* Same technique again, sized for a whole ResourceCard's border-radius —
+ * a card's overall severity now combines Proxmox resource state AND Host
+ * Health (see lib/severity.ts's hostHealthStatus), so this is the one
+ * glanceable signal that something on this card is critical, even before
+ * reading which meter or badge is responsible. */
+@keyframes card-pulse-critical {
+  0% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0.45); }
+  70% { box-shadow: 0 0 0 8px rgba(208, 59, 59, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0); }
+}
+
+.card-critical-pulse {
+  animation: card-pulse-critical 1.4s ease-out infinite;
 }

@@ -14,12 +14,10 @@ import { TrendChart } from './TrendChart'
 import { HeartbeatDot } from './HeartbeatDot'
 import { StatusBadge } from './StatusBadge'
 import { DateRangeFilter } from './DateRangeFilter'
+import { MultiSelectFilter } from './MultiSelectFilter'
 
 type SortField = 'request_timestamp' | 'latency_ms' | 'total_tokens' | 'total_cost'
 type SortDirection = 'asc' | 'desc'
-
-const filterSelectClass =
-  'rounded-lg border border-border-hairline bg-surface-page px-3 py-2 text-sm text-ink-primary outline-none focus:border-accent'
 
 function formatCost(v: number): string {
   return `$${v.toFixed(v < 1 ? 4 : 2)}`
@@ -47,9 +45,9 @@ export function AiUsagePanel() {
   const [preset, setPreset] = useState<DateRangePreset>('30d')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
-  const [provider, setProvider] = useState('')
-  const [model, setModel] = useState('')
-  const [virtualKey, setVirtualKey] = useState('')
+  const [provider, setProvider] = useState<string[]>([])
+  const [model, setModel] = useState<string[]>([])
+  const [virtualKey, setVirtualKey] = useState<string[]>([])
   const [sortField, setSortField] = useState<SortField>('request_timestamp')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
 
@@ -58,7 +56,7 @@ export function AiUsagePanel() {
     [preset, customStart, customEnd],
   )
   const filters = useMemo(
-    () => ({ provider: provider || undefined, model: model || undefined, virtualKeyName: virtualKey || undefined }),
+    () => ({ provider, model, virtualKeyName: virtualKey }),
     [provider, model, virtualKey],
   )
 
@@ -112,39 +110,9 @@ export function AiUsagePanel() {
               setCustomEnd(end)
             }}
           />
-          <select
-            aria-label="Provider"
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            className={filterSelectClass}
-          >
-            <option value="">All Providers</option>
-            {(filterOptions?.providers ?? []).map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          <select
-            aria-label="Model"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className={filterSelectClass}
-          >
-            <option value="">All Models</option>
-            {(filterOptions?.models ?? []).map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-          <select
-            aria-label="Virtual Key"
-            value={virtualKey}
-            onChange={(e) => setVirtualKey(e.target.value)}
-            className={filterSelectClass}
-          >
-            <option value="">All Virtual Keys</option>
-            {(filterOptions?.virtual_keys ?? []).map((v) => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
+          <MultiSelectFilter label="Providers" options={filterOptions?.providers ?? []} selected={provider} onChange={setProvider} />
+          <MultiSelectFilter label="Models" options={filterOptions?.models ?? []} selected={model} onChange={setModel} />
+          <MultiSelectFilter label="Virtual Keys" options={filterOptions?.virtual_keys ?? []} selected={virtualKey} onChange={setVirtualKey} />
         </div>
       </div>
 
