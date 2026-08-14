@@ -11,12 +11,15 @@
   "bench_name",
   "queue_name",
   "rq_job_id",
+  "job_name",
   "column_break_job",
   "failed_at",
   "first_seen",
   "last_seen",
   "resolved",
   "resolved_at",
+  "exc_type",
+  "failure_signature",
   "exc_info"
  ],
  "fields": [
@@ -50,6 +53,12 @@
    "label": "RQ Job ID",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "description": "The enqueued method's dotted path (rq's job.func_name), e.g. frappe.email.queue.flush. Root input to failure_signature below — not shown as a standalone filter, just grouping material.",
+   "fieldname": "job_name",
+   "fieldtype": "Data",
+   "label": "Job Name"
   },
   {
    "fieldname": "column_break_job",
@@ -89,6 +98,23 @@
    "fieldname": "resolved_at",
    "fieldtype": "Datetime",
    "label": "Resolved At",
+   "read_only": 1
+  },
+  {
+   "description": "Exception class name, parsed server-side from the last line of exc_info (e.g. \"KeyError\" from \"KeyError: 'foo'\"). \"Unknown\" if that line doesn't match the usual traceback format.",
+   "fieldname": "exc_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Exception Type",
+   "read_only": 1
+  },
+  {
+   "description": "sha256(exc_type + \"::\" + job_name), truncated to 16 hex chars — the dashboard's root-cause grouping key. Two failures with the same exception type from the same method collapse into one group, across hosts and over time.",
+   "fieldname": "failure_signature",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Failure Signature",
    "read_only": 1
   },
   {

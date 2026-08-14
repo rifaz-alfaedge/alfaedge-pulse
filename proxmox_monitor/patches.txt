@@ -9,3 +9,4 @@ proxmox_monitor.patches.add_llm_usage_log_indexes
 proxmox_monitor.patches.add_uptime_check_log_indexes
 proxmox_monitor.patches.add_frappe_worker_health_log_indexes
 proxmox_monitor.patches.setup_host_health_agent
+proxmox_monitor.patches.add_failed_job_log_failure_signature_index

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
 
 import frappe
@@ -301,20 +302,49 @@ def _process_bench(host_name: str, row: dict, orphan_critical_threshold: int, fa
 	}
 
 
+def _parse_exc_type(exc_info: str | None) -> str:
+	"""Best-effort exception class name from a raw traceback string — the
+	last non-empty line is normally ``SomeException: message`` (Python's own
+	``traceback.format_exception`` convention). "Unknown" if that line
+	doesn't look like one (empty exc_info, or a format we don't recognize)
+	rather than guessing wrong."""
+	for line in reversed((exc_info or "").splitlines()):
+		line = line.strip()
+		if not line:
+			continue
+		name = line.split(":", 1)[0].strip()
+		if name and " " not in name:
+			return name
+		return "Unknown"
+	return "Unknown"
+
+
+def _failure_signature(exc_type: str, job_name: str | None) -> str:
+	"""Root-cause grouping key — same exception type from the same enqueued
+	method collapses into one signature, across hosts and over time. Not a
+	security boundary, just a grouping key — 16 hex chars is plenty."""
+	return hashlib.sha256(f"{exc_type}::{job_name or 'unknown'}".encode()).hexdigest()[:16]
+
+
 def _upsert_failed_job(host_name: str, bench_name: str, job: dict) -> str | None:
 	rq_job_id = job.get("rq_job_id")
 	if not rq_job_id:
 		return None
 	now = now_datetime()
+	job_name = job.get("job_name")
+	exc_type = _parse_exc_type(job.get("exc_info"))
 	fields = {
 		"monitored_host": host_name,
 		"bench_name": bench_name,
 		"queue_name": job.get("queue_name"),
+		"job_name": job_name,
 		"failed_at": _parse_remote_timestamp(job.get("failed_at")),
 		"last_seen": now,
 		"resolved": 0,
 		"resolved_at": None,
 		"exc_info": job.get("exc_info"),
+		"exc_type": exc_type,
+		"failure_signature": _failure_signature(exc_type, job_name),
 	}
 	existing = frappe.db.get_value("Frappe Failed Job Log", {"rq_job_id": rq_job_id}, "name")
 	if existing:

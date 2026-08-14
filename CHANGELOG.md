@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here.
 
+## [3.1.0] - 2026-08-14
+
+### Added
+- **Root-cause grouping for Failed Job Log.** The Host Health dashboard's
+  failed-jobs view now collapses raw RQ failures into distinct root causes
+  instead of a flat list — new "Failed Job Root Causes" section, one card
+  per `failure_signature` (exception type + enqueued method), each
+  expandable to the matching individual occurrences across the fleet.
+  - `Frappe Failed Job Log` gains `job_name` (the RQ job's method dotted
+    path, newly captured by `pulse_agent`), `exc_type` (parsed server-side
+    from the raw traceback's last line), and `failure_signature`
+    (`sha256(exc_type + job_name)`, indexed) — computed inline at ingest
+    time, no extra polling.
+  - New `host_health.api.get_failed_job_groups` endpoint for the grouped
+    aggregation (occurrence count, affected-host count, first/last seen,
+    a representative traceback sample) — a shape the generic list API can't
+    express.
+  - Existing "Failed Job Threshold" alerting is unchanged in this release —
+    still raw per-bench open-row count, not signature-aware; a candidate for
+    a future phase once real grouped data exists to design against.
+
 ## [3.0.0] - 2026-08-13
 
 ### Added
