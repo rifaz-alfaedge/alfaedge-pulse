@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "autoname": "hash",
+ "autoname": "format:{hostname}_{proxmox_guest}",
  "creation": "2026-08-13 00:00:00.000000",
  "doctype": "DocType",
  "document_type": "System",
@@ -186,7 +186,7 @@
  "modified_by": "Administrator",
  "module": "Host Health",
  "name": "Monitored Host",
- "naming_rule": "Random",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
