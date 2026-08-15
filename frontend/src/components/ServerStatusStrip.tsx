@@ -1,5 +1,22 @@
 import { formatPercent } from '../lib/format'
-import type { ProxmoxServer } from '../lib/types'
+import type { ProxmoxDatastore, ProxmoxServer } from '../lib/types'
+
+/** Mean of each of this server's physical drives' own usage% (the same
+ * `Proxmox Datastore` rows the host card's disk meters already read from —
+ * see `driveLabel` in App.tsx) — deliberately NOT `server.storage_usage`,
+ * which is only the root filesystem and explicitly documented server-side
+ * as excluded from alerting because it doesn't reflect this fleet's real
+ * disk layout (two separate physical drives per host; see poller.py's
+ * `_apply_host_status`). `null` when a server has no datastore rows yet,
+ * not 0% — no data is not the same as an empty disk. */
+function averageDriveUsage(server: ProxmoxServer, datastores: ProxmoxDatastore[]): number | null {
+  const values = datastores
+    .filter((d) => d.server === server.name)
+    .map((d) => d.usage_percent)
+    .filter((v): v is number => v !== undefined && v !== null)
+  if (values.length === 0) return null
+  return values.reduce((sum, v) => sum + v, 0) / values.length
+}
 
 /** Always-visible, view-only ticker of every non-PBS Proxmox host's
  * CPU/RAM/Storage, sticky above the header so it stays on screen across
@@ -9,10 +26,12 @@ import type { ProxmoxServer } from '../lib/types'
  * hosts in the fleet. Not interactive — plain glanceable status only. */
 export function ServerStatusStrip({
   servers,
+  datastores,
   warningThreshold,
   criticalThreshold,
 }: {
   servers: ProxmoxServer[]
+  datastores: ProxmoxDatastore[]
   warningThreshold: number
   criticalThreshold: number
 }) {
@@ -33,7 +52,7 @@ export function ServerStatusStrip({
               <span className="flex items-center gap-2.5 text-xs tabular-nums">
                 <Metric label="CPU" value={s.cpu_usage} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
                 <Metric label="RAM" value={s.memory_usage} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
-                <Metric label="Disk" value={s.storage_usage} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
+                <Metric label="Disk" value={averageDriveUsage(s, datastores)} warningThreshold={warningThreshold} criticalThreshold={criticalThreshold} />
               </span>
             )}
           </div>

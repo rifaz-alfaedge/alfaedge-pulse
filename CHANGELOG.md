@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [3.4.0] - 2026-08-15
+
+### Fixed
+- **Server status strip's Disk figure** now averages each server's actual
+  physical drives (`Proxmox Datastore.usage_percent` — the same rows the
+  host cards' disk meters already read from) instead of
+  `Proxmox Server.storage_usage`, which is only the root filesystem (`/`)
+  and is explicitly excluded from alerting server-side because it doesn't
+  reflect this fleet's real two-drive-per-host layout (see `poller.py`'s
+  `_apply_host_status`). Shows "—" for a server with no datastore rows
+  synced yet, not a misleading 0%.
+
 ## [3.3.0] - 2026-08-15
 
 ### Added

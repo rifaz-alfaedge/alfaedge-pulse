@@ -203,6 +203,7 @@ function App() {
     <div className="mx-auto max-w-[96rem] px-6 pb-10 sm:px-10 lg:px-16">
       <ServerStatusStrip
         servers={statusStripHosts}
+        datastores={allDatastores}
         warningThreshold={warningThreshold}
         criticalThreshold={criticalThreshold}
       />
