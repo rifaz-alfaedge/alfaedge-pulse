@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [3.3.0] - 2026-08-15
+
+### Added
+- **Server status strip** — a thin, always-visible, view-only bar pinned
+  above the header (sticky, so it stays on screen across every tab, not
+  just Usage Metrics) showing every non-PBS Proxmox server's name plus
+  CPU/RAM/Disk percentages, color-coded on the same warning/critical
+  thresholds as everywhere else on the dashboard, or an "Offline" badge in
+  place of the numbers when a server is unreachable.
+
 ## [3.2.0] - 2026-08-14
 
 ### Added

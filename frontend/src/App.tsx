@@ -13,6 +13,7 @@ import { hostHealthStatus, isHostCritical, isHostWarning } from './lib/severity'
 import { ResourceCard, type DiskMeter, type Severity } from './components/ResourceCard'
 import { AlertsPopup } from './components/AlertsPopup'
 import { MultiSelectFilter } from './components/MultiSelectFilter'
+import { ServerStatusStrip } from './components/ServerStatusStrip'
 import { UptimeSummaryTile } from './components/UptimeSummaryTile'
 import { ThemeToggle } from './components/ThemeToggle'
 import { NodeDetailDialog, type SelectedNode } from './components/NodeDetailDialog'
@@ -122,6 +123,10 @@ function App() {
 
   const pveHosts = allServers.filter((s) => s.server_type === 'PVE')
   const pbsInstances = allServers.filter((s) => s.server_type === 'PBS')
+  // Production, then Staging, then Development — same ordering convention
+  // as the card grid below, so the always-visible strip and the cards it
+  // links into never disagree about which host comes first.
+  const statusStripHosts = [...pveHosts].sort((a, b) => roleRank(a.role) - roleRank(b.role) || a.server_name.localeCompare(b.server_name))
 
   const serverFilterOptions = useMemo(
     () => [...allServers.map((s) => s.server_name)].sort((a, b) => a.localeCompare(b)),
@@ -195,8 +200,14 @@ function App() {
     .at(-1)
 
   return (
-    <div className="mx-auto max-w-[96rem] px-6 py-10 sm:px-10 lg:px-16">
-      <header className="mb-10 flex flex-wrap items-center justify-between gap-6">
+    <div className="mx-auto max-w-[96rem] px-6 pb-10 sm:px-10 lg:px-16">
+      <ServerStatusStrip
+        servers={statusStripHosts}
+        warningThreshold={warningThreshold}
+        criticalThreshold={criticalThreshold}
+      />
+
+      <header className="mb-10 flex flex-wrap items-center justify-between gap-6 pt-10">
         <div>
           {/* Relative path, not the site's full domain — this dashboard rides on
            * whatever Frappe site it's installed on, and "/app" (the Desk's default
