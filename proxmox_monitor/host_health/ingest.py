@@ -42,6 +42,7 @@ from proxmox_monitor.tasks.poller import _handle_transition
 DEFAULT_CONFIRMATION_CHECKS = 3
 DEFAULT_ORPHAN_WORKER_CRITICAL_THRESHOLD = 3
 DEFAULT_FAILED_JOB_CRITICAL_THRESHOLD = 20
+DEFAULT_LONG_RUNNING_JOB_CRITICAL_THRESHOLD_SECONDS = 1800
 
 
 def _parse_remote_timestamp(value):
@@ -102,6 +103,9 @@ def push_status(
 	checks = cint(settings.confirmation_checks) or DEFAULT_CONFIRMATION_CHECKS
 	orphan_critical_threshold = cint(settings.orphan_worker_critical_threshold) or DEFAULT_ORPHAN_WORKER_CRITICAL_THRESHOLD
 	failed_job_critical_threshold = cint(settings.failed_job_critical_threshold) or DEFAULT_FAILED_JOB_CRITICAL_THRESHOLD
+	long_running_critical_threshold = (
+		cint(settings.long_running_job_critical_threshold_seconds) or DEFAULT_LONG_RUNNING_JOB_CRITICAL_THRESHOLD_SECONDS
+	)
 	role = get_host_role(host_name)
 	notify_global = role == "Production"
 
@@ -128,7 +132,11 @@ def push_status(
 		bench_results = []
 		for row in benches:
 			try:
-				bench_results.append(_process_bench(host_name, row, orphan_critical_threshold, failed_job_critical_threshold))
+				bench_results.append(
+					_process_bench(
+						host_name, row, orphan_critical_threshold, failed_job_critical_threshold, long_running_critical_threshold
+					)
+				)
 				benches_recorded += 1
 			except Exception:
 				frappe.log_error(
@@ -138,11 +146,21 @@ def push_status(
 
 		worker_health_critical = any(r["orphan_streak"] >= checks for r in bench_results)
 		failed_job_critical = any(r["failed_job_streak"] >= checks for r in bench_results)
-		was = frappe.db.get_value("Monitored Host", host_name, ["worker_health_critical", "failed_job_critical"], as_dict=True)
+		long_running_job_critical = any(r["long_running_streak"] >= checks for r in bench_results)
+		was = frappe.db.get_value(
+			"Monitored Host",
+			host_name,
+			["worker_health_critical", "failed_job_critical", "long_running_job_critical"],
+			as_dict=True,
+		)
 		frappe.db.set_value(
 			"Monitored Host",
 			host_name,
-			{"worker_health_critical": worker_health_critical, "failed_job_critical": failed_job_critical},
+			{
+				"worker_health_critical": worker_health_critical,
+				"failed_job_critical": failed_job_critical,
+				"long_running_job_critical": long_running_job_critical,
+			},
 		)
 		_handle_transition(
 			bool(cint(was.worker_health_critical)),
@@ -162,6 +180,16 @@ def push_status(
 			"Failed Job Threshold",
 			f"{host_name}: failed job count has stayed at/above the critical threshold.",
 			recovery_message=f"{host_name}: failed job count back under threshold.",
+			notify_global=notify_global,
+		)
+		_handle_transition(
+			bool(cint(was.long_running_job_critical)),
+			long_running_job_critical,
+			"Monitored Host",
+			host_name,
+			"Long Running Job",
+			f"{host_name}: a job has stayed running at/beyond the long-running threshold.",
+			recovery_message=f"{host_name}: no more long-running jobs.",
 			notify_global=notify_global,
 		)
 
@@ -247,7 +275,13 @@ def _upsert_service(host_name: str, row: dict, checks: int, notify_global: bool)
 	)
 
 
-def _process_bench(host_name: str, row: dict, orphan_critical_threshold: int, failed_job_critical_threshold: int) -> dict:
+def _process_bench(
+	host_name: str,
+	row: dict,
+	orphan_critical_threshold: int,
+	failed_job_critical_threshold: int,
+	long_running_critical_threshold_seconds: int,
+) -> dict:
 	bench_name = row.get("bench_name")
 	if not bench_name:
 		raise ValueError("bench row missing bench_name")
@@ -255,26 +289,41 @@ def _process_bench(host_name: str, row: dict, orphan_critical_threshold: int, fa
 	prior = frappe.get_all(
 		"Frappe Worker Health Log",
 		filters={"monitored_host": host_name, "bench_name": bench_name},
-		fields=["orphan_critical_streak", "failed_job_critical_streak"],
+		fields=["orphan_critical_streak", "failed_job_critical_streak", "long_running_job_critical_streak"],
 		order_by="timestamp desc",
 		limit_page_length=1,
 	)
 	prior_orphan_streak = cint(prior[0].orphan_critical_streak) if prior else 0
 	prior_failed_streak = cint(prior[0].failed_job_critical_streak) if prior else 0
+	prior_long_running_streak = cint(prior[0].long_running_job_critical_streak) if prior else 0
 
 	orphan_count = cint(row.get("orphan_worker_count"))
 	failed_jobs = row.get("failed_jobs") or []
 	failed_job_count = cint(row.get("failed_job_count")) if row.get("failed_job_count") is not None else len(failed_jobs)
+	active_jobs = row.get("active_jobs") or []
 
 	orphan_streak = prior_orphan_streak + 1 if orphan_count >= orphan_critical_threshold else 0
 	failed_streak = prior_failed_streak + 1 if failed_job_count >= failed_job_critical_threshold else 0
+
+	now = now_datetime()
+	seen_active_ids = set()
+	long_running_job_count = 0
+	for job in active_jobs:
+		job_id, is_long_running = _upsert_active_job(host_name, bench_name, job, long_running_critical_threshold_seconds, now)
+		if job_id:
+			seen_active_ids.add(job_id)
+			if is_long_running:
+				long_running_job_count += 1
+	_delete_stale_active_jobs(host_name, bench_name, seen_active_ids)
+
+	long_running_streak = prior_long_running_streak + 1 if long_running_job_count > 0 else 0
 
 	doc = frappe.new_doc("Frappe Worker Health Log")
 	doc.update(
 		{
 			"monitored_host": host_name,
 			"bench_name": bench_name,
-			"timestamp": now_datetime(),
+			"timestamp": now,
 			"registered_workers": cint(row.get("registered_workers")),
 			"live_worker_count": cint(row.get("live_worker_count")),
 			"orphan_worker_count": orphan_count,
@@ -283,6 +332,9 @@ def _process_bench(host_name: str, row: dict, orphan_critical_threshold: int, fa
 			"queue_depths": json.dumps(row.get("queue_depths") or {}),
 			"failed_job_count": failed_job_count,
 			"failed_job_critical_streak": failed_streak,
+			"active_job_count": len(active_jobs),
+			"long_running_job_count": long_running_job_count,
+			"long_running_job_critical_streak": long_running_streak,
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -298,6 +350,7 @@ def _process_bench(host_name: str, row: dict, orphan_critical_threshold: int, fa
 		"bench_name": bench_name,
 		"orphan_streak": orphan_streak,
 		"failed_job_streak": failed_streak,
+		"long_running_streak": long_running_streak,
 		"scheduler_last_run": row.get("scheduler_last_run"),
 	}
 
@@ -376,6 +429,63 @@ def _resolve_missing_failed_jobs(host_name: str, bench_name: str, seen_ids: set)
 	for row in open_rows:
 		if row.rq_job_id not in seen_ids:
 			frappe.db.set_value("Frappe Failed Job Log", row.name, {"resolved": 1, "resolved_at": now})
+
+
+def _upsert_active_job(
+	host_name: str, bench_name: str, job: dict, long_running_critical_threshold_seconds: int, now
+) -> tuple[str | None, bool]:
+	"""Returns (rq_job_id, is_long_running) — None job_id if the row was
+	malformed and skipped. Unlike failed jobs, elapsed time is computed
+	here (not just stored raw) so both the streak logic right above and
+	the dashboard get a single already-computed number instead of
+	re-deriving it from two timestamps."""
+	rq_job_id = job.get("rq_job_id")
+	if not rq_job_id:
+		return None, False
+	started_at = _parse_remote_timestamp(job.get("started_at"))
+	elapsed_seconds = int((now - started_at).total_seconds()) if started_at else 0
+	is_long_running = elapsed_seconds >= long_running_critical_threshold_seconds
+
+	fields = {
+		"monitored_host": host_name,
+		"bench_name": bench_name,
+		"queue_name": job.get("queue_name"),
+		"job_name": job.get("job_name"),
+		"worker_pid": job.get("worker_pid"),
+		"started_at": started_at,
+		"last_seen": now,
+		"elapsed_seconds": elapsed_seconds,
+		"is_long_running": 1 if is_long_running else 0,
+	}
+	existing = frappe.db.get_value("Frappe Active Job", {"rq_job_id": rq_job_id}, "name")
+	if existing:
+		frappe.db.set_value("Frappe Active Job", existing, fields, update_modified=True)
+		return rq_job_id, is_long_running
+
+	doc = frappe.new_doc("Frappe Active Job")
+	doc.update({"rq_job_id": rq_job_id, **fields})
+	try:
+		doc.insert(ignore_permissions=True)
+	except frappe.DuplicateEntryError:
+		# Lost a race to create this exact row to another process — same
+		# fallback as Frappe Failed Job Log's _upsert_failed_job.
+		frappe.db.set_value("Frappe Active Job", {"rq_job_id": rq_job_id}, fields, update_modified=True)
+	return rq_job_id, is_long_running
+
+
+def _delete_stale_active_jobs(host_name: str, bench_name: str, seen_ids: set) -> None:
+	"""Jobs that were active last push but aren't in this push's active_jobs
+	list anymore — finished normally, in the ordinary case. Deleted
+	outright, not tombstoned: see Frappe Active Job's own docstring for why
+	this is a live snapshot, not a history log, unlike failed jobs."""
+	open_rows = frappe.get_all(
+		"Frappe Active Job",
+		filters={"monitored_host": host_name, "bench_name": bench_name},
+		fields=["name", "rq_job_id"],
+	)
+	for row in open_rows:
+		if row.rq_job_id not in seen_ids:
+			frappe.delete_doc("Frappe Active Job", row.name, ignore_permissions=True, delete_permanently=True)
 
 
 def _replace_hosted_sites(host_name: str, sites: list, warnings: list) -> int:

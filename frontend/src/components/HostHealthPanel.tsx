@@ -3,6 +3,7 @@ import { Dialog } from '@rtcamp/frappe-ui-react'
 import { useFrappePostCall } from 'frappe-react-sdk'
 import {
   useFailedJobGroups,
+  useFrappeActiveJobs,
   useFrappeFailedJobLogs,
   useFrappeWorkerHealthLogs,
   useGuests,
@@ -11,15 +12,34 @@ import {
   useMonitoredHosts,
   useServers,
   useServiceStatusLogs,
+  useWorkerHealthHistory,
 } from '../lib/hooks'
-import type { FrappeFailedJobLog, FrappeWorkerHealthLog, MonitoredHost, MonitoredHostSite, ServiceStatusLog } from '../lib/types'
+import type {
+  FrappeActiveJob,
+  FrappeFailedJobLog,
+  FrappeWorkerHealthLog,
+  MonitoredHost,
+  MonitoredHostSite,
+  ServiceStatusLog,
+} from '../lib/types'
+import { buildConsoleUrl } from '../lib/consoleUrl'
 import { getErrorMessage } from '../lib/errors'
-import { timeAgo } from '../lib/format'
+import { formatUptime, timeAgo } from '../lib/format'
 import { HeartbeatDot } from './HeartbeatDot'
 import { StatusBadge } from './StatusBadge'
 import { TrendChart } from './TrendChart'
 
 const DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 90
+
+/** Bench Health trend-chart window presets, in minutes — 6h default: wide
+ * enough to see a real trend, narrow enough that a ~20-30s agent push
+ * interval still renders as a readable line rather than a wall of points. */
+const TREND_RANGE_OPTIONS: { label: string; minutes: number }[] = [
+  { label: '1h', minutes: 60 },
+  { label: '6h', minutes: 360 },
+  { label: '24h', minutes: 1440 },
+  { label: '7d', minutes: 10080 },
+]
 
 /** Latest row per (monitored_host, bench_name) from an append-only log —
  * the same "latest row per bench" query the ingest endpoint's own streak
@@ -58,6 +78,7 @@ export function HostHealthPanel() {
   const { data: services } = useServiceStatusLogs()
   const { data: workerLogs } = useFrappeWorkerHealthLogs()
   const { data: failedJobs } = useFrappeFailedJobLogs()
+  const { data: activeJobs } = useFrappeActiveJobs()
   const { data: settings } = useHostMonitorSettings()
   const { data: guests } = useGuests()
   const { data: servers } = useServers()
@@ -68,6 +89,7 @@ export function HostHealthPanel() {
   const allServices = services ?? []
   const allWorkerLogs = workerLogs ?? []
   const allFailedJobs = failedJobs ?? []
+  const allActiveJobs = activeJobs ?? []
   const heartbeatTimeoutSeconds = settings?.heartbeat_timeout_seconds || DEFAULT_HEARTBEAT_TIMEOUT_SECONDS
 
   const latestBenches = useMemo(() => latestPerBench(allWorkerLogs), [allWorkerLogs])
@@ -105,7 +127,9 @@ export function HostHealthPanel() {
             <HeartbeatDot
               lastSynced={host.last_seen}
               pollIntervalSeconds={heartbeatTimeoutSeconds / 4}
-              critical={!host.is_online || !!host.worker_health_critical || !!host.failed_job_critical}
+              critical={
+                !host.is_online || !!host.worker_health_critical || !!host.failed_job_critical || !!host.long_running_job_critical
+              }
             />
             <span className="font-medium text-ink-primary">{host.hostname || host.name}</span>
             <span className="text-xs text-ink-muted">{host.is_online ? timeAgo(host.last_seen) : 'unreachable'}</span>
@@ -123,6 +147,7 @@ export function HostHealthPanel() {
             benches={latestBenches.filter((w) => w.monitored_host === host.name)}
             sites={allSites.filter((s) => s.parent === host.name)}
             openFailedJobCount={allFailedJobs.filter((j) => j.monitored_host === host.name).length}
+            longRunningJobCount={allActiveJobs.filter((j) => j.monitored_host === host.name && j.is_long_running).length}
             onOpenDetail={() => setSelectedHost(host)}
           />
         ))}
@@ -135,7 +160,17 @@ export function HostHealthPanel() {
           services={allServices.filter((s) => s.monitored_host === selectedHost.name)}
           workerLogs={allWorkerLogs.filter((w) => w.monitored_host === selectedHost.name)}
           failedJobs={allFailedJobs.filter((j) => j.monitored_host === selectedHost.name)}
+          activeJobs={allActiveJobs.filter((j) => j.monitored_host === selectedHost.name)}
           sites={allSites.filter((s) => s.parent === selectedHost.name)}
+          // Host Health only ever tracks a Frappe agent running *inside* a
+          // guest (see Monitored Host's own proxmox_guest field) — never a
+          // bare Proxmox host/PBS server, so this is always a guest console
+          // link, same restriction the Usage Metrics tab's own Open
+          // Console enforces (see lib/consoleUrl.ts).
+          consoleUrl={(() => {
+            const guest = guestByName.get(selectedHost.proxmox_guest)
+            return guest ? buildConsoleUrl(guest, serverByName.get(guest.server)) : null
+          })()}
           onClose={() => setSelectedHost(null)}
         />
       )}
@@ -150,6 +185,7 @@ function HostCard({
   benches,
   sites,
   openFailedJobCount,
+  longRunningJobCount,
   onOpenDetail,
 }: {
   host: MonitoredHost
@@ -158,10 +194,12 @@ function HostCard({
   benches: FrappeWorkerHealthLog[]
   sites: MonitoredHostSite[]
   openFailedJobCount: number
+  longRunningJobCount: number
   onOpenDetail: () => void
 }) {
   const anyServiceDown = services.some((s) => s.is_down)
-  const critical = !host.is_online || !!host.worker_health_critical || !!host.failed_job_critical
+  const critical =
+    !host.is_online || !!host.worker_health_critical || !!host.failed_job_critical || !!host.long_running_job_critical
   const totalOrphans = benches.reduce((sum, b) => sum + (b.orphan_worker_count || 0), 0)
 
   return (
@@ -211,7 +249,16 @@ function HostCard({
           {sites.length > 0 ? `${sites.length} site${sites.length === 1 ? '' : 's'}` : 'No sites reported'}
           {totalOrphans > 0 && <span className="text-status-warning"> · {totalOrphans} orphan worker{totalOrphans === 1 ? '' : 's'}</span>}
         </span>
-        {openFailedJobCount > 0 && <span className="text-status-critical">{openFailedJobCount} open failed job{openFailedJobCount === 1 ? '' : 's'}</span>}
+        <span className="flex items-center gap-2">
+          {longRunningJobCount > 0 && (
+            <span className="text-status-critical">
+              {longRunningJobCount} long-running job{longRunningJobCount === 1 ? '' : 's'}
+            </span>
+          )}
+          {openFailedJobCount > 0 && (
+            <span className="text-status-critical">{openFailedJobCount} open failed job{openFailedJobCount === 1 ? '' : 's'}</span>
+          )}
+        </span>
       </div>
     </div>
   )
@@ -223,7 +270,9 @@ function HostDetailDialog({
   services,
   workerLogs,
   failedJobs,
+  activeJobs,
   sites,
+  consoleUrl,
   onClose,
 }: {
   host: MonitoredHost
@@ -231,19 +280,31 @@ function HostDetailDialog({
   services: ServiceStatusLog[]
   workerLogs: FrappeWorkerHealthLog[]
   failedJobs: FrappeFailedJobLog[]
+  activeJobs: FrappeActiveJob[]
   sites: MonitoredHostSite[]
+  consoleUrl: string | null
   onClose: () => void
 }) {
   const benchNames = [...new Set(workerLogs.map((w) => w.bench_name))]
   const [selectedBench, setSelectedBench] = useState(benchNames[0])
-  const benchHistory = workerLogs
-    .filter((w) => w.bench_name === selectedBench)
-    .slice()
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+  const [rangeMinutes, setRangeMinutes] = useState(360)
+  // Scoped to exactly this (host, bench) within the chosen window — unlike
+  // the `workerLogs` prop above (a fleet-wide recent-300 cap shared across
+  // every host/bench, only reliable for "what's the latest row," not a
+  // real range), so picking a longer window here doesn't starve other
+  // hosts out of their own share of that shared cap.
+  const { data: rangeHistoryData } = useWorkerHealthHistory(host.name, selectedBench ?? '', rangeMinutes)
+  const benchHistory = rangeHistoryData ?? []
   const x = benchHistory.map((w) => Math.floor(new Date(w.timestamp.replace(' ', 'T')).getTime() / 1000))
   const orphanSeries = benchHistory.map((w) => w.orphan_worker_count)
   const failedJobSeries = benchHistory.map((w) => w.failed_job_count)
   const latestForBench = benchHistory.at(-1)
+  // Longest-running first, matching Frappe Active Job's own default sort —
+  // the worst offender on this bench always leads the list.
+  const benchActiveJobs = activeJobs
+    .filter((j) => j.bench_name === selectedBench)
+    .slice()
+    .sort((a, b) => b.elapsed_seconds - a.elapsed_seconds)
 
   const { data: failedJobGroups } = useFailedJobGroups(host.name)
 
@@ -312,25 +373,42 @@ function HostDetailDialog({
 
         {benchNames.length > 0 && (
           <div>
-            <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-ink-muted">Bench Health</h3>
-              {benchNames.length > 1 && (
-                <select
-                  value={selectedBench}
-                  onChange={(e) => setSelectedBench(e.target.value)}
-                  className="rounded-lg border border-border-hairline bg-surface-page px-2 py-1 text-xs text-ink-primary outline-none focus:border-accent"
-                >
-                  {benchNames.map((b) => (
-                    <option key={b} value={b}>{b}</option>
+              <div className="flex items-center gap-2">
+                {benchNames.length > 1 && (
+                  <select
+                    value={selectedBench}
+                    onChange={(e) => setSelectedBench(e.target.value)}
+                    className="rounded-lg border border-border-hairline bg-surface-page px-2 py-1 text-xs text-ink-primary outline-none focus:border-accent"
+                  >
+                    {benchNames.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                )}
+                <div className="flex items-center rounded-lg border border-border-hairline p-0.5 text-xs">
+                  {TREND_RANGE_OPTIONS.map(({ label, minutes }) => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      onClick={() => setRangeMinutes(minutes)}
+                      className={`rounded-md px-2 py-1 transition-colors ${
+                        rangeMinutes === minutes ? 'bg-accent text-white' : 'text-ink-secondary hover:bg-ink-primary/5'
+                      }`}
+                    >
+                      {label}
+                    </button>
                   ))}
-                </select>
-              )}
+                </div>
+              </div>
             </div>
             {latestForBench && (
               <div className="mb-3 flex flex-wrap gap-6 text-sm">
                 <Stat label="Workers" value={`${latestForBench.live_worker_count}/${latestForBench.registered_workers}`} />
                 <Stat label="Orphans" value={String(latestForBench.orphan_worker_count)} warn={latestForBench.orphan_worker_count > 0} />
                 <Stat label="Failed Jobs" value={String(latestForBench.failed_job_count)} warn={latestForBench.failed_job_count > 0} />
+                <Stat label="Active Jobs" value={String(latestForBench.active_job_count)} warn={latestForBench.long_running_job_count > 0} />
                 <div>
                   <div className="text-lg font-semibold text-ink-primary">
                     {Object.entries(parseQueueDepths(latestForBench.queue_depths)).map(([q, n]) => `${q}:${n}`).join(' ') || '—'}
@@ -355,20 +433,58 @@ function HostDetailDialog({
           </div>
         )}
 
+        {benchActiveJobs.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-ink-muted">
+              Active Jobs ({benchActiveJobs.length})
+            </h3>
+            {/* Longest-running first (see benchActiveJobs' own sort) — an
+             * eagle-eye view exists precisely to surface the worst offender
+             * without having to scan a whole list, so it always leads. */}
+            <div className="max-h-64 divide-y divide-border-hairline overflow-y-auto rounded-lg border border-border-hairline">
+              {benchActiveJobs.map((j) => (
+                <div key={j.name} className="flex items-center justify-between gap-3 px-3 py-2.5 text-xs">
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-ink-primary">{j.job_name || 'Unknown job'}</span>
+                    <span className="text-ink-muted">
+                      {j.queue_name || 'default'} queue{j.worker_pid ? ` · worker ${j.worker_pid}` : ''}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 font-medium ${j.is_long_running ? 'text-status-critical' : 'text-ink-secondary'}`}>
+                    running {formatUptime(j.elapsed_seconds)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {failedJobs.length > 0 && (
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
                 Failed Job Root Causes ({(failedJobGroups ?? []).length || failedJobs.length})
               </h3>
-              <button
-                type="button"
-                onClick={downloadLog}
-                disabled={downloadingLog}
-                className="rounded-lg border border-border-hairline px-2.5 py-1 text-xs text-ink-secondary hover:bg-ink-primary/5 disabled:opacity-50"
-              >
-                {downloadingLog ? 'Preparing…' : 'Download Log'}
-              </button>
+              <div className="flex items-center gap-2">
+                {consoleUrl && (
+                  <a
+                    href={consoleUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg border border-border-hairline px-2.5 py-1 text-xs text-ink-secondary hover:bg-ink-primary/5"
+                  >
+                    Open Console ↗
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={downloadLog}
+                  disabled={downloadingLog}
+                  className="rounded-lg border border-border-hairline px-2.5 py-1 text-xs text-ink-secondary hover:bg-ink-primary/5 disabled:opacity-50"
+                >
+                  {downloadingLog ? 'Preparing…' : 'Download Log'}
+                </button>
+              </div>
             </div>
             {downloadError && <p className="mb-2 text-xs text-status-critical">{downloadError}</p>}
             {/* Human-readable summary — the same grouping "Download Log" writes

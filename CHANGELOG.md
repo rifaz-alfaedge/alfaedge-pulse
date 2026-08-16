@@ -2,6 +2,51 @@
 
 All notable changes to this project are documented here.
 
+## [3.5.0] - 2026-08-16
+
+### Added
+- **Per-guest Console link.** VM/CT detail dialogs (Usage Metrics tab and
+  now Host Health's own detail dialog, next to "Download Log") get an
+  "Open Console" action that deep-links to that guest's console on its own
+  Proxmox host's web UI in a new tab — never for host/PBS servers
+  themselves, only guests. An earlier embedded-in-dashboard attempt
+  (`console_relay/`, `ConsoleDialog.tsx`, `Proxmox Console Session Log`) is
+  kept in the codebase but currently unused: Proxmox's `vncwebsocket`
+  endpoint consistently rejected a standalone relay's `PVEAuthCookie`
+  handshake with "invalid PVEVNC ticket" despite matching every documented
+  requirement — a long-standing, still-unresolved issue in Proxmox's own
+  community. The new-tab deep-link sidesteps it entirely by letting
+  Proxmox's own JS handle its own console protocol. Adds `Proxmox
+  Guest.node` (persisted by the poller) and `Proxmox Server` Console
+  Username/Password fields (a real PVE login, separate from the read-only
+  monitoring token).
+- **Frappe worker/job "eagle-eye view."** Host Health now tracks every
+  currently-executing RQ job per bench, not just aggregate worker/queue
+  counts — surfaced in a new "Active Jobs" section (job name, queue,
+  worker PID, elapsed time) in the host detail dialog, with a per-card
+  badge and card-level critical styling once any job has been running
+  past a configurable threshold. A new `Long Running Job` alert fires the
+  same way `Worker Degraded`/`Failed Job Threshold` already do (streak +
+  confirmation checks). New `Frappe Active Job` doctype — a live snapshot,
+  not a history log, so a row disappears the moment its job finishes
+  rather than being tombstoned. Requires the updated `pulse_agent` (this
+  release, `agent_collect.collect_bench_health`) on each guest to actually
+  report active jobs — older agents keep working, they just don't
+  populate this data.
+- **Bench Health trend chart date range.** The chart's history now comes
+  from a query scoped to exactly the selected (host, bench) within a
+  chosen window (1h/6h/24h/7d buttons) instead of a fleet-wide "most
+  recent 300 rows shared across every host and bench," which could shrink
+  to almost nothing per host as more of the fleet becomes active.
+
+### Fixed
+- **Bench Health stats flicker.** The new scoped date-range query's
+  "since" timestamp was computed fresh from `Date.now()` on every render,
+  changing the underlying SWR cache key on every re-render (not just every
+  poll tick) and resetting the whole stats row to a loading state —
+  visible as the numbers repeatedly blanking out and reappearing every few
+  seconds. Fixed by bucketing/memoizing that timestamp to the minute.
+
 ## [3.4.0] - 2026-08-15
 
 ### Fixed

@@ -1,7 +1,9 @@
+import { useMemo } from 'react'
 import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-react-sdk'
 import type {
   BifrostSettings,
   FailedJobGroup,
+  FrappeActiveJob,
   FrappeFailedJobLog,
   FrappeWorkerHealthLog,
   HostMonitorSettings,
@@ -316,7 +318,8 @@ export function useUptimeHistory(site: string, days = 7) {
 
 const MONITORED_HOST_FIELDS: (keyof MonitoredHost)[] = [
   'name', 'proxmox_guest', 'hostname', 'enabled', 'last_seen', 'is_online',
-  'worker_health_critical', 'failed_job_critical', 'scheduler_last_run', 'scheduler_overdue',
+  'worker_health_critical', 'failed_job_critical', 'long_running_job_critical',
+  'scheduler_last_run', 'scheduler_overdue',
 ]
 
 export function useMonitoredHosts() {
@@ -377,9 +380,68 @@ export function useFrappeWorkerHealthLogs(limit = 300) {
       fields: [
         'name', 'monitored_host', 'bench_name', 'timestamp', 'registered_workers', 'live_worker_count',
         'orphan_worker_count', 'orphan_critical_streak', 'queue_depths', 'failed_job_count', 'failed_job_critical_streak',
+        'active_job_count', 'long_running_job_count', 'long_running_job_critical_streak',
       ],
       limit,
       orderBy: { field: 'timestamp', order: 'desc' },
+    },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+}
+
+/** Full history for exactly one (monitored_host, bench_name) within a
+ * chosen window — unlike useFrappeWorkerHealthLogs' fleet-wide recent-300
+ * cap (built for "what's the latest row per bench," not "show me a real
+ * range"), this is what the trend chart's own date-range picker uses, so
+ * picking a longer window doesn't just starve other hosts/benches out of
+ * a shared window. `sinceMinutes` a fixed lookback (e.g. 360 = 6h); pass
+ * an explicit `until` only for a custom/non-"now" range. */
+export function useWorkerHealthHistory(monitoredHost: string, benchName: string, sinceMinutes: number, until?: string) {
+  // Bucketed to the minute, and memoized, rather than computed fresh from
+  // Date.now() on every render: a raw Date.now() value changes by however
+  // many milliseconds elapsed between renders, which — since it's baked
+  // into the filters below — makes useFrappeGetDocList (SWR under the
+  // hood) see a "new" query on every single render, not just every poll
+  // tick, discarding cached data and flashing the whole stats row back to
+  // its loading state. Confirmed live: this is exactly what was causing
+  // Bench Health's numbers to flicker every few seconds. Recomputing once
+  // per minute keeps the filter value stable across the vastly more
+  // frequent re-renders this component goes through (its own poll tick,
+  // sibling state changes, etc.) while still sliding forward over time.
+  const minuteBucket = Math.floor(Date.now() / 60_000)
+  const sinceStr = useMemo(() => {
+    const since = new Date(minuteBucket * 60_000 - sinceMinutes * 60_000)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    // Local-time string, NOT toISOString() (which is UTC) — this app's
+    // datetimes are naive-local throughout (see lib/dateRange.ts's own
+    // note on the same convention), and `timestamp` here is stored via
+    // Frappe's now_datetime(), also naive-local.
+    return `${since.getFullYear()}-${pad(since.getMonth() + 1)}-${pad(since.getDate())} ${pad(since.getHours())}:${pad(since.getMinutes())}:${pad(since.getSeconds())}`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minuteBucket, sinceMinutes])
+  return useFrappeGetDocList<FrappeWorkerHealthLog>(
+    'Frappe Worker Health Log',
+    {
+      fields: [
+        'name', 'monitored_host', 'bench_name', 'timestamp', 'registered_workers', 'live_worker_count',
+        'orphan_worker_count', 'orphan_critical_streak', 'queue_depths', 'failed_job_count', 'failed_job_critical_streak',
+        'active_job_count', 'long_running_job_count', 'long_running_job_critical_streak',
+      ],
+      filters: until
+        ? [
+            ['monitored_host', '=', monitoredHost],
+            ['bench_name', '=', benchName],
+            ['timestamp', '>=', sinceStr],
+            ['timestamp', '<=', until],
+          ]
+        : [
+            ['monitored_host', '=', monitoredHost],
+            ['bench_name', '=', benchName],
+            ['timestamp', '>=', sinceStr],
+          ],
+      limit: 0,
+      orderBy: { field: 'timestamp', order: 'asc' },
     },
     undefined,
     { refreshInterval: UI_POLL_MS },
@@ -409,6 +471,28 @@ export function useFrappeFailedJobLogs() {
       filters: [['resolved', '=', 0]],
       limit: 0,
       orderBy: { field: 'last_seen', order: 'desc' },
+    },
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+}
+
+/** Every currently-executing RQ job fleet-wide — a live snapshot (see
+ * FrappeActiveJob's own docstring), so unlike failed jobs there's no
+ * resolved/unresolved filter here: a finished job's row is simply gone by
+ * the next push, nothing to filter out. Sorted longest-running first so
+ * the worst offender fleet-wide is always the first row, matching the
+ * doctype's own default sort. */
+export function useFrappeActiveJobs() {
+  return useFrappeGetDocList<FrappeActiveJob>(
+    'Frappe Active Job',
+    {
+      fields: [
+        'name', 'monitored_host', 'bench_name', 'queue_name', 'rq_job_id',
+        'job_name', 'worker_pid', 'started_at', 'last_seen', 'elapsed_seconds', 'is_long_running',
+      ],
+      limit: 0,
+      orderBy: { field: 'elapsed_seconds', order: 'desc' },
     },
     undefined,
     { refreshInterval: UI_POLL_MS },

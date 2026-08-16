@@ -21,7 +21,11 @@
   "queue_depths",
   "failed_job_section",
   "failed_job_count",
-  "failed_job_critical_streak"
+  "failed_job_critical_streak",
+  "active_job_section",
+  "active_job_count",
+  "long_running_job_count",
+  "long_running_job_critical_streak"
  ],
  "fields": [
   {
@@ -123,6 +127,35 @@
    "fieldname": "failed_job_critical_streak",
    "fieldtype": "Int",
    "label": "Failed Job Critical Streak",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "active_job_section",
+   "fieldtype": "Section Break",
+   "label": "Active Jobs"
+  },
+  {
+   "description": "Currently-executing jobs across this bench's live workers at push time — also drives Frappe Active Job upserts.",
+   "fieldname": "active_job_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Active Job Count",
+   "non_negative": 1
+  },
+  {
+   "description": "Of active_job_count, how many have been running at/beyond Host Monitor Settings' Long-Running Job Critical Threshold.",
+   "fieldname": "long_running_job_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Long-Running Job Count",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "Same critical-tier-only confirmation-check semantics as Orphan Critical Streak.",
+   "fieldname": "long_running_job_critical_streak",
+   "fieldtype": "Int",
+   "label": "Long-Running Job Critical Streak",
    "non_negative": 1
   }
  ],

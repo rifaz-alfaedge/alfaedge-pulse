@@ -16,6 +16,9 @@
   "column_break_thresh",
   "failed_job_warning_threshold",
   "failed_job_critical_threshold",
+  "long_running_job_section",
+  "long_running_job_warning_threshold_seconds",
+  "long_running_job_critical_threshold_seconds",
   "default_services_section",
   "default_expected_services"
  ],
@@ -82,6 +85,27 @@
    "default": "20",
    "non_negative": 1,
    "description": "At/above this count, held for Confirmation Checks polls, raises the Failed Job Threshold alert."
+  },
+  {
+   "fieldname": "long_running_job_section",
+   "fieldtype": "Section Break",
+   "label": "Long-Running Job Thresholds"
+  },
+  {
+   "fieldname": "long_running_job_warning_threshold_seconds",
+   "fieldtype": "Int",
+   "label": "Long-Running Job Warning Threshold (seconds)",
+   "default": "600",
+   "non_negative": 1,
+   "description": "A currently-executing job running at/beyond this long colors it as a warning on the dashboard — display only, there is no separate \"Job Warning\" alert type. See Critical Threshold below for what actually alerts. Bulk/reporting jobs can legitimately run long; set this to whatever's normal for this fleet's own workload."
+  },
+  {
+   "fieldname": "long_running_job_critical_threshold_seconds",
+   "fieldtype": "Int",
+   "label": "Long-Running Job Critical Threshold (seconds)",
+   "default": "1800",
+   "non_negative": 1,
+   "description": "A job running at/beyond this long, held for Confirmation Checks polls, raises the Long Running Job alert — the fleet-wide signal for a hung/stuck worker."
   },
   {
    "fieldname": "default_services_section",

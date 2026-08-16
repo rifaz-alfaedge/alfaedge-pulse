@@ -16,6 +16,7 @@
   "is_online",
   "worker_health_critical",
   "failed_job_critical",
+  "long_running_job_critical",
   "agent_section",
   "api_key",
   "api_secret",
@@ -94,6 +95,13 @@
    "fieldname": "failed_job_critical",
    "fieldtype": "Check",
    "label": "Failed Job Critical",
+   "read_only": 1
+  },
+  {
+   "description": "OR across this host's benches of long_running_job_critical_streak reaching Confirmation Checks — stable alert reference for Long Running Job, same reasoning as Worker Health Critical.",
+   "fieldname": "long_running_job_critical",
+   "fieldtype": "Check",
+   "label": "Long Running Job Critical",
    "read_only": 1
   },
   {

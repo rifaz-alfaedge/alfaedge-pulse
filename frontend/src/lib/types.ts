@@ -95,7 +95,19 @@ export interface ProxmoxBackupLog {
   error_message?: string
 }
 
-export type AlertType = 'Critical Resource' | 'Resource Warning' | 'Backup Failure' | 'Backup Overdue' | 'Server Offline' | 'Site Down'
+export type AlertType =
+  | 'Critical Resource'
+  | 'Resource Warning'
+  | 'Backup Failure'
+  | 'Backup Overdue'
+  | 'Server Offline'
+  | 'Site Down'
+  | 'Service Down'
+  | 'Worker Degraded'
+  | 'Failed Job Threshold'
+  | 'Long Running Job'
+  | 'Scheduler Stalled'
+  | 'Host Unreachable'
 
 export interface ProxmoxAlertLog {
   name: string
@@ -252,6 +264,7 @@ export interface MonitoredHost {
   is_online: 0 | 1
   worker_health_critical: 0 | 1
   failed_job_critical: 0 | 1
+  long_running_job_critical: 0 | 1
   scheduler_last_run?: string
   scheduler_overdue: 0 | 1
 }
@@ -296,6 +309,9 @@ export interface FrappeWorkerHealthLog {
   queue_depths?: string
   failed_job_count: number
   failed_job_critical_streak: number
+  active_job_count: number
+  long_running_job_count: number
+  long_running_job_critical_streak: number
 }
 
 export interface FrappeFailedJobLog {
@@ -311,6 +327,23 @@ export interface FrappeFailedJobLog {
   first_seen?: string
   last_seen?: string
   resolved: 0 | 1
+}
+
+/** A currently-executing RQ job — a live snapshot, not a history log (see
+ * the doctype's own docstring): a row simply disappears once its job
+ * finishes, rather than being tombstoned like Frappe Failed Job Log. */
+export interface FrappeActiveJob {
+  name: string
+  monitored_host: string
+  bench_name: string
+  queue_name?: string
+  rq_job_id: string
+  job_name?: string
+  worker_pid?: number
+  started_at?: string
+  last_seen?: string
+  elapsed_seconds: number
+  is_long_running: 0 | 1
 }
 
 /** One root cause for a single host — see
@@ -333,4 +366,6 @@ export interface HostMonitorSettings {
   orphan_worker_critical_threshold: number
   failed_job_warning_threshold: number
   failed_job_critical_threshold: number
+  long_running_job_warning_threshold_seconds: number
+  long_running_job_critical_threshold_seconds: number
 }
