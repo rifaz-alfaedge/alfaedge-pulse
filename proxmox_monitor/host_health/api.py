@@ -103,35 +103,88 @@ def get_failed_job_groups(monitored_host: str, resolved: int = 0) -> list[dict]:
 	]
 
 
+def _fetch_active_jobs(monitored_host: str) -> list[dict]:
+	"""Every job currently executing on this host, longest-running first —
+	same sort as the dashboard's own Active Jobs section, so the worst
+	offender always leads here too."""
+	return frappe.get_all(
+		"Frappe Active Job",
+		filters={"monitored_host": monitored_host},
+		fields=["bench_name", "queue_name", "job_name", "worker_pid", "started_at", "elapsed_seconds", "is_long_running"],
+		order_by="elapsed_seconds desc",
+		limit_page_length=0,
+		ignore_permissions=True,
+	)
+
+
+def _format_duration(total_seconds: int) -> str:
+	"""Largest one or two sensible units, e.g. "45m 12s" or "1h 3m" —
+	mirrors the frontend's own formatUptime so a job's elapsed time reads
+	the same whether you're looking at the dashboard or this download."""
+	total_seconds = max(0, int(total_seconds))
+	hours, remainder = divmod(total_seconds, 3600)
+	minutes, seconds = divmod(remainder, 60)
+	if hours:
+		return f"{hours}h {minutes}m"
+	if minutes:
+		return f"{minutes}m {seconds}s"
+	return f"{seconds}s"
+
+
 @frappe.whitelist()
 def get_failed_job_log_text(monitored_host: str, resolved: int = 0) -> str:
-	"""Plain-text, downloadable failed-job log for one host's detail dialog.
-	Two parts: a plain-English summary (what broke, how often, in words a
-	non-Python-reader can act on) up top, then every occurrence's full
-	traceback below for whoever actually needs to debug it — rather than
-	either dumping 30+ raw tracebacks on the dashboard itself or leading
-	with a wall of stack traces here. Root causes grouped by
-	``failure_signature`` (see ``host_health/ingest.py``). Text formatting
-	happens here rather than in the frontend so there's one place that
-	defines what the log looks like, whether it's opened from the dashboard
-	or (later) any other client."""
+	"""Plain-text, downloadable health log for one host's detail dialog.
+	Three parts: a plain-English failed-job summary (what broke, how
+	often, in words a non-Python-reader can act on) up top, currently-
+	running jobs next (the same "eagle eye" data the dashboard's own
+	Active Jobs section shows — included here too since a debugging
+	snapshot without what's running *right now* is an incomplete one),
+	then every failed occurrence's full traceback below for whoever
+	actually needs to debug it — rather than either dumping 30+ raw
+	tracebacks on the dashboard itself or leading with a wall of stack
+	traces here. Root causes grouped by ``failure_signature`` (see
+	``host_health/ingest.py``). Text formatting happens here rather than
+	in the frontend so there's one place that defines what the log looks
+	like, whether it's opened from the dashboard or (later) any other
+	client."""
 	frappe.has_permission("Frappe Failed Job Log", "read", throw=True)
 	ordered = _grouped_failed_jobs(
 		monitored_host, resolved, ["bench_name", "queue_name", "job_name", "exc_type", "exc_info", "failed_at", "first_seen", "last_seen"]
 	)
 	rows = [o for occurrences in ordered for o in occurrences]
+	active_jobs = _fetch_active_jobs(monitored_host)
+	long_running_count = sum(1 for j in active_jobs if j["is_long_running"])
 
 	hostname = frappe.db.get_value("Monitored Host", monitored_host, "hostname") or monitored_host
 	lines = [
-		"alfaEdge Pulse — Failed Job Log",
+		"alfaEdge Pulse — Host Health Log",
 		f"Host: {hostname}",
 		f"Generated: {frappe.utils.pretty_date(frappe.utils.now_datetime())}",
 		"",
 		f"{len(rows)} open failed job{'s' if len(rows) != 1 else ''}, "
-		f"{len(ordered)} distinct root cause{'s' if len(ordered) != 1 else ''}",
+		f"{len(ordered)} distinct root cause{'s' if len(ordered) != 1 else ''}"
+		f" · {len(active_jobs)} job{'s' if len(active_jobs) != 1 else ''} currently running"
+		f" ({long_running_count} long-running)",
 		"",
-		"SUMMARY",
-		"-------",
+		"ACTIVE JOBS",
+		"-----------",
+	]
+	if not active_jobs:
+		lines.append("(none currently running)")
+	for job in active_jobs:
+		flag = " [LONG RUNNING]" if job["is_long_running"] else ""
+		lines.append(f"{job['job_name'] or 'unknown method'}{flag}")
+		lines.append(
+			f"   {job['bench_name']} · {job['queue_name'] or '—'} queue · worker PID {job['worker_pid'] or '—'}"
+			f" · running {_format_duration(job['elapsed_seconds'])}"
+			f" (since {str(job['started_at'])[:19] if job['started_at'] else 'unknown'})"
+		)
+		lines.append("")
+
+	lines += [
+		"",
+		"FAILED JOBS SUMMARY",
+		"--------------------",
 	]
 	for i, occurrences in enumerate(ordered, start=1):
 		latest = occurrences[0]

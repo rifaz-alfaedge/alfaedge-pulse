@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [3.5.1] - 2026-08-16
+
+### Added
+- **"Download Log" now includes Active Jobs.** The downloadable host
+  health log (Host Health detail dialog) was scoped to failed jobs only —
+  a debugging snapshot missing what's running *right now* is an
+  incomplete one, so it now leads with an ACTIVE JOBS section (job name,
+  bench, queue, worker PID, elapsed time, `[LONG RUNNING]` flag) before
+  the failed-job summary and tracebacks. Renamed header to "Host Health
+  Log" to match the broader scope; same endpoint/button, no frontend
+  changes needed.
+
 ## [3.5.0] - 2026-08-16
 
 ### Added
