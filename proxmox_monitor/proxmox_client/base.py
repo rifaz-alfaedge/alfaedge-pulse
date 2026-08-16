@@ -51,6 +51,35 @@ class BaseProxmoxClient:
 	agent_timeout = 4
 
 	def __init__(self, hostname: str, port: int, token_id: str, token_secret: str, verify_ssl: bool = False):
+		self._setup(hostname, port, verify_ssl)
+		self.session.headers["Authorization"] = self._auth_header(token_id, token_secret)
+
+	@classmethod
+	def from_ticket(cls, hostname: str, port: int, ticket: str, csrf_token: str, verify_ssl: bool = False):
+		"""Alternate constructor for PVEAuthCookie/ticket-based auth —
+		the *only* auth mechanism Proxmox's ``vncwebsocket`` endpoint
+		accepts. Confirmed live (a real API-token call to it returns a
+		bare HTTP 401 before any application-level response body) and
+		matches multiple independent reports in the Proxmox community —
+		every other endpoint in this app happily accepts the normal
+		token-based ``__init__`` above, just not this one. See
+		``pve.login()`` for how to obtain ``ticket``/``csrf_token`` in the
+		first place (a real username+password POST to ``/access/ticket``,
+		the same login Proxmox's own web UI performs).
+
+		Used only by the console feature's ``vncproxy``/``termproxy``
+		calls — everything else in this app (polling, backups, etc.)
+		keeps using the token-based constructor.
+		"""
+		self = cls.__new__(cls)
+		self._setup(hostname, port, verify_ssl)
+		self.session.cookies.set("PVEAuthCookie", ticket)
+		# Only actually required for POST/PUT/DELETE, but harmless to set
+		# unconditionally — Proxmox ignores it on GET.
+		self.session.headers["CSRFPreventionToken"] = csrf_token
+		return self
+
+	def _setup(self, hostname: str, port: int, verify_ssl: bool) -> None:
 		self.base_url = f"https://{hostname}:{port}/api2/json"
 		# requests' `verify` kwarg treats any truthy value that isn't the
 		# exact `True` object as a CA-bundle *path* (checked via `is True`,
@@ -60,7 +89,6 @@ class BaseProxmoxClient:
 		# explicitly so callers can safely pass ints, "0"/"1", etc.
 		self.verify_ssl = bool(verify_ssl)
 		self.session = requests.Session()
-		self.session.headers["Authorization"] = self._auth_header(token_id, token_secret)
 
 		if not verify_ssl:
 			# Proxmox hosts almost always run with a self-signed certificate
@@ -88,6 +116,31 @@ class BaseProxmoxClient:
 		try:
 			response = self.session.get(
 				url, params=params, timeout=timeout or self.default_timeout, verify=self.verify_ssl
+			)
+			response.raise_for_status()
+		except requests.RequestException as e:
+			raise ProxmoxAPIError(f"{url} failed: {e}") from e
+
+		try:
+			payload = response.json()
+		except ValueError as e:
+			raise ProxmoxAPIError(f"{url} returned non-JSON response") from e
+
+		if "data" not in payload:
+			raise ProxmoxAPIError(f"{url} response missing 'data' field")
+		return payload["data"]
+
+	def post(self, path: str, data: dict | None = None, timeout: int | None = None) -> dict | list:
+		"""POST a `/api2/json` path and return its unwrapped `data` payload.
+
+		Same shape as `get()` — only needed today for the console proxy
+		endpoints (`vncproxy`/`termproxy`, see `pve.py`), which are the only
+		POST calls this app makes.
+		"""
+		url = f"{self.base_url}{path}"
+		try:
+			response = self.session.post(
+				url, data=data, timeout=timeout or self.default_timeout, verify=self.verify_ssl
 			)
 			response.raise_for_status()
 		except requests.RequestException as e:

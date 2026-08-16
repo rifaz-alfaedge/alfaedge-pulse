@@ -16,12 +16,16 @@ export type SelectedNode =
 export function NodeDetailDialog({
   selected,
   onClose,
+  onOpenConsole,
   datastores,
   backupLogs,
   alertLogs,
 }: {
   selected: SelectedNode | null
   onClose: () => void
+  // Handed up to whoever renders this dialog (App.tsx), which deep-links
+  // to Proxmox's own console UI in a new tab — see lib/consoleUrl.ts.
+  onOpenConsole: (guest: ProxmoxGuest) => void
   datastores: ProxmoxDatastore[]
   backupLogs: ProxmoxBackupLog[]
   alertLogs: ProxmoxAlertLog[]
@@ -89,6 +93,21 @@ export function NodeDetailDialog({
             </div>
           )}
         </section>
+
+        {/* Console is guest-only, by design — a Proxmox host/PBS server
+         * (isServer) never renders this trigger; onOpenConsole only ever
+         * receives a real Proxmox Guest. */}
+        {!isServer && (
+          <div className="flex justify-end border-t border-border-hairline pt-4">
+            <button
+              type="button"
+              onClick={() => onOpenConsole(selected.doc as ProxmoxGuest)}
+              className="rounded-lg border border-border-hairline px-2.5 py-1 text-xs text-ink-secondary hover:bg-ink-primary/5"
+            >
+              Open Console ↗
+            </button>
+          </div>
+        )}
       </div>
     </Dialog>
   )

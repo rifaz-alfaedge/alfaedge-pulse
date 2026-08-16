@@ -8,6 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "server",
+  "node",
   "vmid",
   "guest_name",
   "guest_type",
@@ -45,6 +46,13 @@
    "options": "Proxmox Server",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "description": "The PVE node name this guest lives on (e.g. what appears in /nodes/{node}/qemu/{vmid}/...). Populated by the poller; needed to build console (vncproxy/termproxy) API paths without re-discovering it per request.",
+   "fieldname": "node",
+   "fieldtype": "Data",
+   "label": "Proxmox Node",
+   "read_only": 1
   },
   {
    "fieldname": "vmid",

@@ -1,0 +1,117 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-15 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "guest",
+  "server",
+  "protocol",
+  "column_break_session",
+  "opened_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "User",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "guest",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Guest",
+   "options": "Proxmox Guest",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "description": "Denormalized from Guest at the time the session was opened, for easy filtering even if the guest is later removed.",
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Server",
+   "options": "Proxmox Server",
+   "read_only": 1
+  },
+  {
+   "fieldname": "protocol",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Protocol",
+   "options": "vnc\nterminal",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_session",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "opened_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Opened At",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "icon": "fa fa-terminal",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Proxmox Fleet Monitor",
+ "name": "Proxmox Console Session Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "opened_at",
+ "sort_order": "DESC",
+ "states": []
+}

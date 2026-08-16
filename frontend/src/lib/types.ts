@@ -10,6 +10,7 @@ export interface ProxmoxServer {
   name: string
   server_name: string
   hostname: string
+  port?: number
   server_type: ServerType
   role?: 'Production' | 'Development' | 'Staging' | 'Backup'
   datacenter_location?: DatacenterLocation
@@ -38,6 +39,7 @@ export type NetworkMode = 'Direct Public IP' | 'Internal Bridge + Reverse Proxy'
 export interface ProxmoxGuest {
   name: string
   server: string
+  node?: string
   vmid: number
   guest_name: string
   guest_type: GuestType

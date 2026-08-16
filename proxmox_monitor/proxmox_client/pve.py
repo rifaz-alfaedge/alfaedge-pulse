@@ -11,7 +11,49 @@ node name that may not match what the admin named the host in Proxmox.
 
 from __future__ import annotations
 
+import requests
+
 from proxmox_monitor.proxmox_client.base import BaseProxmoxClient, ProxmoxAPIError
+
+
+def login(hostname: str, port: int, username: str, password: str, verify_ssl: bool = False) -> dict:
+	"""Real username+password login against ``/access/ticket`` — the same
+	call Proxmox's own web UI makes when you log in. Returns
+	``{"ticket": ..., "csrf_token": ...}``, both needed by
+	``PVEClient.from_ticket`` to talk to the console feature's
+	``vncwebsocket`` endpoint, which (unlike every other endpoint this app
+	calls) rejects API-token auth outright — see ``base.py``'s
+	``from_ticket`` docstring.
+
+	A free function, not a ``PVEClient`` method: every other client in
+	this app is constructed already-authenticated (a token is set on
+	``self.session`` in ``__init__``), but this call has to happen
+	*before* any client exists — there's nothing to authenticate yet.
+	"""
+	# Same gotcha `base.py`'s _setup already guards against: `requests`
+	# treats any truthy value that isn't the exact `True` object as a
+	# CA-bundle *path*, so a bare cint() 0/1 int makes `verify=1` crash
+	# deep in urllib3 instead of behaving like a bool. Confirmed live.
+	verify_ssl = bool(verify_ssl)
+	if not verify_ssl:
+		import urllib3
+
+		urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+	try:
+		response = requests.post(
+			f"https://{hostname}:{port}/api2/json/access/ticket",
+			data={"username": username, "password": password},
+			timeout=10,
+			verify=verify_ssl,
+		)
+		response.raise_for_status()
+		data = response.json()["data"]
+	except (requests.RequestException, KeyError, ValueError) as e:
+		raise ProxmoxAPIError(f"login to {hostname} failed: {e}") from e
+
+	if not data.get("ticket") or not data.get("CSRFPreventionToken"):
+		raise ProxmoxAPIError(f"login to {hostname} did not return a ticket — check username/password")
+	return {"ticket": data["ticket"], "csrf_token": data["CSRFPreventionToken"]}
 
 
 class PVEClient(BaseProxmoxClient):
@@ -122,6 +164,26 @@ class PVEClient(BaseProxmoxClient):
 				if addr.get("ip-address-type") == "ipv4":
 					return addr.get("ip-address")
 		return None
+
+	def open_vnc_proxy(self, node: str, vmid: int) -> dict:
+		"""Mint a one-time VNC ticket for a QEMU VM's graphical console.
+
+		Requires the token to hold VM.Console (well beyond this client's
+		usual read-only monitoring scope) — see console_relay/api.py, the
+		only caller, which uses a separate elevated token for exactly this
+		reason. `websocket=1` requests the websocket-proxy variant rather
+		than the legacy raw-TCP one, since the console relay always speaks
+		the websocket variant (see console_relay/relay.py).
+		"""
+		return self.post(f"/nodes/{node}/qemu/{vmid}/vncproxy", data={"websocket": 1})
+
+	def open_term_proxy(self, node: str, vmid: int) -> dict:
+		"""Mint a one-time ticket for an LXC container's text console.
+
+		Same VM.Console privilege requirement as open_vnc_proxy above —
+		LXC has no graphical console at all, only ever a real shell.
+		"""
+		return self.post(f"/nodes/{node}/lxc/{vmid}/termproxy")
 
 	def get_lxc_ip(self, node: str, vmid: int) -> str | None:
 		"""Best-effort primary IPv4 address for a running LXC container."""

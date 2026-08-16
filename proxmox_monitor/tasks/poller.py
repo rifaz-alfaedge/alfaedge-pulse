@@ -364,7 +364,7 @@ def _sync_pve_guests(server, client: PVEClient, node: str, thresholds: Threshold
 		_upsert_guest(
 			server, vmid, vm.get("name") or f"vm-{vmid}", "QEMU (VM)", vm.get("status", "unknown"),
 			flt(vm.get("cpu")) * 100, flt(vm.get("mem")), flt(vm.get("maxmem")),
-			disk_usage, disk_total, cint(vm.get("uptime")), ip_address, thresholds,
+			disk_usage, disk_total, cint(vm.get("uptime")), ip_address, thresholds, node,
 		)
 
 	for ct in client.list_lxc(node):
@@ -379,7 +379,7 @@ def _sync_pve_guests(server, client: PVEClient, node: str, thresholds: Threshold
 		_upsert_guest(
 			server, vmid, ct.get("name") or f"ct-{vmid}", "LXC (CT)", ct.get("status", "unknown"),
 			flt(ct.get("cpu")) * 100, flt(ct.get("mem")), flt(ct.get("maxmem")),
-			disk_usage, disk_total, cint(ct.get("uptime")), ip_address, thresholds,
+			disk_usage, disk_total, cint(ct.get("uptime")), ip_address, thresholds, node,
 		)
 
 	# True auto-sync: a guest Proxmox no longer reports (deleted/migrated
@@ -396,6 +396,7 @@ def _upsert_guest(
 	server, vmid: int, guest_name: str, guest_type: str, status: str,
 	cpu_pct: float, mem_used: float, mem_total: float,
 	disk_pct: float | None, disk_total: float | None, uptime: int, ip_address: str | None, thresholds: Thresholds,
+	node: str,
 ) -> None:
 	docname = f"{server.name}-{vmid}"
 	memory_usage = round((mem_used / mem_total) * 100, 1) if mem_total else 0
@@ -429,6 +430,7 @@ def _upsert_guest(
 
 	doc.guest_name = guest_name
 	doc.guest_type = guest_type
+	doc.node = node
 	doc.status = status
 	doc.cpu_usage = cpu_usage
 	doc.memory_usage = memory_usage

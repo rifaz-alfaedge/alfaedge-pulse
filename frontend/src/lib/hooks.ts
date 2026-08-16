@@ -34,14 +34,14 @@ import type {
 const UI_POLL_MS = 7000
 
 const SERVER_FIELDS: (keyof ProxmoxServer)[] = [
-  'name', 'server_name', 'hostname', 'server_type', 'role', 'datacenter_location',
+  'name', 'server_name', 'hostname', 'port', 'server_type', 'role', 'datacenter_location',
   'cloud_provider', 'local_backup_retention', 'enabled', 'status', 'is_critical', 'backup_critical',
   'cpu_usage', 'memory_usage', 'memory_total', 'swap_usage', 'swap_total', 'storage_usage', 'storage_total',
   'uptime', 'last_synced', 'last_error',
 ]
 
 const GUEST_FIELDS: (keyof ProxmoxGuest)[] = [
-  'name', 'server', 'vmid', 'guest_name', 'guest_type', 'status', 'is_critical', 'is_warning',
+  'name', 'server', 'node', 'vmid', 'guest_name', 'guest_type', 'status', 'is_critical', 'is_warning',
   'cpu_usage', 'memory_usage', 'memory_total', 'disk_usage', 'disk_total', 'uptime',
   'last_synced', 'last_successful_backup', 'ip_address', 'network_mode',
   'public_ip', 'access_url', 'assigned_engineer', 'tags',

@@ -19,6 +19,11 @@ dependencies = [
     # endpoint via plain `requests`, so this dependency's blast radius is
     # limited to that one admin-initiated convenience feature.
     "python-socketio[client]>=5.11.0",
+    # Standalone console-relay process (console_relay/relay.py) — asyncio
+    # WS server+client in one package, used to bridge a browser's embedded
+    # VNC/terminal session to a Proxmox host's vncwebsocket endpoint. Not
+    # imported by the Frappe app itself, only by that standalone script.
+    "websockets>=13.0",
 ]
 
 [build-system]

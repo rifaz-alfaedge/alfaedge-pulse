@@ -17,6 +17,7 @@ import { ServerStatusStrip } from './components/ServerStatusStrip'
 import { UptimeSummaryTile } from './components/UptimeSummaryTile'
 import { ThemeToggle } from './components/ThemeToggle'
 import { NodeDetailDialog, type SelectedNode } from './components/NodeDetailDialog'
+import { buildConsoleUrl } from './lib/consoleUrl'
 import { BackupsPanel } from './components/BackupsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
 import { AiUsagePanel } from './components/AiUsagePanel'
@@ -441,6 +442,13 @@ function App() {
       <NodeDetailDialog
         selected={selected}
         onClose={() => setSelected(null)}
+        onOpenConsole={(guest) => {
+          // Deep-link to Proxmox's own console UI in a new tab — see
+          // lib/consoleUrl.ts for why this replaced an embedded attempt.
+          const server = allServers.find((s) => s.name === guest.server)
+          const url = buildConsoleUrl(guest, server)
+          if (url) window.open(url, '_blank', 'noopener')
+        }}
         datastores={allDatastores}
         backupLogs={allBackupLogs}
         alertLogs={allAlertLogs}

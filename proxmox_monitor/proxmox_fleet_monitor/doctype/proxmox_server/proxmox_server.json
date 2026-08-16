@@ -20,6 +20,9 @@
   "verify_ssl",
   "enabled",
   "local_backup_retention",
+  "console_section",
+  "console_username",
+  "console_password",
   "sync_actions_section",
   "sync_now",
   "status_section",
@@ -101,7 +104,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Proxmox API token in the form user@realm!token-id, e.g. monitor@pve!dashboard",
+   "description": "Proxmox API token in the form user@realm!token-id, e.g. monitor@pve!dashboard. Read-only monitoring credential — deliberately does not have VM.Console; see Console Username/Password below for that.",
    "fieldname": "api_token_id",
    "fieldtype": "Data",
    "label": "API Token ID",
@@ -133,6 +136,23 @@
    "fieldname": "local_backup_retention",
    "fieldtype": "Data",
    "label": "Local Backup Retention (informational)"
+  },
+  {
+   "fieldname": "console_section",
+   "fieldtype": "Section Break",
+   "label": "Console Access (separate PVE login — API tokens can't authenticate the console websocket)"
+  },
+  {
+   "description": "A Proxmox username (e.g. monitor@pve or root@pam), with VM.Console permission, used only to open embedded VNC/terminal sessions to this server's guests. Deliberately a real username+password login, not an API token: Proxmox's vncwebsocket endpoint rejects API-token auth outright (confirmed against real Proxmox hosts and documented in the Proxmox community) — it only accepts a PVEAuthCookie session obtained via username+password, the same way Proxmox's own web UI logs in. Leave both Console fields blank to disable console access for this server's guests.",
+   "fieldname": "console_username",
+   "fieldtype": "Data",
+   "label": "Console Username"
+  },
+  {
+   "description": "Password for the console login user above. Stored encrypted; never exposed to the Viewer role. Used only to obtain a short-lived PVEAuthCookie ticket per console session — never stored longer than that.",
+   "fieldname": "console_password",
+   "fieldtype": "Password",
+   "label": "Console Password"
   },
   {
    "fieldname": "sync_actions_section",
