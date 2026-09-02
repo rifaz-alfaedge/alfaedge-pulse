@@ -1,0 +1,122 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-17 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "resource_mount",
+  "monitored_host",
+  "mount_point",
+  "collected_at",
+  "column_break_sample",
+  "used_bytes",
+  "total_bytes",
+  "usage_percent",
+  "inodes_used",
+  "inodes_total",
+  "inode_usage_percent"
+ ],
+ "fields": [
+  {
+   "fieldname": "resource_mount",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Resource Mount",
+   "options": "Resource Mount",
+   "reqd": 1
+  },
+  {
+   "description": "Denormalized from Resource Mount — lets get_disk_forecasts() and any direct history query filter without a join.",
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1
+  },
+  {
+   "description": "Denormalized from Resource Mount, same reason as Monitored Host above.",
+   "fieldname": "mount_point",
+   "fieldtype": "Data",
+   "label": "Mount Point",
+   "reqd": 1
+  },
+  {
+   "description": "Genuine append-only history, server clock at ingest time — matches Resource Metric Log's convention. Never purged by anything except purge_old_resource_logs (Retention Days) — a Resource Mount that's stopped being reported is deleted from the live table, but its sample history here is left alone until it ages out normally, so a recently-unmounted disk's chart still works for a while.",
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Collected At",
+   "reqd": 1
+  },
+  { "fieldname": "column_break_sample", "fieldtype": "Column Break" },
+  {
+   "description": "Raw bytes, not GB-rounded like Resource Mount's used_gb/total_gb — a 14-30 day growth-rate regression needs finer precision than display rounding gives.",
+   "fieldname": "used_bytes",
+   "fieldtype": "Float",
+   "label": "Used (bytes)"
+  },
+  { "fieldname": "total_bytes", "fieldtype": "Float", "label": "Total (bytes)" },
+  { "fieldname": "usage_percent", "fieldtype": "Percent", "label": "Usage", "read_only": 1 },
+  { "fieldname": "inodes_used", "fieldtype": "Int", "label": "Inodes Used", "non_negative": 1 },
+  { "fieldname": "inodes_total", "fieldtype": "Int", "label": "Inodes Total", "non_negative": 1 },
+  {
+   "description": "Null when this filesystem doesn't report inode counts.",
+   "fieldname": "inode_usage_percent",
+   "fieldtype": "Percent",
+   "label": "Inode Usage",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-hdd-o",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-17 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Resource Disk Sample",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "collected_at",
+ "sort_order": "DESC",
+ "states": []
+}

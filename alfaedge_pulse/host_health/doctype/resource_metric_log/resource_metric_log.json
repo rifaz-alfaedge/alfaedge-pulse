@@ -1,0 +1,176 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-17 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "monitored_host",
+  "collected_at",
+  "load_section",
+  "cpu_core_count",
+  "load_avg_1min",
+  "load_avg_5min",
+  "load_avg_15min",
+  "load_normalized_percent",
+  "column_break_load",
+  "load_warning_streak",
+  "load_critical_streak",
+  "swap_section",
+  "swap_used_gb",
+  "swap_total_gb",
+  "swap_usage_percent",
+  "column_break_swap",
+  "swap_warning_streak",
+  "swap_critical_streak"
+ ],
+ "fields": [
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1
+  },
+  {
+   "description": "Genuine append-only history, server clock at ingest time (not the agent-reported timestamp) — matches Host Health's own convention. The \"current\" reading for a host is just its latest row by collected_at (see the (monitored_host, collected_at) index).",
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Collected At",
+   "reqd": 1
+  },
+  { "fieldname": "load_section", "fieldtype": "Section Break", "label": "Load Average" },
+  {
+   "description": "os.cpu_count() at collection time, stored per-row (not looked up elsewhere) so history stays self-consistent if a guest is later resized. Used only to normalize load average — never conflated with Proxmox Guest/Server's own hypervisor-observed CPU usage percent.",
+   "fieldname": "cpu_core_count",
+   "fieldtype": "Int",
+   "label": "CPU Core Count",
+   "non_negative": 1
+  },
+  { "fieldname": "load_avg_1min", "fieldtype": "Float", "label": "Load Average (1 min)" },
+  { "fieldname": "load_avg_5min", "fieldtype": "Float", "label": "Load Average (5 min)" },
+  { "fieldname": "load_avg_15min", "fieldtype": "Float", "label": "Load Average (15 min)" },
+  {
+   "description": "(load_avg_1min / cpu_core_count) * 100 — compared against Resource Monitor Settings' Load Warning/Critical thresholds.",
+   "fieldname": "load_normalized_percent",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Load (% of cores)",
+   "read_only": 1
+  },
+  { "fieldname": "column_break_load", "fieldtype": "Column Break" },
+  {
+   "default": "0",
+   "description": "Consecutive polls load has stayed at/above the Warning threshold, no dip. Computed at ingest time from the prior row for this monitored_host, since there's no persistent doc to mutate in-memory on an append-only table — same approach Frappe Worker Health Log's orphan_critical_streak uses.",
+   "fieldname": "load_warning_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Load Warning Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Same semantics as Load Warning Streak, at the Critical threshold. Reaching Confirmation Checks raises the High Load Average alert.",
+   "fieldname": "load_critical_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Load Critical Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  { "fieldname": "swap_section", "fieldtype": "Section Break", "label": "Swap" },
+  {
+   "description": "Null (not 0) when this row's swap_total_gb is also null (no swap configured) — same null-not-zero convention as Proxmox Server.swap_usage.",
+   "fieldname": "swap_used_gb",
+   "fieldtype": "Float",
+   "label": "Swap Used (GB)"
+  },
+  {
+   "description": "Null when the host has no swap configured at all — 0 would misleadingly read as \"swap is fine\" rather than \"there's no swap to measure\".",
+   "fieldname": "swap_total_gb",
+   "fieldtype": "Float",
+   "label": "Swap Total (GB)"
+  },
+  {
+   "fieldname": "swap_usage_percent",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Swap Usage",
+   "read_only": 1
+  },
+  { "fieldname": "column_break_swap", "fieldtype": "Column Break" },
+  {
+   "default": "0",
+   "description": "Same confirmation-check semantics as Load Warning Streak, tracked independently for swap (different scale — load can exceed 100%, swap can't — so the two are never combined via max()).",
+   "fieldname": "swap_warning_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Swap Warning Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Same semantics as Swap Warning Streak, at the Critical threshold. Reaching Confirmation Checks raises the High Swap Usage alert.",
+   "fieldname": "swap_critical_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Swap Critical Streak",
+   "non_negative": 1,
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-line-chart",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-17 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Resource Metric Log",
+ "naming_rule": "Random",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "sort_field": "collected_at",
+ "sort_order": "DESC",
+ "states": []
+}

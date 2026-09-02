@@ -1,4 +1,4 @@
-// Mirrors the Frappe DocTypes in proxmox_monitor/proxmox_fleet_monitor/doctype.
+// Mirrors the Frappe DocTypes in alfaedge_pulse/proxmox_fleet_monitor/doctype.
 // Kept intentionally in sync by hand (no codegen) since the field set is
 // small and stable — see the corresponding .json files for the source of truth.
 
@@ -127,7 +127,7 @@ export interface ProxmoxMonitorSettings {
   confirmation_checks: number
 }
 
-// Mirrors proxmox_monitor/llm_usage_monitor/doctype — see those .json files
+// Mirrors alfaedge_pulse/llm_usage_monitor/doctype — see those .json files
 // for the source of truth.
 
 export type LlmUsageSource = 'Bifrost' | 'OpenAI Direct' | 'Google Direct' | 'Other'
@@ -186,7 +186,7 @@ export interface UsageFilterOptions {
   virtual_keys: string[]
 }
 
-// Mirrors proxmox_monitor/uptime_monitor/doctype — see those .json files
+// Mirrors alfaedge_pulse/uptime_monitor/doctype — see those .json files
 // for the source of truth.
 
 export type UptimeMonitorType = 'HTTP(s)' | 'TCP' | 'Ping'
@@ -250,7 +250,7 @@ export interface UptimeHistoryPoint {
   avg_response_time_ms: number
 }
 
-// Mirrors proxmox_monitor/host_health/doctype — see those .json files
+// Mirrors alfaedge_pulse/host_health/doctype — see those .json files
 // for the source of truth.
 
 export type ServiceState = 'active' | 'inactive' | 'failed' | 'activating' | 'deactivating' | 'unknown'

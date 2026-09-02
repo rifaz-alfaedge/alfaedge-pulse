@@ -85,24 +85,24 @@ self-hosted [Bifrost](https://getbifrost.ai) gateway (see
 ```bash
 cd $PATH_TO_YOUR_BENCH
 bench get-app $URL_OF_THIS_REPO --branch version-16
-bench --site your-site install-app proxmox_monitor
+bench --site your-site install-app alfaedge_pulse
 ```
 
 The dashboard's frontend is a separate React build and isn't committed to
 this repo (see `.gitignore`) — build it once after installing:
 
 ```bash
-cd apps/proxmox_monitor/frontend
+cd apps/alfaedge_pulse/frontend
 npm install
 npm run build
-bench build --app proxmox_monitor
+bench build --app alfaedge_pulse
 ```
 
 Then visit `https://your-site/alfaedge-pulse` (an authenticated Frappe
 session is required — Guests are redirected to `/login`).
 
 `npm install`/`npm run build` need write access to `frontend/node_modules`
-and to `proxmox_monitor/public/alfaedge-pulse` — run them as the bench's
+and to `alfaedge_pulse/public/alfaedge-pulse` — run them as the bench's
 own user (usually `frappe`), not root or an unrelated account, or the
 build will silently fail to produce output and the dashboard route will
 500 with a `manifest.json` not found error.
@@ -129,7 +129,7 @@ both the gunicorn web workers and the background job workers keep
 executing the old code in memory until restarted:
 
 ```bash
-bench build --app proxmox_monitor   # relinks/rebuilds static assets
+bench build --app alfaedge_pulse   # relinks/rebuilds static assets
 supervisorctl restart frappe-bench-web:frappe-bench-frappe-web
 supervisorctl restart frappe-bench-workers:
 ```
@@ -172,7 +172,7 @@ with `git checkout -- <file>` and reinstall.
 
 ## How it works
 
-- A background loop (`proxmox_monitor.tasks.poller.run_poll_loop`) polls
+- A background loop (`alfaedge_pulse.tasks.poller.run_poll_loop`) polls
   every enabled `Proxmox Server` roughly every 20 seconds (configurable in
   **Proxmox Monitor Settings**), using the Proxmox VE / PBS REST APIs
   directly — no extra services (no InfluxDB, no Grafana, no `proxmoxer`)
@@ -501,7 +501,7 @@ Warning summary already does — not just on the Uptime tab itself.
 This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
 
 ```bash
-cd apps/proxmox_monitor
+cd apps/alfaedge_pulse
 pre-commit install
 ```
 

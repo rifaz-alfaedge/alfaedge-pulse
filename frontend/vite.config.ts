@@ -2,8 +2,8 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// Built assets are served by the proxmox_monitor Frappe app from
-// `/assets/proxmox_monitor/alfaedge-pulse/...` (see www/alfaedge-pulse/index.py),
+// Built assets are served by the alfaedge_pulse Frappe app from
+// `/assets/alfaedge_pulse/alfaedge-pulse/...` (see www/alfaedge-pulse/index.py),
 // so `base` must match that path. Filenames are content-hashed (Vite's
 // default) — nginx caches everything under /assets for a full year
 // (max-age=31536000, no revalidation), so a fixed filename would mean
@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [react(), tailwindcss()],
-    base: '/assets/proxmox_monitor/alfaedge-pulse/',
+    base: '/assets/alfaedge_pulse/alfaedge-pulse/',
     server: {
       proxy: {
         // In dev, proxy API/socket calls to the local Frappe site so the
@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: '../proxmox_monitor/public/alfaedge-pulse',
+      outDir: '../alfaedge_pulse/public/alfaedge-pulse',
       emptyOutDir: true,
       manifest: true,
     },

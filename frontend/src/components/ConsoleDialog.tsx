@@ -30,7 +30,7 @@ export function ConsoleDialog({ guest, onClose }: { guest: ProxmoxGuest; onClose
   // envelope, not `T` directly — see HostHealthPanel.tsx's own note on this
   // same gotcha.
   const { call: openConsole } = useFrappePostCall<{ message: OpenConsoleResponse }>(
-    'proxmox_monitor.console_relay.api.open_console',
+    'alfaedge_pulse.console_relay.api.open_console',
   )
 
   useEffect(() => {

@@ -93,10 +93,10 @@ export function useDatastores() {
 // same host's own less-frequent Local Disk history, out of it entirely.
 // The backend fetches per (server, backup_source) bucket and merges
 // instead, so every combination that has data is guaranteed its own
-// window — see proxmox_monitor.api.get_recent_backup_logs.
+// window — see alfaedge_pulse.api.get_recent_backup_logs.
 export function useBackupLogs(perBucketLimit = 150) {
   const result = useFrappeGetCall<{ message: ProxmoxBackupLog[] }>(
-    'proxmox_monitor.api.get_recent_backup_logs',
+    'alfaedge_pulse.api.get_recent_backup_logs',
     { per_bucket_limit: perBucketLimit },
     undefined,
     { refreshInterval: UI_POLL_MS },
@@ -160,7 +160,7 @@ function serializeFilterList(values?: string[]): string | undefined {
 
 export function useAiUsageSummary(startDate?: string, endDate?: string, source?: string, filters: UsageFilters = {}) {
   const result = useFrappeGetCall<{ message: UsageSummary }>(
-    'proxmox_monitor.llm_usage_monitor.api.get_usage_summary',
+    'alfaedge_pulse.llm_usage_monitor.api.get_usage_summary',
     {
       start_date: startDate,
       end_date: endDate,
@@ -183,7 +183,7 @@ export function useAiUsageTrend(
   filters: UsageFilters = {},
 ) {
   const result = useFrappeGetCall<{ message: UsageTrendPoint[] }>(
-    'proxmox_monitor.llm_usage_monitor.api.get_usage_trend',
+    'alfaedge_pulse.llm_usage_monitor.api.get_usage_trend',
     {
       start_date: startDate,
       end_date: endDate,
@@ -207,7 +207,7 @@ export function useAiUsageBreakdown(
   filters: UsageFilters = {},
 ) {
   const result = useFrappeGetCall<{ message: UsageBreakdownRow[] }>(
-    'proxmox_monitor.llm_usage_monitor.api.get_breakdown',
+    'alfaedge_pulse.llm_usage_monitor.api.get_breakdown',
     {
       dimension,
       start_date: startDate,
@@ -225,7 +225,7 @@ export function useAiUsageBreakdown(
 
 export function useAiUsageFilterOptions() {
   const result = useFrappeGetCall<{ message: UsageFilterOptions }>(
-    'proxmox_monitor.llm_usage_monitor.api.get_filter_options',
+    'alfaedge_pulse.llm_usage_monitor.api.get_filter_options',
     {},
     undefined,
     { refreshInterval: SLOW_POLL_MS },
@@ -275,7 +275,7 @@ export function useUptimeSites() {
  * endpoint with a meaningless value). */
 export function useImportableMonitors(instance: string) {
   const result = useFrappeGetCall<{ message: ImportableMonitor[] }>(
-    'proxmox_monitor.uptime_monitor.api.list_importable_monitors',
+    'alfaedge_pulse.uptime_monitor.api.list_importable_monitors',
     { instance },
     instance ? undefined : null,
   )
@@ -290,7 +290,7 @@ export function useUptimeMonitorSettings() {
 
 export function useUptimeSummary(site?: string, days = 7) {
   const result = useFrappeGetCall<{ message: UptimeSummary }>(
-    'proxmox_monitor.uptime_monitor.api.get_uptime_summary',
+    'alfaedge_pulse.uptime_monitor.api.get_uptime_summary',
     { site, days },
     undefined,
     { refreshInterval: SLOW_POLL_MS },
@@ -300,7 +300,7 @@ export function useUptimeSummary(site?: string, days = 7) {
 
 export function useUptimeHistory(site: string, days = 7) {
   const result = useFrappeGetCall<{ message: UptimeHistoryPoint[] }>(
-    'proxmox_monitor.uptime_monitor.api.get_uptime_history',
+    'alfaedge_pulse.uptime_monitor.api.get_uptime_history',
     { site, days },
     undefined,
     { refreshInterval: SLOW_POLL_MS },
@@ -345,7 +345,7 @@ export function useMonitoredHosts() {
  * read-on-Monitored-Host explicitly — see that function's own docstring. */
 export function useMonitoredHostSites() {
   const result = useFrappeGetCall<{ message: MonitoredHostSite[] }>(
-    'proxmox_monitor.host_health.api.get_hosted_sites',
+    'alfaedge_pulse.host_health.api.get_hosted_sites',
     {},
     undefined,
     { refreshInterval: SLOW_POLL_MS },
@@ -507,7 +507,7 @@ export function useFrappeActiveJobs() {
  * needed here. */
 export function useFailedJobGroups(monitoredHost: string) {
   const result = useFrappeGetCall<{ message: FailedJobGroup[] }>(
-    'proxmox_monitor.host_health.api.get_failed_job_groups',
+    'alfaedge_pulse.host_health.api.get_failed_job_groups',
     { monitored_host: monitoredHost },
     undefined,
     { refreshInterval: UI_POLL_MS },
@@ -532,7 +532,7 @@ export function useAiRecentRequests(
   order: 'asc' | 'desc' = 'desc',
 ) {
   const result = useFrappeGetCall<{ message: { rows: LlmUsageLog[]; total_count: number } }>(
-    'proxmox_monitor.llm_usage_monitor.api.get_recent_requests',
+    'alfaedge_pulse.llm_usage_monitor.api.get_recent_requests',
     {
       start_date: startDate,
       end_date: endDate,

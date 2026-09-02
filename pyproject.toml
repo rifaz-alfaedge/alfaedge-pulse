@@ -1,5 +1,5 @@
 [project]
-name = "proxmox_monitor"
+name = "alfaedge_pulse"
 authors = [
     { name = "AlfaEdge", email = "rifazmohammed@gmail.com"}
 ]

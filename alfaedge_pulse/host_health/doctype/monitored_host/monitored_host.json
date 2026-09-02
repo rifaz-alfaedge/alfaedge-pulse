@@ -1,0 +1,254 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:{hostname}_{proxmox_guest}",
+ "creation": "2026-08-13 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_section",
+  "proxmox_guest",
+  "hostname",
+  "enabled",
+  "column_break_identity",
+  "last_seen",
+  "is_online",
+  "worker_health_critical",
+  "failed_job_critical",
+  "long_running_job_critical",
+  "load_average_critical",
+  "swap_critical",
+  "agent_section",
+  "api_key",
+  "api_secret",
+  "user",
+  "agent_key_generated_on",
+  "regenerate_agent_key",
+  "services_section",
+  "expected_services",
+  "sites_section",
+  "hosted_sites",
+  "state_section",
+  "scheduler_last_run",
+  "scheduler_overdue"
+ ],
+ "fields": [
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "Identity"
+  },
+  {
+   "description": "Identity is inherited from the linked guest, not duplicated here. Role (for alert notification gating) is resolved live from the guest's own server at alert time, not cached on this doc — Proxmox Guest itself follows the same practice.",
+   "fieldname": "proxmox_guest",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Proxmox Guest",
+   "options": "Proxmox Guest",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fetch_from": "proxmox_guest.guest_name",
+   "fieldname": "hostname",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Hostname",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Updated by the ingest endpoint on every accepted agent push.",
+   "fieldname": "last_seen",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Seen",
+   "read_only": 1
+  },
+  {
+   "description": "Computed: last_seen within Host Monitor Settings' Heartbeat Timeout. Set optimistically on every accepted push, and authoritatively by the heartbeat watchdog — only the watchdog can ever clear it, since only it can observe absence.",
+   "fieldname": "is_online",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Online",
+   "read_only": 1
+  },
+  {
+   "description": "OR across this host's benches of orphan_critical_streak reaching Confirmation Checks — stable alert reference for Worker Degraded, since Frappe Worker Health Log itself is append-only and can't be one.",
+   "fieldname": "worker_health_critical",
+   "fieldtype": "Check",
+   "label": "Worker Health Critical",
+   "read_only": 1
+  },
+  {
+   "description": "OR across this host's benches of failed_job_critical_streak reaching Confirmation Checks — stable alert reference for Failed Job Threshold, same reasoning as Worker Health Critical.",
+   "fieldname": "failed_job_critical",
+   "fieldtype": "Check",
+   "label": "Failed Job Critical",
+   "read_only": 1
+  },
+  {
+   "description": "OR across this host's benches of long_running_job_critical_streak reaching Confirmation Checks — stable alert reference for Long Running Job, same reasoning as Worker Health Critical.",
+   "fieldname": "long_running_job_critical",
+   "fieldtype": "Check",
+   "label": "Long Running Job Critical",
+   "read_only": 1
+  },
+  {
+   "description": "Resource Metric Log's load_critical_streak reaching Confirmation Checks — stable alert reference for High Load Average, since Resource Metric Log itself is append-only and can't be one.",
+   "fieldname": "load_average_critical",
+   "fieldtype": "Check",
+   "label": "Load Average Critical",
+   "read_only": 1
+  },
+  {
+   "description": "Resource Metric Log's swap_critical_streak reaching Confirmation Checks — stable alert reference for High Swap Usage, same reasoning as Load Average Critical.",
+   "fieldname": "swap_critical",
+   "fieldtype": "Check",
+   "label": "Swap Critical",
+   "read_only": 1
+  },
+  {
+   "fieldname": "agent_section",
+   "fieldtype": "Section Break",
+   "label": "Agent Authentication"
+  },
+  {
+   "description": "A public identifier, not a secret — used with API Secret below via Frappe's own Authorization: token <key>:<secret> mechanism (Frappe-Authorization-Source: Monitored Host). System-generated only, via \"Generate / Regenerate Agent Key\" below.",
+   "fieldname": "api_key",
+   "fieldtype": "Data",
+   "label": "API Key",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "description": "Shown once, at generation time, in a dialog — never displayed again afterward, same handling as any Frappe API secret.",
+   "fieldname": "api_secret",
+   "fieldtype": "Password",
+   "label": "API Secret"
+  },
+  {
+   "description": "The shared, low-privilege Host Health Agent user every Monitored Host authenticates as (required field name/shape for Frappe's own api_key/api_secret auth mechanism) — set automatically on creation, not meant to be reassigned.",
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "Agent User",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "agent_key_generated_on",
+   "fieldtype": "Datetime",
+   "label": "Key Generated On",
+   "read_only": 1
+  },
+  {
+   "description": "Invalidates the previous key immediately. The agent's local config on that guest must be updated with the new key/secret or its pushes will be rejected.",
+   "fieldname": "regenerate_agent_key",
+   "fieldtype": "Button",
+   "label": "Generate / Regenerate Agent Key"
+  },
+  {
+   "fieldname": "services_section",
+   "fieldtype": "Section Break",
+   "label": "Expected Services"
+  },
+  {
+   "description": "Leave empty to use Host Monitor Settings → Default Expected Services. Add rows here only to add/remove services for this specific host.",
+   "fieldname": "expected_services",
+   "fieldtype": "Table",
+   "label": "Expected Services (override)",
+   "options": "Expected Service"
+  },
+  {
+   "fieldname": "sites_section",
+   "fieldtype": "Section Break",
+   "label": "Hosted Sites"
+  },
+  {
+   "description": "Site inventory reported by the agent — informational only, not monitored. Fully replaced on every ingest push.",
+   "fieldname": "hosted_sites",
+   "fieldtype": "Table",
+   "label": "Hosted Sites",
+   "options": "Monitored Host Site"
+  },
+  {
+   "fieldname": "state_section",
+   "fieldtype": "Section Break",
+   "label": "Frappe Scheduler State"
+  },
+  {
+   "description": "Latest scheduler heartbeat reported by the agent payload, across all benches on this host.",
+   "fieldname": "scheduler_last_run",
+   "fieldtype": "Datetime",
+   "label": "Scheduler Last Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "scheduler_overdue",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Scheduler Overdue",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-heartbeat",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Monitored Host",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

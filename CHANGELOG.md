@@ -2,6 +2,65 @@
 
 All notable changes to this project are documented here.
 
+## [4.0.0] - 2026-09-02
+
+### Changed
+- **App renamed `proxmox_monitor` → `alfaedge_pulse`.** The package,
+  every internal import, the ingest endpoint's dotted path, the frontend
+  asset base path, and the console-relay process command all now use the
+  real product name instead of the old working name — brings the
+  underlying package in line with the product name, GitHub repo, and web
+  route, all of which have said "alfaEdge Pulse" for a long time. Breaking
+  for anything referencing the old import path directly; `pulse_agent`
+  v0.3.0 carries the matching fix for its own ingest URL.
+
+### Added
+- **Resource & Capacity Monitoring.** Tracks what the hypervisor-side
+  Proxmox Guest/Server data can't see from inside the guest OS: load
+  average, swap usage, and per-mount disk/inode usage — on its own
+  ~3-minute cadence via a new standalone `resource_agent.py` collector,
+  independent of Host Health's 25s heartbeat. New `Client`,
+  `Resource Monitor Settings`, `Resource Mount`, `Resource Metric Log`,
+  and `Resource Disk Sample` doctypes; a new `push_resource_metrics`
+  ingest endpoint reusing the existing confirmation-streak severity/
+  alerting machinery verbatim (`High Load Average`, `High Swap Usage`,
+  and disk/inode fullness reusing the existing `Critical Resource`/
+  `Resource Warning` types); a capacity forecast (`get_disk_forecasts`)
+  that fits a trend line over recent samples to estimate days-until-full;
+  a daily retention purge for both new history tables.
+- **Host Health alerts batched into three daily digests.** Service Down,
+  Worker Degraded, Failed Job Threshold, Long Running Job, Scheduler
+  Stalled, and Host Unreachable no longer send immediately — they're not
+  urgent enough to interrupt for — and are instead summarized in three
+  scheduled digests (07:00 previous-day recap, 13:00 midday, 20:00
+  evening) via a new `alerts/digest.py`. Every other alert type (Uptime,
+  resource usage, backups, server-offline) is unaffected and still sends
+  immediately. Digest recipients are scoped correctly: the global
+  recipient list gets the full fleet-wide picture, but a per-guest Alert
+  Subscription only ever receives the hosts they actually subscribed to
+  — never folded in with every other host's issues from the same window.
+  Delivered by email (full itemized detail) and WhatsApp (a short
+  count-only summary via a new `whatsapp_health_digest_template` Meta
+  UTILITY template).
+
+### Fixed
+- **`Frappe Active Job`/`Frappe Failed Job Log`'s `rq_job_id`** was a
+  plain `Data` field (140-char default) — some real scheduled-job dotted
+  paths push RQ's own job-id format past that limit, silently failing to
+  record that job every cycle it ran. Widened to 255 characters.
+- **`push_resource_metrics` could wipe a host's entire disk-status history**
+  if a single push reported an empty `disks` list (e.g. a transient
+  `/proc/mounts` read failure on the agent) — the stale-mount cleanup's
+  "not in" filter degenerated to matching every real mount. Now only
+  prunes stale mounts when at least one real mount was actually seen that
+  push.
+- **`get_disk_forecasts`** issued one query per mount instead of one
+  batched query across all of them — fixed for endpoints scaling with
+  fleet size rather than mount count.
+- A malformed disk-usage payload with `inodes_total` as a non-empty falsy
+  string (e.g. `"0"`) could raise `ZeroDivisionError` instead of being
+  handled like every other defensively-guarded numeric field.
+
 ## [3.5.1] - 2026-08-16
 
 ### Added

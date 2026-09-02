@@ -1,0 +1,161 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-17 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "monitored_host",
+  "mount_point",
+  "fstype",
+  "column_break_identity",
+  "is_critical",
+  "is_warning",
+  "streak_section",
+  "warning_streak",
+  "critical_streak",
+  "usage_section",
+  "used_gb",
+  "total_gb",
+  "usage_percent",
+  "column_break_usage",
+  "inodes_used",
+  "inodes_total",
+  "inode_usage_percent",
+  "last_synced"
+ ],
+ "fields": [
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1
+  },
+  {
+   "description": "Upserted in place by the ingest handler, keyed on (monitored_host, mount_point) — not appended to as history, same pattern as Proxmox Datastore. Resource Disk Sample is where per-poll history/forecast data lives.",
+   "fieldname": "mount_point",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Mount Point",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fstype",
+   "fieldtype": "Data",
+   "label": "Filesystem Type"
+  },
+  { "fieldname": "column_break_identity", "fieldtype": "Column Break" },
+  {
+   "default": "0",
+   "description": "At or above Resource Monitor Settings' Disk / Inode Critical threshold for the configured Confirmation Checks — whichever of disk-space or inode fullness is higher.",
+   "fieldname": "is_critical",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Critical",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "At or above the Warning threshold for the configured Confirmation Checks, but below Critical.",
+   "fieldname": "is_warning",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Warning",
+   "read_only": 1
+  },
+  { "fieldname": "streak_section", "fieldtype": "Section Break", "label": "Streak Tracking" },
+  {
+   "default": "0",
+   "description": "Consecutive polls usage has stayed at-or-above the Warning threshold. Cleared to 0 the moment a reading dips back below it.",
+   "fieldname": "warning_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Warning Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Consecutive polls usage has stayed at-or-above the Critical threshold. Cleared to 0 the moment a reading dips back below it.",
+   "fieldname": "critical_streak",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Critical Streak",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  { "fieldname": "usage_section", "fieldtype": "Section Break", "label": "Disk Usage" },
+  { "fieldname": "used_gb", "fieldtype": "Float", "label": "Used (GB)", "read_only": 1 },
+  { "fieldname": "total_gb", "fieldtype": "Float", "label": "Total (GB)", "read_only": 1 },
+  {
+   "fieldname": "usage_percent",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Usage",
+   "read_only": 1
+  },
+  { "fieldname": "column_break_usage", "fieldtype": "Column Break" },
+  { "fieldname": "inodes_used", "fieldtype": "Int", "label": "Inodes Used", "non_negative": 1, "read_only": 1 },
+  { "fieldname": "inodes_total", "fieldtype": "Int", "label": "Inodes Total", "non_negative": 1, "read_only": 1 },
+  {
+   "description": "Null when this filesystem doesn't report inode counts (some network/overlay filesystems don't).",
+   "fieldname": "inode_usage_percent",
+   "fieldtype": "Percent",
+   "label": "Inode Usage",
+   "read_only": 1
+  },
+  { "fieldname": "last_synced", "fieldtype": "Datetime", "label": "Last Synced", "read_only": 1 }
+ ],
+ "icon": "fa fa-hdd-o",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-17 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Resource Mount",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "usage_percent",
+ "sort_order": "DESC",
+ "states": []
+}

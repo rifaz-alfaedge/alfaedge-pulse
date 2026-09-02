@@ -315,7 +315,7 @@ function HostDetailDialog({
   // runtime, confirmed by a real downloaded file containing the literal
   // text "[object Object]" before this was unwrapped.
   const { call: getFailedJobLogText, loading: downloadingLog } = useFrappePostCall<{ message: string }>(
-    'proxmox_monitor.host_health.api.get_failed_job_log_text',
+    'alfaedge_pulse.host_health.api.get_failed_job_log_text',
   )
   const [downloadError, setDownloadError] = useState<string | null>(null)
 

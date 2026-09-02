@@ -1,0 +1,161 @@
+{
+ "actions": [],
+ "creation": "2026-08-17 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "polling_section",
+  "confirmation_checks",
+  "column_break_poll",
+  "retention_days",
+  "load_section",
+  "load_warning_percent",
+  "load_critical_percent",
+  "swap_section",
+  "swap_warning_percent",
+  "swap_critical_percent",
+  "disk_section",
+  "disk_warning_percent",
+  "disk_critical_percent",
+  "forecast_section",
+  "forecast_lookback_days",
+  "forecast_min_samples"
+ ],
+ "fields": [
+  { "fieldname": "polling_section", "fieldtype": "Section Break", "label": "Polling" },
+  {
+   "fieldname": "confirmation_checks",
+   "fieldtype": "Int",
+   "label": "Confirmation Checks",
+   "default": "3",
+   "reqd": 1,
+   "non_negative": 1,
+   "description": "Consecutive polls a load/swap/disk reading must stay at-or-above its threshold, with no dip, before an alert fires. Same semantics as Host Monitor Settings' own Confirmation Checks — a poll-count, not a duration, since resource_agent.py's push cadence is independently configurable."
+  },
+  { "fieldname": "column_break_poll", "fieldtype": "Column Break" },
+  {
+   "fieldname": "retention_days",
+   "fieldtype": "Int",
+   "label": "Retention (days)",
+   "default": "30",
+   "reqd": 1,
+   "non_negative": 1,
+   "description": "Resource Metric Log and Resource Disk Sample rows older than this are purged daily by purge_old_resource_logs. Must be at least Forecast Lookback (days) below, or the forecast window would silently be truncated by its own data's retention."
+  },
+  { "fieldname": "load_section", "fieldtype": "Section Break", "label": "Load Average" },
+  {
+   "fieldname": "load_warning_percent",
+   "fieldtype": "Int",
+   "label": "Load Warning (% of cores)",
+   "default": "100",
+   "non_negative": 1,
+   "description": "1-minute load average as a percent of this host's CPU core count (e.g. 100% = load average equal to core count, a fully-loaded but not yet overloaded host). Not CPU%, and not compared against Proxmox Guest/Server's own hypervisor-observed CPU usage."
+  },
+  {
+   "fieldname": "load_critical_percent",
+   "fieldtype": "Int",
+   "label": "Load Critical (% of cores)",
+   "default": "200",
+   "non_negative": 1,
+   "description": "At/above this (held for Confirmation Checks polls), raises the High Load Average alert."
+  },
+  { "fieldname": "swap_section", "fieldtype": "Section Break", "label": "Swap" },
+  {
+   "fieldname": "swap_warning_percent",
+   "fieldtype": "Int",
+   "label": "Swap Warning (%)",
+   "default": "50",
+   "non_negative": 1,
+   "description": "Dashboard display only, colors the tile as a warning — see Critical below for what actually alerts."
+  },
+  {
+   "fieldname": "swap_critical_percent",
+   "fieldtype": "Int",
+   "label": "Swap Critical (%)",
+   "default": "90",
+   "non_negative": 1,
+   "description": "At/above this (held for Confirmation Checks polls), raises the High Swap Usage alert. Hosts with no swap configured never evaluate this — see Resource Metric Log's swap_total_gb."
+  },
+  { "fieldname": "disk_section", "fieldtype": "Section Break", "label": "Disk / Inodes" },
+  {
+   "fieldname": "disk_warning_percent",
+   "fieldtype": "Int",
+   "label": "Disk / Inode Warning (%)",
+   "default": "80",
+   "non_negative": 1,
+   "description": "Applies to both disk-space and inode fullness on a mount — whichever is higher (max of the two) is compared against this single pair, same approach as Proxmox Server sharing one CPU/RAM threshold pair. Dashboard display only — see Critical below for what actually alerts."
+  },
+  {
+   "fieldname": "disk_critical_percent",
+   "fieldtype": "Int",
+   "label": "Disk / Inode Critical (%)",
+   "default": "90",
+   "non_negative": 1,
+   "description": "At/above this (held for Confirmation Checks polls), raises a Critical Resource alert on the affected Resource Mount — reusing the same alert_type Proxmox Datastore already uses for a filling storage pool."
+  },
+  { "fieldname": "forecast_section", "fieldtype": "Section Break", "label": "Capacity Forecast" },
+  {
+   "fieldname": "forecast_lookback_days",
+   "fieldtype": "Int",
+   "label": "Forecast Lookback (days)",
+   "default": "14",
+   "reqd": 1,
+   "non_negative": 1,
+   "description": "How far back get_disk_forecasts() looks when fitting each mount's growth trend. Must not exceed Retention (days) above."
+  },
+  {
+   "fieldname": "forecast_min_samples",
+   "fieldtype": "Int",
+   "label": "Forecast Minimum Samples",
+   "default": "5",
+   "reqd": 1,
+   "non_negative": 1,
+   "description": "A mount with fewer Resource Disk Sample rows than this within the lookback window gets no forecast (insufficient_data) rather than an unreliable one."
+  }
+ ],
+ "icon": "fa fa-tachometer",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-17 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Resource Monitor Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
