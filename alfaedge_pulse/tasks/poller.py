@@ -36,12 +36,16 @@ Design notes (the "why" behind the shape of this module):
 - **One server's failure never blocks another's.** Beta being down
   is the whole reason this dashboard exists — ``sync_all_servers`` wraps
   each server's sync in its own try/except and commits per-server.
-- **Backup health is checked at the task level, not per guest.** Rather
-  than tracking each VM/CT's own backup age, ``_sync_pve_backups`` looks
-  at whether the actual vzdump job (local or PBS-targeted) succeeded or
-  failed as a whole — see ``_handle_backup_task_result``. A failure marks
-  the *server* critical (``Proxmox Server.backup_critical``), not the
-  individual guests inside that job.
+- **Backup health is judged over a rolling window, not per task.** With
+  jobs running every 30-60 minutes, flagging critical on any single failed
+  vzdump task (one guest locked, one transient error) fired constantly
+  even though the fleet was still being backed up fine overall. Instead
+  ``_handle_backup_task_result`` looks at whether *any* task succeeded
+  anywhere on the host within ``BACKUP_OVERDUE_HOURS`` — only a genuine
+  multi-hour gap with zero successes marks the *server* critical
+  (``Proxmox Server.backup_critical``), not the individual guests inside
+  any one job. Every task's outcome is still recorded in full for the
+  Backups tab regardless.
 - **Per-guest severity is tracked for every role, notified globally only
   for Production.** A Development/Staging/Backup host's VMs/CTs are still
   expected to spike routinely, but suppressing severity tracking entirely
@@ -72,7 +76,7 @@ from datetime import datetime, timedelta
 from typing import NamedTuple
 
 import frappe
-from frappe.utils import cint, flt, now_datetime
+from frappe.utils import add_to_date, cint, flt, get_datetime, now_datetime
 from frappe.utils.password import get_decrypted_password
 
 from alfaedge_pulse.alerts.dispatch import dispatch_alert, dispatch_recovery, has_open_alert, resolve_alert
@@ -595,16 +599,14 @@ def _parse_archive_size_gb(text: str) -> float | None:
 
 def _sync_pve_backups(server, client: PVEClient, node: str) -> None:
 	"""Record every guest's backup result (for the Backups tab), then flag
-	the *server* critical if the underlying backup task itself failed.
+	the *server* critical only if no backup task anywhere on the host has
+	succeeded within ``BACKUP_OVERDUE_HOURS``.
 
 	Per-guest history is still kept in full — that's what the dashboard's
-	Backups tab groups/sorts/displays — but alerting no longer looks at any
-	individual guest's own backup age. Instead each processed task (a
-	single-guest "Backup now" run, or a bulk nightly job covering the whole
-	fleet) is judged as a whole via ``_handle_backup_task_result``: if the
-	job succeeded outright, backup-critical clears; if any part of it
-	failed, the server is flagged critical with one alert, not one per
-	affected guest.
+	Backups tab groups/sorts/displays — but alerting doesn't react to any
+	single task's outcome any more (see ``_handle_backup_task_result``):
+	one guest failing inside an otherwise-healthy every-30-60-minutes
+	backup schedule shouldn't page anyone.
 	"""
 	# One extra call per cycle, used only to look up each backup's Notes
 	# field (see _find_backup_notes) — the task list/log never carry it.
@@ -626,22 +628,14 @@ def _sync_pve_backups(server, client: PVEClient, node: str) -> None:
 
 		vmid = _parse_vmid(task.get("id"))
 		if vmid is not None:
-			outcome = _record_single_guest_backup(server, client, node, task, upid, vmid, backup_files)
+			_record_single_guest_backup(server, client, node, task, upid, vmid, backup_files)
 		else:
-			outcome = _record_bulk_backup_job(server, client, node, task, upid, backup_files)
+			_record_bulk_backup_job(server, client, node, task, upid, backup_files)
 
-		if outcome is not None:
-			succeeded, message = outcome
-			_handle_backup_task_result(server, succeeded, message)
-
-	# No vzdump task has ever shown up for this host at all — not "the last
-	# one failed", but "there has never been one to judge". Silently staying
-	# non-critical here would read as "backups are fine" when really nothing
-	# has ever been backed up, so this is treated the same as a failed task.
-	if not tasks and not frappe.db.exists("Proxmox Backup Log", {"server": server.name}):
-		_handle_backup_task_result(
-			server, task_succeeded=False, message=f"{server.server_name}: no backup has ever run on this host",
-		)
+	# Evaluated every cycle regardless of whether a new task showed up this
+	# time — that's what catches backups having quietly stopped altogether
+	# (no new tasks at all), not just "the last one failed".
+	_handle_backup_task_result(server)
 
 
 def _find_backup_notes(backup_files: list[dict], vmid: int, backup_time: datetime) -> str:
@@ -664,16 +658,13 @@ def _find_backup_notes(backup_files: list[dict], vmid: int, backup_time: datetim
 
 def _record_single_guest_backup(
 	server, client: PVEClient, node: str, task: dict, upid: str, vmid: int, backup_files: list[dict],
-) -> tuple[bool, str | None] | None:
-	"""A vzdump task whose `id` is already a specific vmid — e.g. a manual "Backup now" run.
-
-	Returns ``(succeeded, message)`` — ``message`` is a ready-to-send alert
-	string on failure, ``None`` on success — or plain ``None`` (not a tuple)
-	if this task was already recorded on a previous cycle, meaning there's
-	nothing new to feed into the server's backup-critical state.
+) -> None:
+	"""A vzdump task whose `id` is already a specific vmid — e.g. a manual
+	"Backup now" run. A no-op if this task was already recorded on a
+	previous cycle.
 	"""
 	if frappe.db.exists("Proxmox Backup Log", {"upid": upid}):
-		return None
+		return
 
 	status = "Success" if task.get("status") == "OK" else "Failed"
 	error_message = "" if status == "Success" else task.get("status", "Unknown error")
@@ -684,29 +675,22 @@ def _record_single_guest_backup(
 	_create_backup_log(
 		server, vmid, backup_source, status, backup_time, storage_target, error_message, upid, size_gb, notes,
 	)
-	if status == "Success":
-		return True, None
-	guest_display = _guest_display_name(server, vmid)
-	return False, f"{server.server_name} → {guest_display}: backup failed — {error_message}"
 
 
 def _record_bulk_backup_job(
 	server, client: PVEClient, node: str, task: dict, upid: str, backup_files: list[dict],
-) -> tuple[bool, str | None] | None:
+) -> None:
 	"""A vzdump task covering multiple guests at once (the common nightly-job case).
 
 	Once fully processed, a task is never re-fetched: any already-recorded
 	row with this upid's prefix is proof the whole log was parsed on a
 	previous cycle, so a large recurring bulk job only ever costs one
-	extra API call the first time it's seen.
-
-	Returns ``(succeeded, message)`` — every guest in the job succeeded and
-	the task's own overall status was OK, or not, with a message naming the
-	specific guest(s) that failed — or plain ``None`` if it was already
-	recorded / its log couldn't be fetched this cycle (try again next time).
+	extra API call the first time it's seen. A no-op if it was already
+	recorded, or if its log couldn't be fetched this cycle (try again next
+	time).
 	"""
 	if frappe.db.exists("Proxmox Backup Log", {"upid": ["like", f"{upid}#%"]}):
-		return None
+		return
 
 	try:
 		# limit=0 is Proxmox's own convention for "no limit" on this
@@ -714,7 +698,7 @@ def _record_bulk_backup_job(
 		# hundred log lines, well past any small fixed page size.
 		log_lines = client.get(f"/nodes/{node}/tasks/{upid}/log", params={"limit": 0})
 	except ProxmoxAPIError:
-		return None  # try again next cycle
+		return  # try again next cycle
 
 	joined = " ".join(line.get("t", "") for line in log_lines)
 	backup_source = "PBS Remote" if "Proxmox Backup Server archive" in joined else "Local Disk"
@@ -729,31 +713,6 @@ def _record_bulk_backup_job(
 			server, vmid, backup_source, status, backup_time, storage_target, error_message,
 			f"{upid}#{vmid}", size_gb, notes,
 		)
-
-	failed = [(vmid, error_message) for vmid, status, _, error_message, _ in entries if status != "Success"]
-	succeeded = not failed and task.get("status") == "OK"
-	if succeeded:
-		return True, None
-
-	if len(failed) == 1:
-		vmid, error_message = failed[0]
-		guest_display = _guest_display_name(server, vmid)
-		message = f"{server.server_name} → {guest_display}: backup failed — {error_message}"
-	elif failed:
-		# Several guests failed in the same job — naming all of them plus
-		# their individual errors would stop being a "simple" alert, so this
-		# names who's affected and points at the tab for the rest.
-		names = [_guest_display_name(server, vmid) for vmid, _ in failed]
-		shown, extra = names[:4], len(names) - 4
-		who = ", ".join(shown) + (f" and {extra} more" if extra > 0 else "")
-		message = f"{server.server_name}: backup failed for {who} — see Backups tab for details"
-	else:
-		# No per-guest failure was parsed out of the log, but the task's own
-		# overall status still wasn't OK — a job-level problem rather than
-		# any specific guest's.
-		message = f"{server.server_name}: backup task failed — see Backups tab for details"
-
-	return False, message
 
 
 _BACKUP_STARTED_AT_RE = re.compile(r"Backup started at (.+)")
@@ -855,9 +814,9 @@ def _create_backup_log(
 
 	Used by both the single-guest and bulk-job paths above so "what happens
 	when a backup is recorded" is implemented once. Purely historical
-	record-keeping for the Backups tab — critical-flagging and alerting for
-	backup failures happen once per *task* (see ``_handle_backup_task_result``),
-	not here per guest.
+	record-keeping for the Backups tab — critical-flagging and alerting is
+	decided separately, once per sync cycle, from this same table's history
+	(see ``_handle_backup_task_result``), not here per guest.
 	"""
 	guest_name = _match_guest_by_vmid(server, vmid)
 
@@ -928,21 +887,29 @@ def _bump_last_successful_backup(guest_name: str | None, backup_time: datetime) 
 		frappe.db.set_value("Proxmox Guest", guest_name, "last_successful_backup", backup_time)
 
 
-def _handle_backup_task_result(server, task_succeeded: bool, message: str | None = None) -> None:
-	"""Flag the server critical when a backup task fails, on a per-task
-	basis rather than per guest.
+#: A single failed vzdump task no longer flags anything on its own — with
+#: jobs running every 30-60 minutes, one guest's transient failure amid an
+#: otherwise-healthy schedule isn't an incident. Only a full day with zero
+#: successful backups anywhere on the host is.
+BACKUP_OVERDUE_HOURS = 24
 
-	Called once for every newly-processed vzdump task (single-guest or
-	bulk — see ``_sync_pve_backups``), never for one already recorded on an
-	earlier cycle, and once more if the host has never had a single vzdump
-	task at all (see the check right after ``_sync_pve_backups``'s loop).
-	``backup_critical`` is sticky: it only changes when a new task actually
-	completes (or the "never ran" state is (re)detected), so a failing job
-	stays flagged across cycles even though a failed task is never
-	reprocessed, and a later successful task clears it. Scoped to the
-	server rather than the individual guest(s) involved, since a single job
-	failing (e.g. the backup drive filling up) is a host-level incident,
-	not a per-VM one.
+
+def _handle_backup_task_result(server) -> None:
+	"""Flag the server critical only if no backup task anywhere on this
+	host has succeeded within ``BACKUP_OVERDUE_HOURS`` — not on any single
+	task's own pass/fail, which is still recorded in full on the Backups
+	tab regardless (see ``_create_backup_log``/``_sync_pve_backups``).
+
+	Called once per sync cycle, unconditionally — including cycles with no
+	new tasks at all — so a schedule that's quietly stopped producing tasks
+	altogether is caught the same as one whose tasks keep failing.
+	``backup_critical`` is sticky: it only changes when this evaluation's
+	result actually flips, so a genuinely overdue host stays flagged across
+	cycles until a new success is recorded, and clears the moment one is.
+	Scoped to the server rather than any individual guest, since "nothing
+	has backed up successfully in a day" (e.g. the backup drive filling up,
+	or the schedule itself broken) is a host-level incident, not a per-VM
+	one.
 
 	Sets ``server.backup_critical`` as a plain in-memory attribute rather
 	than writing it straight to the database: this runs from inside
@@ -955,14 +922,19 @@ def _handle_backup_task_result(server, task_succeeded: bool, message: str | None
 	no backup tasks at all, since until then a same-cycle collision was
 	rare enough (only ever-so-often a new task) to not have been noticed.
 	"""
+	cutoff = add_to_date(now_datetime(), hours=-BACKUP_OVERDUE_HOURS)
+	last_success = frappe.db.get_value(
+		"Proxmox Backup Log", {"server": server.name, "status": "Success"}, [{"MAX": "backup_time"}]
+	)
+	is_critical_now = not last_success or get_datetime(last_success) < cutoff
 	was_critical = cint(server.backup_critical)
-	is_critical_now = not task_succeeded
 	server.backup_critical = 1 if is_critical_now else 0
 
 	if is_critical_now and not was_critical:
+		detail = f"last successful backup was {last_success}" if last_success else "no successful backup has ever been recorded"
 		dispatch_alert(
 			"Backup Failure", "Proxmox Server", server.name,
-			message or f"{server.server_name}: backup task failed — see Backups tab for details",
+			f"{server.server_name}: no successful backup in over {BACKUP_OVERDUE_HOURS}h ({detail}) — see Backups tab for details",
 		)
 	elif was_critical and not is_critical_now:
 		resolve_alert("Proxmox Server", server.name, "Backup Failure")
@@ -999,16 +971,6 @@ def _match_guest_by_vmid(server, vmid: int | None) -> str | None:
 	if vmid is None:
 		return None
 	return frappe.db.get_value("Proxmox Guest", {"server": server.name, "vmid": vmid})
-
-
-def _guest_display_name(server, vmid: int) -> str:
-	"""Human-readable guest identifier for alert messages — the actual
-	Proxmox-reported name/hostname where we have a matching Guest record,
-	falling back to a bare VMID for one we don't (not yet synced, or
-	already removed since this backup ran).
-	"""
-	guest_name = frappe.db.get_value("Proxmox Guest", {"server": server.name, "vmid": vmid}, "guest_name")
-	return guest_name or f"VMID {vmid}"
 
 
 # ---------------------------------------------------------------------------

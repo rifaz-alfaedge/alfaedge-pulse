@@ -29,7 +29,8 @@
    "label": "Server",
    "options": "Proxmox Server",
    "read_only": 1,
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "description": "Kept even if the guest is later removed from Proxmox Guest, so backup history for decommissioned guests isn't lost.",
@@ -66,7 +67,8 @@
    "label": "Status",
    "options": "Success\nFailed\nRunning",
    "read_only": 1,
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "column_break_details",
@@ -77,7 +79,8 @@
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Backup Time",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "size",

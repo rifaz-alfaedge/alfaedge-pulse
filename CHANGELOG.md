@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## [4.1.0] - 2026-09-05
+
+### Changed
+- **Backup Failure alerts now judged over a rolling 24-hour window,
+  not per task.** With backup jobs running every 30-60 minutes, flagging
+  critical on any single failed vzdump task (one guest locked, one
+  transient error) fired constantly even though the fleet was still
+  being backed up fine overall. `_handle_backup_task_result` now checks
+  whether *any* task has succeeded anywhere on the host within the last
+  24 hours; only a genuine day-long gap with zero successes marks the
+  server critical and sends one alert, which clears the moment a new
+  success is recorded. Every task's own outcome is still recorded in
+  full on the Backups tab regardless — this only changes what triggers
+  an alert. Added a search index on `Proxmox Backup Log`'s `server`,
+  `status`, and `backup_time` fields, since this check now runs on every
+  poll cycle for every server.
+
 ## [4.0.0] - 2026-09-02
 
 ### Changed
