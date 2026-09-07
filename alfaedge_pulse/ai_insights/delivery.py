@@ -22,12 +22,22 @@ from alfaedge_pulse.alerts.dispatch import _resolve_whatsapp_template, _send_wha
 
 
 def send_email_report(settings, subject: str, report_text: str) -> bool:
-	"""Sends the full report text verbatim as the email body."""
+	"""Sends the full report text as the email body, rendered from
+	Markdown to real HTML (as_markdown=True) rather than passed through
+	verbatim — report_text is Markdown (## headers, - bullets, **bold**,
+	see the prompt templates in proxmox_report.py/host_health_report.py),
+	and without this flag frappe.sendmail drops it straight into its HTML
+	email template as plain text: every email client then collapses the
+	raw \\n line breaks per normal HTML whitespace rules, so the whole
+	report reads as one unbroken paragraph. as_markdown=True runs it
+	through Frappe's own md_to_html() first, giving real headers,
+	paragraph breaks, and bullet lists in the rendered email.
+	"""
 	recipients = [r.strip() for r in (settings.email_recipients or "").split(",") if r.strip()]
 	if not recipients:
 		return False
 	try:
-		frappe.sendmail(recipients=recipients, subject=subject, message=report_text, now=True)
+		frappe.sendmail(recipients=recipients, subject=subject, message=report_text, as_markdown=True, now=True)
 		return True
 	except Exception:
 		frappe.log_error(title="AI Insights: report email failed", message=frappe.get_traceback())
