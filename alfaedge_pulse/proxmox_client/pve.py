@@ -98,6 +98,24 @@ class PVEClient(BaseProxmoxClient):
 		"""All storage pools visible to this node, e.g. the OS/backup drive and the LVM-Thin guest pool."""
 		return self.get(f"/nodes/{node}/storage")
 
+	def get_node_rrddata(self, node: str, timeframe: str = "week", cf: str = "MAX") -> list[dict]:
+		"""Proxmox's own built-in historical CPU/RAM/swap/disk samples for
+		this host — used for the one-time Resource History backfill
+		(alfaedge_pulse.proxmox_resource_history.backfill), not the live
+		poller. ``cf="MAX"`` (rather than Proxmox's default "AVERAGE")
+		deliberately favors catching a spike over a smoothed trend, since
+		that's the whole point of the backfill.
+		"""
+		return self.get(f"/nodes/{node}/rrddata", params={"timeframe": timeframe, "cf": cf})
+
+	def get_qemu_rrddata(self, node: str, vmid: int, timeframe: str = "week", cf: str = "MAX") -> list[dict]:
+		"""Proxmox's own built-in historical CPU/RAM/disk samples for one QEMU VM."""
+		return self.get(f"/nodes/{node}/qemu/{vmid}/rrddata", params={"timeframe": timeframe, "cf": cf})
+
+	def get_lxc_rrddata(self, node: str, vmid: int, timeframe: str = "week", cf: str = "MAX") -> list[dict]:
+		"""Proxmox's own built-in historical CPU/RAM/disk samples for one LXC container."""
+		return self.get(f"/nodes/{node}/lxc/{vmid}/rrddata", params={"timeframe": timeframe, "cf": cf})
+
 	def list_vzdump_tasks(self, node: str, limit: int = 50) -> list[dict]:
 		"""Recent local-backup (vzdump) task results for this node.
 

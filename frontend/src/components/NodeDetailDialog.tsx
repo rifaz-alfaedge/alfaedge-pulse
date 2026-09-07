@@ -1,9 +1,25 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Dialog } from '@rtcamp/frappe-ui-react'
+import { useGuestMetricHistory, useHostMetricHistory } from '../lib/hooks'
 import type { ProxmoxAlertLog, ProxmoxBackupLog, ProxmoxDatastore, ProxmoxGuest, ProxmoxServer } from '../lib/types'
 import { formatGB, formatPercent, formatUptime, timeAgo } from '../lib/format'
 import { StatusBadge } from './StatusBadge'
+import { TrendChart } from './TrendChart'
 import { UsageBar } from './UsageBar'
+
+/** Resource History trend-chart window presets, in minutes — same shape as
+ * Host Health's own TREND_RANGE_OPTIONS (HostHealthPanel.tsx), duplicated
+ * rather than shared since the two panels' natural windows differ slightly
+ * (this data is sampled once a minute by default, not pushed every ~20-30s
+ * by an agent, so there's no reason to keep them coupled). */
+const RESOURCE_HISTORY_RANGE_OPTIONS: { label: string; minutes: number }[] = [
+  { label: '1h', minutes: 60 },
+  { label: '6h', minutes: 360 },
+  { label: '24h', minutes: 1440 },
+  { label: '7d', minutes: 10080 },
+]
+
+const formatChartPercent = (v: number) => `${Math.round(v)}%`
 
 export type SelectedNode =
   | { kind: 'host' | 'pbs'; doc: ProxmoxServer }
@@ -52,6 +68,12 @@ export function NodeDetailDialog({
           <HostDetail server={selected.doc as ProxmoxServer} datastores={datastores.filter((d) => d.server === selected.doc.name)} />
         ) : (
           <GuestDetail guest={selected.doc as ProxmoxGuest} />
+        )}
+
+        {isServer ? (
+          <HostResourceHistory serverName={selected.doc.name} />
+        ) : (
+          <GuestResourceHistory guestName={selected.doc.name} guestType={(selected.doc as ProxmoxGuest).guest_type} />
         )}
 
         <section>
@@ -110,6 +132,102 @@ export function NodeDetailDialog({
         )}
       </div>
     </Dialog>
+  )
+}
+
+/** Range-preset strip + trend chart, shared shell for both the host and
+ * guest variants below — only the data hook and series list differ. */
+function ResourceHistoryChart({
+  x,
+  series,
+  emptyLabel,
+}: {
+  x: number[]
+  series: { label: string; data: (number | null)[]; colorVar: string }[]
+  emptyLabel: string
+}) {
+  return (
+    <div className="rounded-xl border border-gridline p-3">
+      {x.length === 0 ? (
+        <p className="py-6 text-center text-sm text-ink-muted">{emptyLabel}</p>
+      ) : (
+        <TrendChart x={x} series={series} valueFormatter={formatChartPercent} />
+      )}
+    </div>
+  )
+}
+
+function RangePicker({ rangeMinutes, onChange }: { rangeMinutes: number; onChange: (minutes: number) => void }) {
+  return (
+    <div className="flex items-center rounded-lg border border-border-hairline p-0.5 text-xs">
+      {RESOURCE_HISTORY_RANGE_OPTIONS.map(({ label, minutes }) => (
+        <button
+          key={minutes}
+          type="button"
+          onClick={() => onChange(minutes)}
+          className={`rounded-md px-2 py-1 transition-colors ${
+            rangeMinutes === minutes ? 'bg-accent text-white' : 'text-ink-secondary hover:bg-ink-primary/5'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function HostResourceHistory({ serverName }: { serverName: string }) {
+  const [rangeMinutes, setRangeMinutes] = useState(360)
+  const { data } = useHostMetricHistory(serverName, rangeMinutes)
+  const history = data ?? []
+  const x = history.map((h) => Math.floor(new Date(h.collected_at.replace(' ', 'T')).getTime() / 1000))
+
+  return (
+    <section>
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-3">
+        <h4 className="text-xs font-semibold uppercase tracking-widest text-ink-muted">Resource History</h4>
+        <RangePicker rangeMinutes={rangeMinutes} onChange={setRangeMinutes} />
+      </div>
+      <ResourceHistoryChart
+        x={x}
+        emptyLabel="No history yet for this window."
+        series={[
+          { label: 'CPU', data: history.map((h) => h.cpu_usage), colorVar: '--color-accent' },
+          { label: 'Memory', data: history.map((h) => h.memory_usage), colorVar: '--color-status-warning' },
+          { label: 'Swap', data: history.map((h) => h.swap_usage ?? null), colorVar: '--color-status-critical' },
+        ]}
+      />
+    </section>
+  )
+}
+
+function GuestResourceHistory({ guestName, guestType }: { guestName: string; guestType: ProxmoxGuest['guest_type'] }) {
+  const [rangeMinutes, setRangeMinutes] = useState(360)
+  const { data } = useGuestMetricHistory(guestName, rangeMinutes)
+  const history = data ?? []
+  const x = history.map((h) => Math.floor(new Date(h.collected_at.replace(' ', 'T')).getTime() / 1000))
+  // Swap is only ever meaningful for LXC containers with a per-container
+  // swap cap configured — always null for QEMU, and often null for LXC
+  // too if no cap is set (see ProxmoxGuestMetricLog's own field
+  // description). Only add the series at all for LXC, so a QEMU guest's
+  // chart isn't cluttered with a line that can never be anything but "—".
+  const series = [
+    { label: 'CPU', data: history.map((h) => h.cpu_usage), colorVar: '--color-accent' },
+    { label: 'Memory', data: history.map((h) => h.memory_usage), colorVar: '--color-status-warning' },
+    { label: 'Disk', data: history.map((h) => h.disk_usage ?? null), colorVar: '--color-status-serious' },
+    ...(guestType === 'LXC (CT)'
+      ? [{ label: 'Swap', data: history.map((h) => h.swap_usage_percent ?? null), colorVar: '--color-status-critical' }]
+      : []),
+  ]
+
+  return (
+    <section>
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-3">
+        <h4 className="text-xs font-semibold uppercase tracking-widest text-ink-muted">Resource History</h4>
+        <RangePicker rangeMinutes={rangeMinutes} onChange={setRangeMinutes} />
+      </div>
+      <ResourceHistoryChart x={x} series={series} emptyLabel="No history yet for this window." />
+    </section>
   )
 }
 

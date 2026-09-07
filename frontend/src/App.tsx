@@ -21,6 +21,7 @@ import { buildConsoleUrl } from './lib/consoleUrl'
 import { BackupsPanel } from './components/BackupsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
 import { AiUsagePanel } from './components/AiUsagePanel'
+import { AiInsightsPanel } from './components/AiInsightsPanel'
 import { UptimePanel } from './components/UptimePanel'
 import { HostHealthPanel } from './components/HostHealthPanel'
 import { HeartbeatDot } from './components/HeartbeatDot'
@@ -40,8 +41,9 @@ function driveLabel(d: ProxmoxDatastore): string {
 
 // Host Health and Uptime always lead — the two "is anything actively
 // wrong right now" tabs — followed by AI Usage, the renamed Overview
-// ("Usage Metrics"), Backups, and Alerts last.
-const MAIN_TABS = ['Host Health', 'Uptime', 'AI Usage', 'Usage Metrics', 'Backups', 'Alerts'] as const
+// ("Usage Metrics"), Backups, Alerts, and AI Insights last (a weekly-
+// cadence tab, the lowest-traffic one here).
+const MAIN_TABS = ['Host Health', 'Uptime', 'AI Usage', 'Usage Metrics', 'Backups', 'Alerts', 'AI Insights'] as const
 const DEFAULT_WARNING_THRESHOLD = 85
 const DEFAULT_CRITICAL_THRESHOLD = 95
 const DEFAULT_POLL_SECONDS = 20
@@ -434,6 +436,7 @@ function App() {
       {mainTab === 'Backups' && <BackupsPanel backupLogs={activeBackupLogs} guests={allGuests} servers={allServers} />}
       {mainTab === 'Alerts' && <AlertsPanel alertLogs={allAlertLogs} />}
       {mainTab === 'AI Usage' && <AiUsagePanel />}
+      {mainTab === 'AI Insights' && <AiInsightsPanel />}
       {mainTab === 'Uptime' && <UptimePanel />}
       {mainTab === 'Host Health' && <HostHealthPanel />}
 

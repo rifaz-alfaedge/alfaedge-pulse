@@ -1,0 +1,150 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-06 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "report_type",
+  "role",
+  "period_start",
+  "period_end",
+  "generated_at",
+  "status",
+  "column_break_header",
+  "model_used",
+  "sent_email",
+  "sent_whatsapp",
+  "summary",
+  "report_text",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "report_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Report Type",
+   "options": "Proxmox Fleet\nHost Health",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.report_type=='Proxmox Fleet'",
+   "description": "Which Proxmox Server.role segment this report covers — reports are generated separately per role (Production, Development, Staging, ...) rather than blended into one, so a Production issue is never buried under Development noise. \"Unassigned\" covers any enabled server with no role set. Not applicable to Host Health reports (blank).",
+   "fieldname": "role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Role",
+   "options": "\nProduction\nDevelopment\nStaging\nBackup\nUnassigned"
+  },
+  {
+   "description": "Start of the 7-day window this report analyzed.",
+   "fieldname": "period_start",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Period Start",
+   "reqd": 1
+  },
+  {
+   "fieldname": "period_end",
+   "fieldtype": "Datetime",
+   "label": "Period End",
+   "reqd": 1
+  },
+  {
+   "fieldname": "generated_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Generated At",
+   "reqd": 1
+  },
+  {
+   "default": "Success",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Success\nFailed",
+   "reqd": 1
+  },
+  { "fieldname": "column_break_header", "fieldtype": "Column Break" },
+  {
+   "description": "The Bifrost model used to generate this report — informational only; actual cost/tokens are tracked in LLM Usage Log once Bifrost's own sync cycle picks up this call.",
+   "fieldname": "model_used",
+   "fieldtype": "Data",
+   "label": "Model Used"
+  },
+  { "default": "0", "fieldname": "sent_email", "fieldtype": "Check", "label": "Sent via Email", "read_only": 1 },
+  { "default": "0", "fieldname": "sent_whatsapp", "fieldtype": "Check", "label": "Sent via WhatsApp", "read_only": 1 },
+  {
+   "description": "One-line takeaway — the only content that goes into the WhatsApp message (Meta template body variable), and shown in the dashboard's report list without opening the full report.",
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary"
+  },
+  {
+   "description": "Full itemized report (Markdown) — Executive Summary, Right-Sizing Suggestions, Recurring Issues, Action Items. Sent verbatim as the email body and rendered in the dashboard's report detail view.",
+   "fieldname": "report_text",
+   "fieldtype": "Long Text",
+   "label": "Report"
+  },
+  {
+   "depends_on": "eval:doc.status=='Failed'",
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error"
+  }
+ ],
+ "icon": "fa fa-lightbulb-o",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AI Insights",
+ "name": "Weekly AI Report",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "generated_at",
+ "sort_order": "DESC",
+ "states": []
+}

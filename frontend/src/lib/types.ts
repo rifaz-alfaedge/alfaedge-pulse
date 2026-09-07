@@ -21,6 +21,7 @@ export interface ProxmoxServer {
   is_critical: 0 | 1
   backup_critical?: 0 | 1
   cpu_usage?: number
+  cores?: number
   memory_usage?: number
   memory_total?: number
   swap_usage?: number | null
@@ -47,6 +48,7 @@ export interface ProxmoxGuest {
   is_critical: 0 | 1
   is_warning?: 0 | 1
   cpu_usage?: number
+  cpus?: number
   memory_usage?: number
   memory_total?: number
   disk_usage?: number | null
@@ -60,6 +62,33 @@ export interface ProxmoxGuest {
   access_url?: string
   assigned_engineer?: string
   tags?: string
+}
+
+export type MetricSource = 'Live Poll' | 'RRD Backfill'
+
+export interface ProxmoxHostMetricLog {
+  name: string
+  server: string
+  collected_at: string
+  source: MetricSource
+  cpu_usage: number
+  memory_usage: number
+  swap_usage?: number | null
+  storage_usage: number
+}
+
+export interface ProxmoxGuestMetricLog {
+  name: string
+  guest: string
+  server: string
+  vmid: number
+  guest_type: GuestType
+  collected_at: string
+  source: MetricSource
+  cpu_usage: number
+  memory_usage: number
+  disk_usage?: number | null
+  swap_usage_percent?: number | null
 }
 
 export type StorageRole = 'OS + Local Backup Drive' | 'Guest Storage (LVM-Thin)' | 'Other'
@@ -368,4 +397,28 @@ export interface HostMonitorSettings {
   failed_job_critical_threshold: number
   long_running_job_warning_threshold_seconds: number
   long_running_job_critical_threshold_seconds: number
+}
+
+export type WeeklyReportType = 'Proxmox Fleet' | 'Host Health'
+export type WeeklyReportStatus = 'Success' | 'Failed'
+
+export type ProxmoxServerRole = 'Production' | 'Development' | 'Staging' | 'Backup' | 'Unassigned'
+
+export interface WeeklyAIReport {
+  name: string
+  report_type: WeeklyReportType
+  /** Only set for report_type 'Proxmox Fleet' — reports are generated separately per
+   * Proxmox Server role rather than blended, so Production issues never get buried
+   * under Development noise. Blank for 'Host Health' reports (no role concept there). */
+  role?: ProxmoxServerRole
+  period_start: string
+  period_end: string
+  generated_at: string
+  status: WeeklyReportStatus
+  model_used?: string
+  sent_email?: 0 | 1
+  sent_whatsapp?: 0 | 1
+  summary?: string
+  report_text?: string
+  error?: string
 }

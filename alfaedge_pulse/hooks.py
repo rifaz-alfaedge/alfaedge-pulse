@@ -193,6 +193,15 @@ scheduler_events = {
 		"0 7 * * *": ["alfaedge_pulse.alerts.digest.send_health_digest_morning"],
 		"0 13 * * *": ["alfaedge_pulse.alerts.digest.send_health_digest_midday"],
 		"0 20 * * *": ["alfaedge_pulse.alerts.digest.send_health_digest_evening"],
+		# Weekly AI-generated reports — deliberately two separate cron
+		# entries (not Frappe's generic "weekly" scheduler key, which only
+		# fires Sunday midnight with no way to pick a different day/time)
+		# rather than one combined job, since the user wants Proxmox Fleet
+		# and Host Health analyzed and reported completely independently.
+		# Staggered 30 minutes apart so the two LLM calls don't fire at the
+		# exact same instant.
+		"0 8 * * 1": ["alfaedge_pulse.ai_insights.proxmox_report.generate_weekly_report"],
+		"30 8 * * 1": ["alfaedge_pulse.ai_insights.host_health_report.generate_weekly_report"],
 	},
 	"daily": [
 		# Caps Uptime Check Log's growth — see the function's own docstring
@@ -202,6 +211,9 @@ scheduler_events = {
 		# Same reasoning, applied to Resource Metric Log/Resource Disk
 		# Sample — see the function's own docstring.
 		"alfaedge_pulse.tasks.resource_monitor.purge_old_resource_logs",
+		# Same reasoning again, applied to Proxmox Host/Guest Metric Log —
+		# see the function's own docstring.
+		"alfaedge_pulse.proxmox_resource_history.retention.purge_old_resource_history",
 	],
 }
 

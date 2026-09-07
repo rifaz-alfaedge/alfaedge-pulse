@@ -19,6 +19,7 @@
   "critical_streak",
   "column_break_resources",
   "cpu_usage",
+  "cpus",
   "memory_usage",
   "memory_total",
   "disk_usage",
@@ -133,6 +134,14 @@
    "fieldname": "cpu_usage",
    "fieldtype": "Percent",
    "label": "CPU Usage",
+   "read_only": 1
+  },
+  {
+   "description": "Allocated vCPU count, from Proxmox's own /nodes/{node}/qemu and /nodes/{node}/lxc summary responses (\"cpus\") — already fetched every poll cycle, just captured now. Used by the weekly AI report for CPU right-sizing context.",
+   "fieldname": "cpus",
+   "fieldtype": "Int",
+   "label": "vCPUs",
+   "non_negative": 1,
    "read_only": 1
   },
   {

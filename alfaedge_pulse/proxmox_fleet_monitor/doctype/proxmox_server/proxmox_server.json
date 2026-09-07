@@ -26,6 +26,7 @@
   "console_password",
   "sync_actions_section",
   "sync_now",
+  "backfill_resource_history",
   "status_section",
   "status",
   "is_critical",
@@ -34,6 +35,7 @@
   "critical_streak",
   "column_break_status",
   "cpu_usage",
+  "cores",
   "memory_usage",
   "memory_total",
   "swap_usage",
@@ -174,6 +176,12 @@
    "label": "Test Connection & Sync Now"
   },
   {
+   "description": "One-time import of Proxmox's own built-in RRD history (last ~week, at Proxmox's native resolution) into Proxmox Host/Guest Metric Log — gives immediate historical context for a spike that already happened, instead of only capturing new ones going forward. Safe to re-run; existing rows aren't duplicated.",
+   "fieldname": "backfill_resource_history",
+   "fieldtype": "Button",
+   "label": "Backfill Resource History (RRD)"
+  },
+  {
    "fieldname": "status_section",
    "fieldtype": "Section Break",
    "label": "Live Status (updated automatically by the poller)"
@@ -233,6 +241,14 @@
    "fieldname": "cpu_usage",
    "fieldtype": "Percent",
    "label": "CPU Usage",
+   "read_only": 1
+  },
+  {
+   "description": "Physical CPU core count, from /nodes/{node}/status' cpuinfo.cores — already fetched every poll cycle, just captured now. Used by the weekly AI report for CPU right-sizing context; not itself part of Is Critical/Is Warning.",
+   "fieldname": "cores",
+   "fieldtype": "Int",
+   "label": "CPU Cores",
+   "non_negative": 1,
    "read_only": 1
   },
   {

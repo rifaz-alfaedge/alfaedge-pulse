@@ -43,6 +43,15 @@ class PBSClient(BaseProxmoxClient):
 		"""CPU/RAM/root-disk/uptime for the PBS host itself."""
 		return self.get(f"/nodes/{node}/status")
 
+	def get_node_rrddata(self, node: str, timeframe: str = "week", cf: str = "MAX") -> list[dict]:
+		"""Proxmox's own built-in historical CPU/RAM/swap/disk samples for
+		this PBS host — used for the one-time Resource History backfill
+		(alfaedge_pulse.proxmox_resource_history.backfill), not the live
+		poller. ``cf="MAX"`` (rather than the default "AVERAGE") deliberately
+		favors catching a spike over a smoothed trend.
+		"""
+		return self.get(f"/nodes/{node}/rrddata", params={"timeframe": timeframe, "cf": cf})
+
 	def list_datastores(self) -> list[dict]:
 		"""All datastores configured on this PBS instance, e.g. the Linode-backed one."""
 		return self.get("/admin/datastore")

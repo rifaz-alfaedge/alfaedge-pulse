@@ -1,0 +1,127 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-05 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "server",
+  "collected_at",
+  "source",
+  "column_break_host_metrics",
+  "cpu_usage",
+  "memory_usage",
+  "memory_used_gb",
+  "memory_total_gb",
+  "swap_section",
+  "swap_usage",
+  "swap_used_gb",
+  "swap_total_gb",
+  "column_break_swap",
+  "storage_usage",
+  "storage_used_gb",
+  "storage_total_gb"
+ ],
+ "fields": [
+  {
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Server",
+   "options": "Proxmox Server",
+   "reqd": 1
+  },
+  {
+   "description": "Genuine append-only history, server clock at ingest time — matches Proxmox Guest Metric Log and Host Health's Resource Metric Log convention. Only ever purged by purge_old_resource_history (Resource History Retention (days), on Proxmox Monitor Settings).",
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Collected At",
+   "reqd": 1
+  },
+  {
+   "default": "Live Poll",
+   "description": "Live Poll rows come from the ongoing background poller (one row per Resource History Sample Interval). RRD Backfill rows were imported once from Proxmox's own built-in RRD history, and are typically spaced much further apart — kept distinct so a chart doesn't misread the density change as a data gap.",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "Live Poll\nRRD Backfill",
+   "reqd": 1
+  },
+  { "fieldname": "column_break_host_metrics", "fieldtype": "Column Break" },
+  { "fieldname": "cpu_usage", "fieldtype": "Percent", "label": "CPU Usage", "reqd": 1 },
+  { "fieldname": "memory_usage", "fieldtype": "Percent", "label": "Memory Usage", "reqd": 1 },
+  { "fieldname": "memory_used_gb", "fieldtype": "Float", "label": "Memory Used (GB)", "reqd": 1 },
+  { "fieldname": "memory_total_gb", "fieldtype": "Float", "label": "Memory Total (GB)", "reqd": 1 },
+  { "fieldname": "swap_section", "fieldtype": "Section Break", "label": "Swap" },
+  {
+   "description": "Null (not 0%) when this host has no swap configured at all — same convention as Proxmox Server.swap_usage.",
+   "fieldname": "swap_usage",
+   "fieldtype": "Percent",
+   "label": "Swap Usage"
+  },
+  { "fieldname": "swap_used_gb", "fieldtype": "Float", "label": "Swap Used (GB)" },
+  { "fieldname": "swap_total_gb", "fieldtype": "Float", "label": "Swap Total (GB)" },
+  { "fieldname": "column_break_swap", "fieldtype": "Column Break" },
+  {
+   "description": "Root filesystem (Drive 1: OS + local backups) usage — informational, same caveat as Proxmox Server.storage_usage. Not the LVM-Thin guest pool (see Proxmox Datastore for that).",
+   "fieldname": "storage_usage",
+   "fieldtype": "Percent",
+   "label": "Root Disk Usage",
+   "reqd": 1
+  },
+  { "fieldname": "storage_used_gb", "fieldtype": "Float", "label": "Root Disk Used (GB)", "reqd": 1 },
+  { "fieldname": "storage_total_gb", "fieldtype": "Float", "label": "Root Disk Total (GB)", "reqd": 1 }
+ ],
+ "icon": "fa fa-area-chart",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Proxmox Resource History",
+ "name": "Proxmox Host Metric Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "collected_at",
+ "sort_order": "DESC",
+ "states": []
+}

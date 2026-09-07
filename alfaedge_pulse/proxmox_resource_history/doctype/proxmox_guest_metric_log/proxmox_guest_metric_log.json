@@ -1,0 +1,151 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-05 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "guest",
+  "server",
+  "vmid",
+  "guest_type",
+  "collected_at",
+  "source",
+  "column_break_guest_metrics",
+  "cpu_usage",
+  "memory_usage",
+  "memory_used_gb",
+  "memory_total_gb",
+  "disk_usage",
+  "swap_section",
+  "swap_usage_percent",
+  "swap_used_gb",
+  "swap_total_gb"
+ ],
+ "fields": [
+  {
+   "fieldname": "guest",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Guest",
+   "options": "Proxmox Guest",
+   "reqd": 1
+  },
+  {
+   "description": "Denormalized from Guest — lets a direct history query filter without a join, same rationale as Resource Disk Sample.monitored_host.",
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Server",
+   "options": "Proxmox Server",
+   "reqd": 1
+  },
+  {
+   "description": "Denormalized from Guest — keeps history queryable by VMID even after Proxmox stops reporting the guest and the live Proxmox Guest row is auto-deleted.",
+   "fieldname": "vmid",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "VMID",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "guest_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Guest Type",
+   "options": "QEMU (VM)\nLXC (CT)",
+   "reqd": 1
+  },
+  {
+   "description": "Genuine append-only history, server clock at ingest time. Only ever purged by purge_old_resource_history (Resource History Retention (days), on Proxmox Monitor Settings).",
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Collected At",
+   "reqd": 1
+  },
+  {
+   "default": "Live Poll",
+   "description": "Live Poll rows come from the ongoing background poller (one row per Resource History Sample Interval). RRD Backfill rows were imported once from Proxmox's own built-in RRD history, and are typically spaced much further apart — kept distinct so a chart doesn't misread the density change as a data gap.",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "Live Poll\nRRD Backfill",
+   "reqd": 1
+  },
+  { "fieldname": "column_break_guest_metrics", "fieldtype": "Column Break" },
+  { "fieldname": "cpu_usage", "fieldtype": "Percent", "label": "CPU Usage", "reqd": 1 },
+  { "fieldname": "memory_usage", "fieldtype": "Percent", "label": "Memory Usage", "reqd": 1 },
+  { "fieldname": "memory_used_gb", "fieldtype": "Float", "label": "Memory Used (GB)", "reqd": 1 },
+  { "fieldname": "memory_total_gb", "fieldtype": "Float", "label": "Memory Total (GB)", "reqd": 1 },
+  {
+   "description": "QEMU: only when the guest agent responded (best-effort — Proxmox can't see inside a VM's filesystem without it). LXC: real value whenever Proxmox reports a disk size for the container.",
+   "fieldname": "disk_usage",
+   "fieldtype": "Percent",
+   "label": "Disk Usage"
+  },
+  { "fieldname": "swap_section", "fieldtype": "Section Break", "label": "Swap (LXC only)" },
+  {
+   "description": "LXC containers report real cgroup swap usage, which genuinely draws on host swap. Always null for QEMU VMs — Proxmox's API has no way to read swap inside a VM without invasive guest-agent command execution, which this app deliberately doesn't do.",
+   "fieldname": "swap_usage_percent",
+   "fieldtype": "Percent",
+   "label": "Swap Usage"
+  },
+  { "fieldname": "swap_used_gb", "fieldtype": "Float", "label": "Swap Used (GB)" },
+  { "fieldname": "swap_total_gb", "fieldtype": "Float", "label": "Swap Total (GB)" }
+ ],
+ "icon": "fa fa-area-chart",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Proxmox Resource History",
+ "name": "Proxmox Guest Metric Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "collected_at",
+ "sort_order": "DESC",
+ "states": []
+}

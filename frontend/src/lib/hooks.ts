@@ -15,6 +15,8 @@ import type {
   ProxmoxBackupLog,
   ProxmoxDatastore,
   ProxmoxGuest,
+  ProxmoxGuestMetricLog,
+  ProxmoxHostMetricLog,
   ProxmoxMonitorSettings,
   ProxmoxServer,
   ServiceStatusLog,
@@ -27,6 +29,7 @@ import type {
   UsageFilterOptions,
   UsageSummary,
   UsageTrendPoint,
+  WeeklyAIReport,
 } from './types'
 
 /** How often the dashboard itself re-fetches — deliberately faster than the
@@ -83,6 +86,75 @@ export function useDatastores() {
     { fields: DATASTORE_FIELDS, limit: 0 },
     undefined,
     { refreshInterval: UI_POLL_MS },
+  )
+}
+
+/** Minute-bucketed "since" datetime string for a `sinceMinutes` lookback
+ * window, memoized so it only changes once a minute rather than on every
+ * render — a raw `Date.now()` baked into a query's filters would make SWR
+ * see a "new" query on every single re-render (not just every poll tick),
+ * discarding cached data and flashing the UI back to its loading state
+ * (confirmed live: this is exactly what was causing Bench Health's numbers
+ * to flicker every few seconds before this existed). Local-time string,
+ * NOT `toISOString()` (UTC) — this app's datetimes are naive-local
+ * throughout (see lib/dateRange.ts's own note on the same convention),
+ * matching Frappe's `now_datetime()`, also naive-local. Shared by every
+ * "history within a window" hook (useHostMetricHistory,
+ * useGuestMetricHistory, useWorkerHealthHistory) — previously each
+ * redefined this same block independently. */
+function useMinuteBucketedSince(sinceMinutes: number): string {
+  const minuteBucket = Math.floor(Date.now() / 60_000)
+  return useMemo(() => {
+    const since = new Date(minuteBucket * 60_000 - sinceMinutes * 60_000)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${since.getFullYear()}-${pad(since.getMonth() + 1)}-${pad(since.getDate())} ${pad(since.getHours())}:${pad(since.getMinutes())}:${pad(since.getSeconds())}`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minuteBucket, sinceMinutes])
+}
+
+/** Full CPU/RAM/swap/disk history for exactly one Proxmox Server within a
+ * chosen window — same "scoped, not a shared fleet-wide cap" reasoning as
+ * useWorkerHealthHistory below. `sinceMinutes` is a fixed lookback (e.g.
+ * 360 = 6h). Refreshes on SLOW_POLL_MS since the backend only samples once
+ * per Resource History Sample Interval (60s by default) — polling faster
+ * than that just re-fetches identical rows. */
+export function useHostMetricHistory(server: string, sinceMinutes: number) {
+  const sinceStr = useMinuteBucketedSince(sinceMinutes)
+  return useFrappeGetDocList<ProxmoxHostMetricLog>(
+    'Proxmox Host Metric Log',
+    {
+      fields: ['name', 'collected_at', 'source', 'cpu_usage', 'memory_usage', 'swap_usage', 'storage_usage'],
+      filters: [
+        ['server', '=', server],
+        ['collected_at', '>=', sinceStr],
+      ],
+      limit: 0,
+      orderBy: { field: 'collected_at', order: 'asc' },
+    },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+}
+
+/** Same as useHostMetricHistory, for one Proxmox Guest. `swap_usage_percent`
+ * is only ever populated for LXC containers with a per-container swap cap
+ * configured — always null for QEMU VMs, and null for any LXC container
+ * without one (Proxmox has no API-visible per-guest swap otherwise). */
+export function useGuestMetricHistory(guest: string, sinceMinutes: number) {
+  const sinceStr = useMinuteBucketedSince(sinceMinutes)
+  return useFrappeGetDocList<ProxmoxGuestMetricLog>(
+    'Proxmox Guest Metric Log',
+    {
+      fields: ['name', 'collected_at', 'source', 'cpu_usage', 'memory_usage', 'disk_usage', 'swap_usage_percent'],
+      filters: [
+        ['guest', '=', guest],
+        ['collected_at', '>=', sinceStr],
+      ],
+      limit: 0,
+      orderBy: { field: 'collected_at', order: 'asc' },
+    },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
   )
 }
 
@@ -398,28 +470,7 @@ export function useFrappeWorkerHealthLogs(limit = 300) {
  * a shared window. `sinceMinutes` a fixed lookback (e.g. 360 = 6h); pass
  * an explicit `until` only for a custom/non-"now" range. */
 export function useWorkerHealthHistory(monitoredHost: string, benchName: string, sinceMinutes: number, until?: string) {
-  // Bucketed to the minute, and memoized, rather than computed fresh from
-  // Date.now() on every render: a raw Date.now() value changes by however
-  // many milliseconds elapsed between renders, which — since it's baked
-  // into the filters below — makes useFrappeGetDocList (SWR under the
-  // hood) see a "new" query on every single render, not just every poll
-  // tick, discarding cached data and flashing the whole stats row back to
-  // its loading state. Confirmed live: this is exactly what was causing
-  // Bench Health's numbers to flicker every few seconds. Recomputing once
-  // per minute keeps the filter value stable across the vastly more
-  // frequent re-renders this component goes through (its own poll tick,
-  // sibling state changes, etc.) while still sliding forward over time.
-  const minuteBucket = Math.floor(Date.now() / 60_000)
-  const sinceStr = useMemo(() => {
-    const since = new Date(minuteBucket * 60_000 - sinceMinutes * 60_000)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    // Local-time string, NOT toISOString() (which is UTC) — this app's
-    // datetimes are naive-local throughout (see lib/dateRange.ts's own
-    // note on the same convention), and `timestamp` here is stored via
-    // Frappe's now_datetime(), also naive-local.
-    return `${since.getFullYear()}-${pad(since.getMonth() + 1)}-${pad(since.getDate())} ${pad(since.getHours())}:${pad(since.getMinutes())}:${pad(since.getSeconds())}`
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minuteBucket, sinceMinutes])
+  const sinceStr = useMinuteBucketedSince(sinceMinutes)
   return useFrappeGetDocList<FrappeWorkerHealthLog>(
     'Frappe Worker Health Log',
     {
@@ -549,4 +600,25 @@ export function useAiRecentRequests(
     { refreshInterval: SLOW_POLL_MS },
   )
   return { ...result, data: result.data?.message }
+}
+
+/** Every weekly AI report (both Proxmox Fleet and Host Health, newest
+ * first) — a plain doctype list, no custom aggregation needed here since
+ * all the aggregation already happened server-side at generation time
+ * (see ai_insights/proxmox_report.py, .host_health_report.py). SLOW_POLL_MS
+ * since these are only ever produced once a week each. */
+export function useWeeklyAiReports() {
+  return useFrappeGetDocList<WeeklyAIReport>(
+    'Weekly AI Report',
+    {
+      fields: [
+        'name', 'report_type', 'role', 'period_start', 'period_end', 'generated_at',
+        'status', 'model_used', 'sent_email', 'sent_whatsapp', 'summary', 'error',
+      ],
+      limit: 0,
+      orderBy: { field: 'generated_at', order: 'desc' },
+    },
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
 }

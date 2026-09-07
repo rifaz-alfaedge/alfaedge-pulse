@@ -83,6 +83,7 @@ from alfaedge_pulse.alerts.dispatch import dispatch_alert, dispatch_recovery, ha
 from alfaedge_pulse.proxmox_client.base import ProxmoxAPIError
 from alfaedge_pulse.proxmox_client.pbs import PBSClient
 from alfaedge_pulse.proxmox_client.pve import PVEClient
+from alfaedge_pulse.proxmox_resource_history.collector import log_guest_metrics, log_host_metrics
 
 POLLER_JOB_ID = "alfaedge_pulse_poller"
 HEARTBEAT_CACHE_KEY = "alfaedge_pulse:poller_heartbeat"
@@ -325,6 +326,9 @@ def _apply_host_status(server, status: dict, thresholds: Thresholds) -> None:
 
 	server.status = "Online"
 	server.cpu_usage = cpu_usage
+	cores = (status.get("cpuinfo") or {}).get("cores")
+	if cores:
+		server.cores = cint(cores)
 	server.memory_usage = memory_usage
 	server.memory_total = round(flt(memory.get("total")) / 1e9, 2)
 	# Null (not 0%) when a host has no swap configured at all (seen on some
@@ -335,6 +339,8 @@ def _apply_host_status(server, status: dict, thresholds: Thresholds) -> None:
 	server.storage_usage = storage_usage
 	server.storage_total = round(flt(rootfs.get("total")) / 1e9, 2)
 	server.uptime = cint(status.get("uptime"))
+
+	log_host_metrics(server, status)  # interval-gated append to Proxmox Host Metric Log — no new API call
 
 	is_critical, is_warning = _track_severity(server, max(cpu_usage, memory_usage), thresholds)
 	server.is_critical = 1 if is_critical else 0
@@ -369,6 +375,13 @@ def _sync_pve_guests(server, client: PVEClient, node: str, thresholds: Threshold
 			server, vmid, vm.get("name") or f"vm-{vmid}", "QEMU (VM)", vm.get("status", "unknown"),
 			flt(vm.get("cpu")) * 100, flt(vm.get("mem")), flt(vm.get("maxmem")),
 			disk_usage, disk_total, cint(vm.get("uptime")), ip_address, thresholds, node,
+			cpus=cint(vm.get("cpus")) or None,
+		)
+		log_guest_metrics(
+			server, vmid, "QEMU (VM)",
+			cpu_pct=flt(vm.get("cpu")) * 100, mem_used=flt(vm.get("mem")), mem_total=flt(vm.get("maxmem")),
+			disk_pct=disk_usage,
+			swap_used=None, swap_total=None,  # QEMU: no cgroup swap available via the API
 		)
 
 	for ct in client.list_lxc(node):
@@ -384,6 +397,17 @@ def _sync_pve_guests(server, client: PVEClient, node: str, thresholds: Threshold
 			server, vmid, ct.get("name") or f"ct-{vmid}", "LXC (CT)", ct.get("status", "unknown"),
 			flt(ct.get("cpu")) * 100, flt(ct.get("mem")), flt(ct.get("maxmem")),
 			disk_usage, disk_total, cint(ct.get("uptime")), ip_address, thresholds, node,
+			cpus=cint(ct.get("cpus")) or None,
+		)
+		# LXC-only: real cgroup swap, genuinely consumes host swap — free
+		# from the same /nodes/{node}/lxc summary response, just unused
+		# until now.
+		log_guest_metrics(
+			server, vmid, "LXC (CT)",
+			cpu_pct=flt(ct.get("cpu")) * 100, mem_used=flt(ct.get("mem")), mem_total=flt(ct.get("maxmem")),
+			disk_pct=disk_usage,
+			swap_used=flt(ct.get("swap")) if ct.get("maxswap") else None,
+			swap_total=flt(ct.get("maxswap")) if ct.get("maxswap") else None,
 		)
 
 	# True auto-sync: a guest Proxmox no longer reports (deleted/migrated
@@ -400,7 +424,7 @@ def _upsert_guest(
 	server, vmid: int, guest_name: str, guest_type: str, status: str,
 	cpu_pct: float, mem_used: float, mem_total: float,
 	disk_pct: float | None, disk_total: float | None, uptime: int, ip_address: str | None, thresholds: Thresholds,
-	node: str,
+	node: str, cpus: int | None = None,
 ) -> None:
 	docname = f"{server.name}-{vmid}"
 	memory_usage = round((mem_used / mem_total) * 100, 1) if mem_total else 0
@@ -437,6 +461,8 @@ def _upsert_guest(
 	doc.node = node
 	doc.status = status
 	doc.cpu_usage = cpu_usage
+	if cpus:
+		doc.cpus = cpus
 	doc.memory_usage = memory_usage
 	doc.memory_total = memory_total_gb
 	doc.disk_usage = disk_pct

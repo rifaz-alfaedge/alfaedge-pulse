@@ -1,0 +1,167 @@
+{
+ "actions": [],
+ "creation": "2026-09-06 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "bifrost_section",
+  "enabled",
+  "virtual_key",
+  "column_break_bifrost",
+  "model",
+  "max_report_tokens",
+  "reports_section",
+  "proxmox_report_enabled",
+  "host_health_report_enabled",
+  "recipients_section",
+  "email_recipients",
+  "column_break_recipients",
+  "whatsapp_recipients",
+  "whatsapp_report_template",
+  "dashboard_report_url",
+  "actions_section",
+  "generate_proxmox_report_now",
+  "column_break_actions",
+  "generate_host_health_report_now"
+ ],
+ "fields": [
+  {
+   "fieldname": "bifrost_section",
+   "fieldtype": "Section Break",
+   "label": "Bifrost Connection"
+  },
+  {
+   "default": "0",
+   "description": "Master switch for both weekly reports below. Uses the same Bifrost instance configured in Bifrost Settings (base_url) but a separate credential — a virtual key, not the admin Basic Auth used there — since generating a report is an inference call, not a Management API read.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enable Weekly AI Reports"
+  },
+  {
+   "description": "A Bifrost virtual key scoped to whichever cheap model you want these reports to use. Created in your Bifrost dashboard, not in this app — Bifrost owns all provider credentials, same convention as Bifrost Settings.",
+   "fieldname": "virtual_key",
+   "fieldtype": "Password",
+   "label": "Bifrost Virtual Key"
+  },
+  { "fieldname": "column_break_bifrost", "fieldtype": "Column Break" },
+  {
+   "description": "The model name as configured behind that virtual key in Bifrost, e.g. gpt-4o-mini or claude-3-5-haiku. Sent as-is in the request body.",
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model"
+  },
+  {
+   "default": "2000",
+   "description": "Caps each report generation call's max_tokens — a cost control, not a quality setting. Raise it if reports come back visibly truncated.",
+   "fieldname": "max_report_tokens",
+   "fieldtype": "Int",
+   "label": "Max Report Tokens",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "reports_section",
+   "fieldtype": "Section Break",
+   "label": "Reports"
+  },
+  {
+   "default": "1",
+   "description": "Analyzes the last 7 days of Proxmox host/guest resource history, alerts, and backups — right-sizing suggestions, recurring issues, action items.",
+   "fieldname": "proxmox_report_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Proxmox Fleet Report"
+  },
+  {
+   "default": "1",
+   "description": "Analyzes the last 7 days of this bench's own Host Health data (worker/job/service health, disk-full forecasts) — a separate report from Proxmox Fleet, never blended.",
+   "fieldname": "host_health_report_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Host Health Report"
+  },
+  {
+   "fieldname": "recipients_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery"
+  },
+  {
+   "description": "Comma-separated list of email addresses. Gets the full itemized report.",
+   "fieldname": "email_recipients",
+   "fieldtype": "Small Text",
+   "label": "Email Recipients"
+  },
+  { "fieldname": "column_break_recipients", "fieldtype": "Column Break" },
+  {
+   "description": "Comma-separated list of WhatsApp numbers in international format. Gets only the one-line summary plus a link to the full report — see Summary on Weekly AI Report.",
+   "fieldname": "whatsapp_recipients",
+   "fieldtype": "Small Text",
+   "label": "WhatsApp Recipients"
+  },
+  {
+   "description": "A separate Meta-approved UTILITY template for this weekly-report message — distinct from Proxmox Monitor Settings' alert/recovery/digest templates since this one's body includes a link. Required for WhatsApp delivery; without it WhatsApp is skipped (email still sends).",
+   "fieldname": "whatsapp_report_template",
+   "fieldtype": "Data",
+   "label": "WhatsApp Report Template Name"
+  },
+  {
+   "description": "Base URL used to build the \"view full report\" link sent via WhatsApp, e.g. https://infra-dev.alfaedge.in — the report's own name is appended to it. Leave blank to omit the link (WhatsApp message becomes summary-only).",
+   "fieldname": "dashboard_report_url",
+   "fieldtype": "Data",
+   "label": "Dashboard Base URL"
+  },
+  {
+   "fieldname": "actions_section",
+   "fieldtype": "Section Break",
+   "label": "Actions"
+  },
+  {
+   "description": "Runs the analysis immediately, independent of Enable Weekly AI Reports / Enable Proxmox Fleet Report above — those only gate the automatic Monday schedule. Requires Bifrost Virtual Key and Model to be set.",
+   "fieldname": "generate_proxmox_report_now",
+   "fieldtype": "Button",
+   "label": "Generate Proxmox Fleet Report Now"
+  },
+  { "fieldname": "column_break_actions", "fieldtype": "Column Break" },
+  {
+   "description": "Same as the button on the left, for the Host Health report.",
+   "fieldname": "generate_host_health_report_now",
+   "fieldtype": "Button",
+   "label": "Generate Host Health Report Now"
+  }
+ ],
+ "icon": "fa fa-lightbulb-o",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AI Insights",
+ "name": "AI Insights Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

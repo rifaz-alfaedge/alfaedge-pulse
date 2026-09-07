@@ -26,6 +26,27 @@ class ProxmoxServer(Document):
 
 
 @frappe.whitelist()
+def backfill_resource_history(server_name: str) -> dict:
+	"""Whitelisted handler for the "Backfill Resource History (RRD)" button.
+
+	Thin pass-through to alfaedge_pulse.proxmox_resource_history.backfill —
+	kept as a wrapper here (rather than pointing the button's .js straight
+	at that module) so every Proxmox Server action is callable from one
+	place, matching sync_now below.
+
+	Args:
+		server_name: The ``Proxmox Server`` document name to backfill.
+
+	Returns:
+		A dict with ``ok`` (bool) and either ``message`` or ``error``, meant
+		to be shown directly to the user via ``frappe.msgprint``.
+	"""
+	from alfaedge_pulse.proxmox_resource_history.backfill import backfill_server
+
+	return backfill_server(server_name)
+
+
+@frappe.whitelist()
 def sync_now(server_name: str) -> dict:
 	"""Whitelisted handler for the "Test Connection & Sync Now" button.
 

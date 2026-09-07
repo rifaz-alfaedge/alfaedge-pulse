@@ -11,6 +11,11 @@
   "warning_threshold_percent",
   "critical_threshold_percent",
   "confirmation_checks",
+  "resource_history_section",
+  "resource_history_enabled",
+  "column_break_resource_history",
+  "resource_history_interval_seconds",
+  "resource_history_retention_days",
   "email_section",
   "enable_email_alerts",
   "email_recipients",
@@ -64,6 +69,38 @@
    "fieldname": "confirmation_checks",
    "fieldtype": "Int",
    "label": "Confirmation Checks",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "resource_history_section",
+   "fieldtype": "Section Break",
+   "label": "Resource History"
+  },
+  {
+   "default": "1",
+   "description": "Whether to append historical CPU/RAM/swap/disk samples for every host and guest to Proxmox Host Metric Log / Proxmox Guest Metric Log, for later root-cause analysis of resource spikes. Independent of live alerting — disabling this only stops history logging, alerts keep working.",
+   "fieldname": "resource_history_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Resource History Logging"
+  },
+  {
+   "fieldname": "column_break_resource_history",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "60",
+   "description": "Minimum seconds between two logged history samples for the same host or guest. Deliberately coarser than Poll Interval (seconds) above — the live poll loop can run every 5-20s for responsive alerting, but history doesn't need that resolution and would grow the log tables unnecessarily fast at that cadence.",
+   "fieldname": "resource_history_interval_seconds",
+   "fieldtype": "Int",
+   "label": "History Sample Interval (seconds)",
+   "non_negative": 1
+  },
+  {
+   "default": "30",
+   "description": "How long Proxmox Host Metric Log / Proxmox Guest Metric Log rows are kept before the daily purge job deletes them.",
+   "fieldname": "resource_history_retention_days",
+   "fieldtype": "Int",
+   "label": "History Retention (days)",
    "non_negative": 1
   },
   {
