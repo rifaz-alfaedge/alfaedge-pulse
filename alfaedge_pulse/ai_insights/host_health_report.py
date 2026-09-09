@@ -15,7 +15,7 @@ import frappe
 
 from alfaedge_pulse.ai_insights.orchestration import generate_weekly_report as _generate_weekly_report
 from alfaedge_pulse.ai_insights.orchestration import run_report
-from alfaedge_pulse.host_health.api import get_disk_forecasts
+from alfaedge_pulse.host_health.api import _parse_exc_message
 
 
 def _aggregate_worker_health(cutoff) -> list[dict]:
@@ -47,7 +47,8 @@ def _aggregate_failed_jobs(cutoff) -> list[dict]:
 	rows = frappe.get_all(
 		"Frappe Failed Job Log",
 		filters={"last_seen": [">=", cutoff]},
-		fields=["monitored_host", "bench_name", "job_name", "exc_type", "failure_signature", "resolved"],
+		fields=["monitored_host", "bench_name", "job_name", "exc_type", "exc_info", "failure_signature", "resolved"],
+		order_by="last_seen desc",
 		ignore_permissions=True,
 	)
 	groups: dict[str, list[dict]] = {}
@@ -57,6 +58,7 @@ def _aggregate_failed_jobs(cutoff) -> list[dict]:
 		{
 			"exc_type": occurrences[0]["exc_type"] or "Unknown error",
 			"job_name": occurrences[0]["job_name"] or "unknown method",
+			"message": _parse_exc_message(occurrences[0]["exc_info"]),
 			"hosts": sorted({o["monitored_host"] for o in occurrences}),
 			"occurrence_count": len(occurrences),
 			"still_open": any(not o["resolved"] for o in occurrences),
@@ -82,33 +84,33 @@ def build_host_health_weekly_data(cutoff) -> dict:
 		"worker_health_7d": _aggregate_worker_health(cutoff),
 		"failed_jobs_7d": _aggregate_failed_jobs(cutoff),
 		"services_currently_flapping": _aggregate_service_status(),
-		"disk_forecasts": get_disk_forecasts(None),
 	}
 
 
 def _build_prompt(data: dict, period_start, period_end) -> str:
-	return f"""You are a systems reliability analyst. Below is 7 days of aggregated Host \
+	return f"""You are a Frappe/Python debugging assistant. Below is 7 days of aggregated Host \
 Health monitoring data ({period_start} to {period_end}) for a Frappe bench's own servers — \
-background worker health, recurring failed jobs, flapping services, and disk-capacity \
-forecasts. Write a concise, plain-English report a busy administrator can act on directly. \
-Use exactly these four Markdown sections, in this order:
+background worker health, recurring failed jobs (with exception type and message), and \
+flapping services. Write a concise, plain-English report a busy administrator can act on \
+directly. Use exactly these three Markdown sections, in this order:
 
 ## Executive Summary
-2-4 sentences on overall bench health this week.
+2-4 sentences on overall bench stability this week — is it quiet, or is something recurring.
 
-## Right-Sizing Suggestions
-Anything the data suggests about capacity (e.g. a disk filling up within weeks, workers \
-consistently overloaded). If nothing stands out, say so plainly.
-
-## Recurring Issues
-Failed-job root causes or flapping services that happened more than once, with likely causes \
-if the data suggests one.
+## Recurring Errors & Recommended Fixes
+For each recurring failed-job error in the data, explain what is failing (job, exception type \
+and message), how often and on which hosts, and give a specific, actionable recommended fix — \
+a code/config change, a missing null check, a timeout to raise, a retry to add, an upstream \
+dependency to check, etc. Do the same for any flapping services, with a likely cause and fix \
+if the data suggests one. If nothing recurred, say so plainly.
 
 ## Action Items
 A short, prioritized checklist — the concrete next steps, most important first.
 
-Be specific and quantitative where the data supports it. Do not pad with generic advice not \
-grounded in the data below.
+Do NOT suggest CPU/RAM/disk resizing, scaling, or any capacity/resource-usage changes — that \
+is already covered by a separate Proxmox Fleet report. Stay focused on Frappe-level errors and \
+their fixes. Be specific and quantitative where the data supports it. Do not pad with generic \
+advice not grounded in the data below.
 
 DATA:
 {json.dumps(data, indent=2, default=str)}

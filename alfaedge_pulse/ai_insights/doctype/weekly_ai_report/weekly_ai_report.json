@@ -88,7 +88,7 @@
    "label": "Summary"
   },
   {
-   "description": "Full itemized report (Markdown) — Executive Summary, Right-Sizing Suggestions, Recurring Issues, Action Items. Sent verbatim as the email body and rendered in the dashboard's report detail view.",
+   "description": "Full itemized report (Markdown) — sections differ by report_type (Proxmox Fleet: Executive Summary, Right-Sizing Suggestions, Recurring Issues, Action Items; Host Health: Executive Summary, Recurring Errors & Recommended Fixes, Action Items). Sent verbatim as the email body and rendered in the dashboard's report detail view.",
    "fieldname": "report_text",
    "fieldtype": "Long Text",
    "label": "Report"
