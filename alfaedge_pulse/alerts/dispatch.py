@@ -45,6 +45,22 @@ DIGEST_ONLY_ALERT_TYPES = {
 	"Host Unreachable",
 }
 
+#: Host Health's resource-threshold alert types (load average, swap usage
+#: on a Monitored Host) — urgent enough that a multi-hour digest window
+#: (DIGEST_ONLY_ALERT_TYPES above) isn't appropriate, but several hosts
+#: commonly cross their threshold within the same minute or two (e.g. a
+#: shared Proxmox host under load), which without batching sends one
+#: WhatsApp/email per host. Routed into alerts/resource_batch.py's own
+#: short (every-2-minutes) batching job instead of DIGEST_ONLY's three
+#: fixed daily times. Kept as a separate set from DIGEST_ONLY_ALERT_TYPES
+#: so resource_batch.py's own window query never overlaps with
+#: alerts/digest.py's — each alert type is only ever swept by one of the
+#: two batching mechanisms.
+BATCHED_RESOURCE_ALERT_TYPES = {
+	"High Load Average",
+	"High Swap Usage",
+}
+
 
 def dispatch_alert(
 	alert_type: str, reference_doctype: str, reference_name: str, message: str, notify_global: bool = True
@@ -61,14 +77,15 @@ def dispatch_alert(
 			non-Production servers (see poller.py's _upsert_guest).
 			Individual Alert Subscriptions are notified either way.
 
-	Alert types in DIGEST_ONLY_ALERT_TYPES skip every channel below —
-	they're still recorded in Proxmox Alert Log exactly as before (dashboard
-	visibility and has_open_alert/resolve_alert bookkeeping are unaffected),
-	just picked up by the next scheduled digest instead of sent immediately.
+	Alert types in DIGEST_ONLY_ALERT_TYPES or BATCHED_RESOURCE_ALERT_TYPES
+	skip every channel below — they're still recorded in Proxmox Alert Log
+	exactly as before (dashboard visibility and has_open_alert/resolve_alert
+	bookkeeping are unaffected), just picked up by the next scheduled digest
+	or resource-alert batch instead of sent immediately.
 	"""
 	channels_sent = []
 
-	if alert_type not in DIGEST_ONLY_ALERT_TYPES:
+	if alert_type not in DIGEST_ONLY_ALERT_TYPES and alert_type not in BATCHED_RESOURCE_ALERT_TYPES:
 		settings = frappe.get_cached_doc("Proxmox Monitor Settings")
 		subscriptions = _get_matching_subscriptions(reference_doctype, reference_name)
 
@@ -132,13 +149,13 @@ def dispatch_recovery(
 
 	``notify_global`` mirrors dispatch_alert's — see there.
 
-	Alert types in DIGEST_ONLY_ALERT_TYPES skip every channel below, same
-	as dispatch_alert — still recorded in Proxmox Alert Log as a resolved
-	row, just not sent immediately.
+	Alert types in DIGEST_ONLY_ALERT_TYPES or BATCHED_RESOURCE_ALERT_TYPES
+	skip every channel below, same as dispatch_alert — still recorded in
+	Proxmox Alert Log as a resolved row, just not sent immediately.
 	"""
 	channels_sent = []
 
-	if alert_type not in DIGEST_ONLY_ALERT_TYPES:
+	if alert_type not in DIGEST_ONLY_ALERT_TYPES and alert_type not in BATCHED_RESOURCE_ALERT_TYPES:
 		settings = frappe.get_cached_doc("Proxmox Monitor Settings")
 		subscriptions = _get_matching_subscriptions(reference_doctype, reference_name)
 

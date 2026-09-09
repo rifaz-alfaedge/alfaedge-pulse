@@ -4,9 +4,13 @@
 """Three scheduled digests for Host Health's own alert types (see
 ``alerts/dispatch.py``'s ``DIGEST_ONLY_ALERT_TYPES``) — Service Down,
 Worker Degraded, Failed Job Threshold, Long Running Job, Scheduler
-Stalled, Host Unreachable. Every other alert type (Uptime, resource
-usage, backups, server-offline) is untouched by this module and keeps
-sending immediately through ``dispatch.py`` as before.
+Stalled, Host Unreachable. Every other alert type (Uptime, backups,
+server-offline, Proxmox guest resource usage) is untouched by this module
+and keeps sending immediately through ``dispatch.py`` as before — except
+two Host Health resource-threshold types (High Load Average, High Swap
+Usage), which are batched separately and much more frequently by
+``alerts/resource_batch.py`` (``BATCHED_RESOURCE_ALERT_TYPES``) rather
+than by this module's multi-hour windows.
 
 Wired to three fixed times in hooks.py's ``scheduler_events`` cron
 (07:00 / 13:00 / 20:00) — the hour boundaries below must match those

@@ -193,6 +193,13 @@ scheduler_events = {
 		"0 7 * * *": ["alfaedge_pulse.alerts.digest.send_health_digest_morning"],
 		"0 13 * * *": ["alfaedge_pulse.alerts.digest.send_health_digest_midday"],
 		"0 20 * * *": ["alfaedge_pulse.alerts.digest.send_health_digest_evening"],
+		# High Load Average / High Swap Usage (see alerts/dispatch.py's
+		# BATCHED_RESOURCE_ALERT_TYPES) also don't send immediately, but
+		# unlike the digest-only types above they're still urgent — batched
+		# on a short 2-minute window instead of a multi-hour one, so several
+		# hosts crossing threshold together (e.g. one loaded Proxmox host)
+		# land as one message rather than one per host.
+		"*/2 * * * *": ["alfaedge_pulse.alerts.resource_batch.send_resource_alert_batch"],
 		# Weekly AI-generated reports — deliberately two separate cron
 		# entries (not Frappe's generic "weekly" scheduler key, which only
 		# fires Sunday midnight with no way to pick a different day/time)
