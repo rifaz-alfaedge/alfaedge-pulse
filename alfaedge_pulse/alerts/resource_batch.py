@@ -79,8 +79,14 @@ def send_resource_alert_batch() -> None:
 	global_eligible: set[tuple] = set()
 	for key, occurrences in groups.items():
 		alert_type, reference_doctype, reference_name = key
+		# still_open reflects the *current* state, independent of which
+		# message (alert or recovery) happens to be newest in this window —
+		# a window that saw both an alert and its recovery must not read as
+		# "currently critical" just because occurrences[-1] is chronologically
+		# last; the explicit status label below is what actually disambiguates.
 		still_open = has_open_alert(reference_doctype, reference_name, alert_type)
-		count_suffix = f" ({len(occurrences)}x)" if len(occurrences) > 1 else ""
+		status_label = "still open" if still_open else "resolved"
+		count_suffix = f" ({len(occurrences)}x, {status_label})" if len(occurrences) > 1 else f" ({status_label})"
 		section_by_key[key] = f"{alert_type} — {reference_name}{count_suffix}: {occurrences[-1].message}"
 		if reference_doctype == "Monitored Host" and get_host_role(reference_name) == "Production":
 			global_eligible.add(key)
