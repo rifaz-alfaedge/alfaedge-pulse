@@ -209,6 +209,25 @@ function App() {
         datastores={allDatastores}
         warningThreshold={warningThreshold}
         criticalThreshold={criticalThreshold}
+        criticalCount={criticalCount}
+        offlineCount={offlineCount}
+        openAlertCount={openAlertCount}
+        criticalActive={mainTab === 'Usage Metrics' && criticalOnly}
+        offlineActive={mainTab === 'Usage Metrics' && offlineOnly}
+        openAlertsActive={mainTab === 'Alerts'}
+        onCriticalClick={() => {
+          setMainTab('Usage Metrics')
+          setServerFilter([])
+          setOfflineOnly(false)
+          setCriticalOnly((v) => !v)
+        }}
+        onOfflineClick={() => {
+          setMainTab('Usage Metrics')
+          setServerFilter([])
+          setCriticalOnly(false)
+          setOfflineOnly((v) => !v)
+        }}
+        onOpenAlertsClick={() => setMainTab('Alerts')}
       />
 
       <header className="mb-10 flex flex-wrap items-center justify-between gap-6 pt-10">
@@ -243,37 +262,6 @@ function App() {
               setMainTab('Usage Metrics')
               setServerFilter(next)
             }}
-          />
-          <SummaryStat
-            label="Critical"
-            value={criticalCount}
-            tone={criticalCount > 0 ? 'critical' : 'ok'}
-            active={mainTab === 'Usage Metrics' && criticalOnly}
-            onClick={() => {
-              setMainTab('Usage Metrics')
-              setServerFilter([])
-              setOfflineOnly(false)
-              setCriticalOnly((v) => !v)
-            }}
-          />
-          <SummaryStat
-            label="Offline"
-            value={offlineCount}
-            tone={offlineCount > 0 ? 'warning' : 'ok'}
-            active={mainTab === 'Usage Metrics' && offlineOnly}
-            onClick={() => {
-              setMainTab('Usage Metrics')
-              setServerFilter([])
-              setCriticalOnly(false)
-              setOfflineOnly((v) => !v)
-            }}
-          />
-          <SummaryStat
-            label="Open Alerts"
-            value={openAlertCount}
-            tone={openAlertCount > 0 ? 'warning' : 'ok'}
-            active={mainTab === 'Alerts'}
-            onClick={() => setMainTab('Alerts')}
           />
           <ThemeToggle />
         </div>
@@ -507,37 +495,6 @@ function filterAndSortGuests(
       || (b.is_critical - a.is_critical)
       || a.guest_name.localeCompare(b.guest_name),
     )
-}
-
-function SummaryStat({
-  label,
-  value,
-  tone,
-  active,
-  onClick,
-}: {
-  label: string
-  value: number
-  tone: 'critical' | 'warning' | 'ok'
-  active: boolean
-  onClick: () => void
-}) {
-  const toneClass =
-    tone === 'critical' ? 'text-status-critical' : tone === 'warning' ? 'text-status-warning' : 'text-ink-primary'
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      title={`Show ${label.toLowerCase()}`}
-      className={`min-w-[7rem] rounded-2xl border bg-surface-card px-5 py-3.5 text-center shadow-sm transition-shadow hover:shadow-md ${
-        active ? 'border-accent ring-2 ring-accent/40' : 'border-border-hairline'
-      }`}
-    >
-      <div className={`text-2xl font-semibold ${toneClass}`}>{value}</div>
-      <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</div>
-    </button>
-  )
 }
 
 function EmptyState({ message }: { message: string }) {
