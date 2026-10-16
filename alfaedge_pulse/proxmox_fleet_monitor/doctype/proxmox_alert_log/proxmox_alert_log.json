@@ -23,7 +23,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Alert Type",
-   "options": "Critical Resource\nResource Warning\nBackup Failure\nBackup Overdue\nServer Offline\nSite Down\nService Down\nWorker Degraded\nFailed Job Threshold\nLong Running Job\nScheduler Stalled\nHost Unreachable\nHigh Load Average\nHigh Swap Usage",
+   "options": "Critical Resource\nResource Warning\nBackup Failure\nBackup Overdue\nServer Offline\nSite Down\nService Down\nWorker Degraded\nFailed Job Threshold\nLong Running Job\nScheduler Stalled\nHost Unreachable\nHigh Load Average\nHigh Swap Usage\nRecurring Error",
    "read_only": 1,
    "reqd": 1
   },
@@ -81,7 +81,7 @@
  "icon": "fa fa-bell",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-06 11:16:25.155498",
+ "modified": "2026-10-16 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Proxmox Fleet Monitor",
  "name": "Proxmox Alert Log",

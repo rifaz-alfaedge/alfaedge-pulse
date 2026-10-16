@@ -59,6 +59,10 @@ DIGEST_ONLY_ALERT_TYPES = {
 BATCHED_RESOURCE_ALERT_TYPES = {
 	"High Load Average",
 	"High Swap Usage",
+	# Log Monitor (tasks/log_monitor.py) — a bad deploy commonly makes
+	# several distinct errors spike across sites at once; batching turns
+	# that into one message instead of one per error signature.
+	"Recurring Error",
 }
 
 
@@ -243,6 +247,17 @@ def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> 
 		# row's own monitored_host field to still match its per-service
 		# alerts.
 		monitored_host = frappe.db.get_value("Service Status Log", reference_name, "monitored_host")
+		if not monitored_host:
+			return []
+		rows = frappe.get_all(
+			"Alert Subscription Monitored Host", filters={"monitored_host": monitored_host}, fields=["parent"]
+		)
+	elif reference_doctype == "Recurring Error":
+		# A recurring error belongs to a site, and a site belongs to the
+		# Monitored Host that reports it (tasks/log_monitor.py resolves and
+		# stores that link) — so a subscriber watching the host also gets
+		# its sites' recurring errors.
+		monitored_host = frappe.db.get_value("Recurring Error", reference_name, "monitored_host")
 		if not monitored_host:
 			return []
 		rows = frappe.get_all(

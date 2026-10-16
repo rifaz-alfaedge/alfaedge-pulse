@@ -90,6 +90,10 @@ def send_resource_alert_batch() -> None:
 		section_by_key[key] = f"{alert_type} — {reference_name}{count_suffix}: {occurrences[-1].message}"
 		if reference_doctype == "Monitored Host" and get_host_role(reference_name) == "Production":
 			global_eligible.add(key)
+		elif reference_doctype == "Recurring Error":
+			# Log Monitor only ever ingests production sites' logs (that's
+			# what the server script ships), so always fleet-wide.
+			global_eligible.add(key)
 
 	settings = frappe.get_cached_doc("Proxmox Monitor Settings")
 	global_emails = _parse_recipient_list(settings.email_recipients) if settings.enable_email_alerts else []
@@ -127,10 +131,10 @@ def send_resource_alert_batch() -> None:
 			channels_by_key.setdefault(k, set()).add(channel)
 
 	def _send_email(recipients: list[str], keys: set) -> None:
-		body = f"{len(keys)} resource alert(s) in the last few minutes:\n\n{_ordered_sections(keys)}"
+		body = f"{len(keys)} alert(s) in the last few minutes:\n\n{_ordered_sections(keys)}"
 		try:
 			frappe.sendmail(
-				recipients=recipients, subject="alfaEdge Pulse — Resource Alert Summary", message=body, now=True
+				recipients=recipients, subject="alfaEdge Pulse — Alert Summary", message=body, now=True
 			)
 			_mark(keys, "Email")
 		except Exception:

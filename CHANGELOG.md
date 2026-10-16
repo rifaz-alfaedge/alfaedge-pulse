@@ -2,6 +2,50 @@
 
 All notable changes to this project are documented here.
 
+## [4.3.0] - 2026-10-16
+
+### Added
+- **Log Monitor (ClickHouse).** A new **Logs** tab for the Frappe Error
+  Logs that every production site's server script ships into ClickHouse.
+  The logs are queried live over ClickHouse's HTTP interface; none are
+  copied into MariaDB.
+  - Filter by **log type**, **site URL**, **date range**, and free-text
+    search, with summary tiles and an Errors-vs-General trend chart. A row
+    is **Error** when its content contains the configured keyword (default
+    `error`, case-insensitive), and **General** otherwise. The log table
+    is paginated, and clicking a row shows its full traceback with a copy
+    button.
+  - **Recurring Errors** groups the same error on the same site, with
+    occurrence counts and first/last seen times. Volatile tokens (numbers,
+    hashes, docnames, quoted values) are normalized first, so
+    "SINV-00123 not found" and "SINV-00456 not found" count as one error.
+    Clicking a group drills down to its individual occurrences.
+  - **Recurring-error alerts.** When the same error hits a site at least
+    *N* times within *M* minutes (default 5 in 60), a `Recurring Error`
+    alert goes out through the existing Email/WhatsApp channels, batched
+    with the 2-minute resource-alert batch. A recovery message follows once
+    the error drops back under the threshold. Each recurring error is
+    linked to the Monitored Host that reports its site, so an Alert
+    Subscription on that host also receives the host's site errors. Local
+    alert state lives in the new `Recurring Error` doctype.
+  - **`ClickHouse Log Settings`** can be edited both in Desk and in the
+    dashboard's Logs → Settings dialog. Every setting is configurable:
+    protocol, host, port, URL path, timeout, database, table, the column
+    mapping, the error keyword, and the alert thresholds. The username,
+    password, and optional reverse-proxy API key are encrypted Password
+    fields. They are never sent back to the browser, and the dialog treats
+    them as write-only.
+  - Security: every filter value is passed as a ClickHouse query parameter
+    rather than interpolated into the SQL. Identifiers are validated, and
+    requests run with `readonly=1`. A ClickHouse user whose profile is
+    already `readonly=1` rejects per-request settings, so the client
+    detects that and retries without them.
+
+### Changed
+- The 2-minute batched alert email is now titled "Alert Summary" rather
+  than "Resource Alert Summary", since it also carries Recurring Error
+  alerts.
+
 ## [4.1.0] - 2026-09-05
 
 ### Changed

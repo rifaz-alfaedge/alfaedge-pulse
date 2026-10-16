@@ -137,6 +137,9 @@ export type AlertType =
   | 'Long Running Job'
   | 'Scheduler Stalled'
   | 'Host Unreachable'
+  | 'High Load Average'
+  | 'High Swap Usage'
+  | 'Recurring Error'
 
 export interface ProxmoxAlertLog {
   name: string
@@ -421,4 +424,92 @@ export interface WeeklyAIReport {
   summary?: string
   report_text?: string
   error?: string
+}
+
+// ---------------------------------------------------------------------------
+// Log Monitor (ClickHouse) — see alfaedge_pulse/log_monitor/api.py
+// ---------------------------------------------------------------------------
+export type LogType = 'Error' | 'General'
+
+export interface LogFilterOptions {
+  sites: { site_url: string; count: number }[]
+}
+
+export interface LogSummary {
+  total: number
+  errors: number
+  general: number
+  sites: number
+  distinct_errors: number
+  bucket_seconds: number
+  trend: { bucket: string; errors: number; general: number }[]
+}
+
+export interface LogRow {
+  log_id: string
+  ts: string
+  site_url: string
+  log_type: LogType
+  title: string
+  signature: string
+  preview: string
+  truncated: boolean
+}
+
+export interface LogPage {
+  total: number
+  page: number
+  page_length: number
+  rows: LogRow[]
+}
+
+export interface LogDetail extends Omit<LogRow, 'preview' | 'truncated'> {
+  content: string
+}
+
+export interface RecurringErrorRow {
+  signature: string
+  site_url: string
+  title: string
+  occurrences: number
+  first_seen: string
+  last_seen: string
+  latest_log_id: string
+  latest_ts: string
+  is_critical: boolean
+  recurring_error: string | null
+  alert_count: number
+  monitored_host: string | null
+}
+
+export interface LogSettings {
+  enabled: 0 | 1
+  protocol: 'http' | 'https'
+  host: string | null
+  port: number | null
+  url_path: string | null
+  verify_ssl: 0 | 1
+  query_timeout_seconds: number
+  api_key_header: string | null
+  api_key_prefix: string | null
+  database_name: string
+  table_name: string
+  ts_column: string
+  site_column: string
+  content_column: string
+  title_column: string | null
+  id_column: string | null
+  log_type_column: string | null
+  error_keyword: string
+  enable_recurring_alerts: 0 | 1
+  occurrence_threshold: number
+  window_minutes: number
+  check_interval_minutes: number
+  has_username: boolean
+  has_password: boolean
+  has_api_key: boolean
+  effective_url: string
+  last_checked: string | null
+  last_error: string | null
+  can_edit: boolean
 }

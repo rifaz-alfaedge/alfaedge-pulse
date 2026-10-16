@@ -1,0 +1,181 @@
+{
+ "actions": [],
+ "autoname": "format:RE-{signature}",
+ "creation": "2026-10-16 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "signature",
+  "title",
+  "site_url",
+  "monitored_host",
+  "column_break_main",
+  "is_critical",
+  "window_count",
+  "peak_window_count",
+  "alert_count",
+  "timeline_section",
+  "first_seen",
+  "last_seen",
+  "column_break_timeline",
+  "last_alerted",
+  "last_recovered",
+  "latest_log_id"
+ ],
+ "fields": [
+  {
+   "fieldname": "signature",
+   "fieldtype": "Data",
+   "label": "Signature",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "site_url",
+   "fieldtype": "Data",
+   "label": "Site URL",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "is_critical",
+   "fieldtype": "Check",
+   "label": "Currently Alerting",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "window_count",
+   "fieldtype": "Int",
+   "label": "Occurrences in Current Window",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "peak_window_count",
+   "fieldtype": "Int",
+   "label": "Peak Occurrences in a Window",
+   "read_only": 1
+  },
+  {
+   "fieldname": "alert_count",
+   "fieldtype": "Int",
+   "label": "Times Alerted",
+   "read_only": 1
+  },
+  {
+   "fieldname": "timeline_section",
+   "fieldtype": "Section Break",
+   "label": "Timeline"
+  },
+  {
+   "fieldname": "first_seen",
+   "fieldtype": "Datetime",
+   "label": "First Seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_seen",
+   "fieldtype": "Datetime",
+   "label": "Last Seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_timeline",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_alerted",
+   "fieldtype": "Datetime",
+   "label": "Last Alerted",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_recovered",
+   "fieldtype": "Datetime",
+   "label": "Last Recovered",
+   "read_only": 1
+  },
+  {
+   "fieldname": "latest_log_id",
+   "fieldtype": "Data",
+   "label": "Latest Log ID",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log Monitor",
+ "name": "Recurring Error",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer",
+   "share": 1,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "last_seen",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 0
+}

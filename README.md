@@ -474,6 +474,31 @@ Critical (and merely-Down-somewhere) sites also surface in a persistent
 summary shown above every tab, the same way Proxmox's own Critical/
 Warning summary already does — not just on the Uptime tab itself.
 
+## Log Monitor (ClickHouse)
+
+The **Logs** tab shows the Frappe Error Logs that each production site
+ships into a ClickHouse table through a server script. The logs are read
+live from ClickHouse; the only thing stored locally is the alert state for
+recurring errors.
+
+- **Configure** it in **ClickHouse Log Settings**, either in Desk or from
+  the dashboard (Logs → Settings). You set the protocol, host, port and
+  optional URL path, plus the database, table and column mapping (defaults:
+  `ts`, `site_url`, `content`). Credentials (username, password, and an
+  optional API key for a reverse proxy) are stored encrypted and are never
+  shown again after you save them. Use **Test Connection** to check the
+  settings. Give Pulse a read-only ClickHouse user.
+- **Error vs General.** A row is an Error when its content contains the
+  configured keyword (default `error`, case-insensitive). Every other row
+  is General.
+- **Recurring errors** are grouped per site by their normalized message
+  (numbers, hashes and quoted values are stripped). When the same error
+  occurs at least *N* times within *M* minutes, a `Recurring Error` alert
+  goes out. It shares the 2-minute batch with the load and swap alerts,
+  and a recovery message is sent once the error drops back under the
+  threshold. Engineers subscribed to a Monitored Host also receive
+  recurring errors from that host's sites.
+
 ## Known Proxmox API limitations (not bugs in this app)
 
 - **VM disk usage** is only available if the QEMU guest agent is installed

@@ -183,6 +183,10 @@ scheduler_events = {
 			# docstring for why once-a-minute is already enough, no bounded
 			# loop needed.
 			"alfaedge_pulse.tasks.host_health_watchdog.check_host_heartbeats",
+			# Log Monitor's recurring-error check against ClickHouse — self-
+			# throttled on ClickHouse Log Settings' check_interval_minutes, same
+			# pattern as bifrost_sync above.
+			"alfaedge_pulse.tasks.log_monitor.check_recurring_errors",
 		],
 		# Host Health's own alert types (Service Down, Worker Degraded,
 		# Failed Job Threshold, Long Running Job, Scheduler Stalled, Host

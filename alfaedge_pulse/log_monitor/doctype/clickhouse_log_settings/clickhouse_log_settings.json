@@ -1,0 +1,313 @@
+{
+ "actions": [],
+ "creation": "2026-10-16 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "connection_section",
+  "enabled",
+  "protocol",
+  "host",
+  "port",
+  "url_path",
+  "verify_ssl",
+  "query_timeout_seconds",
+  "effective_url",
+  "column_break_connection",
+  "username",
+  "password",
+  "api_key",
+  "api_key_header",
+  "api_key_prefix",
+  "database_name",
+  "table_name",
+  "test_connection",
+  "columns_section",
+  "ts_column",
+  "site_column",
+  "content_column",
+  "column_break_columns",
+  "title_column",
+  "id_column",
+  "log_type_column",
+  "classification_section",
+  "error_keyword",
+  "alerts_section",
+  "enable_recurring_alerts",
+  "occurrence_threshold",
+  "window_minutes",
+  "column_break_alerts",
+  "check_interval_minutes",
+  "status_section",
+  "last_checked",
+  "column_break_status",
+  "last_error"
+ ],
+ "fields": [
+  {
+   "fieldname": "connection_section",
+   "fieldtype": "Section Break",
+   "label": "Connection"
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "protocol",
+   "fieldtype": "Select",
+   "label": "Protocol",
+   "options": "http\nhttps",
+   "default": "http"
+  },
+  {
+   "fieldname": "host",
+   "fieldtype": "Data",
+   "label": "Host",
+   "description": "Hostname or IP only, no scheme/port \u2014 e.g. 10.10.10.202 or chlogs.alfaedge.in"
+  },
+  {
+   "fieldname": "port",
+   "fieldtype": "Int",
+   "label": "Port",
+   "default": "8123",
+   "description": "ClickHouse HTTP port (8123 by default). Set 0 to use the protocol's default (80/443), e.g. behind a reverse proxy."
+  },
+  {
+   "fieldname": "url_path",
+   "fieldtype": "Data",
+   "label": "URL Path",
+   "description": "Optional sub-path if ClickHouse sits behind a reverse proxy path, e.g. /clickhouse"
+  },
+  {
+   "fieldname": "verify_ssl",
+   "fieldtype": "Check",
+   "label": "Verify SSL Certificate",
+   "default": "1",
+   "depends_on": "eval:doc.protocol=='https'"
+  },
+  {
+   "fieldname": "query_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "Query Timeout (seconds)",
+   "default": "30"
+  },
+  {
+   "fieldname": "effective_url",
+   "fieldtype": "Data",
+   "label": "Effective URL",
+   "read_only": 1,
+   "is_virtual": 1
+  },
+  {
+   "fieldname": "column_break_connection",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "username",
+   "fieldtype": "Password",
+   "label": "Username",
+   "description": "Stored encrypted."
+  },
+  {
+   "fieldname": "password",
+   "fieldtype": "Password",
+   "label": "Password",
+   "description": "Stored encrypted."
+  },
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "API Key / Token",
+   "description": "Optional \u2014 only for a reverse proxy in front of ClickHouse that requires its own key. Stored encrypted."
+  },
+  {
+   "fieldname": "api_key_header",
+   "fieldtype": "Data",
+   "label": "API Key Header",
+   "default": "Authorization",
+   "depends_on": "api_key"
+  },
+  {
+   "fieldname": "api_key_prefix",
+   "fieldtype": "Data",
+   "label": "API Key Prefix",
+   "default": "Bearer ",
+   "depends_on": "api_key",
+   "description": "Prepended to the key in the header value (include a trailing space). Leave blank to send the key as-is."
+  },
+  {
+   "fieldname": "database_name",
+   "fieldtype": "Data",
+   "label": "Database",
+   "default": "alfaedge_logs"
+  },
+  {
+   "fieldname": "table_name",
+   "fieldtype": "Data",
+   "label": "Table",
+   "default": "frappe_logs"
+  },
+  {
+   "fieldname": "test_connection",
+   "fieldtype": "Button",
+   "label": "Test Connection"
+  },
+  {
+   "fieldname": "columns_section",
+   "fieldtype": "Section Break",
+   "label": "Column Mapping",
+   "collapsible": 1,
+   "description": "Which ClickHouse columns hold each piece of a log row. Only change these if the server script's table layout differs."
+  },
+  {
+   "fieldname": "ts_column",
+   "fieldtype": "Data",
+   "label": "Timestamp Column",
+   "default": "ts"
+  },
+  {
+   "fieldname": "site_column",
+   "fieldtype": "Data",
+   "label": "Site URL Column",
+   "default": "site_url"
+  },
+  {
+   "fieldname": "content_column",
+   "fieldtype": "Data",
+   "label": "Content Column",
+   "default": "content",
+   "description": "Full log text / traceback. Also what the Error keyword is matched against."
+  },
+  {
+   "fieldname": "column_break_columns",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "title_column",
+   "fieldtype": "Data",
+   "label": "Title Column",
+   "description": "Optional short title/method column. Blank = derive from the first line of Content."
+  },
+  {
+   "fieldname": "id_column",
+   "fieldtype": "Data",
+   "label": "ID Column",
+   "description": "Optional unique row id column (e.g. the Error Log docname). Blank = a hash of timestamp + site + content."
+  },
+  {
+   "fieldname": "log_type_column",
+   "fieldtype": "Data",
+   "label": "Log Type Column",
+   "description": "Optional \u2014 if the table already stores a type, map it here. Blank = classify by the Error keyword below."
+  },
+  {
+   "fieldname": "classification_section",
+   "fieldtype": "Section Break",
+   "label": "Classification"
+  },
+  {
+   "fieldname": "error_keyword",
+   "fieldtype": "Data",
+   "label": "Error Keyword",
+   "default": "error",
+   "description": "A row whose content contains this text (case-insensitive) is an Error log; everything else is a General log."
+  },
+  {
+   "fieldname": "alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Recurring Error Alerts"
+  },
+  {
+   "fieldname": "enable_recurring_alerts",
+   "fieldtype": "Check",
+   "label": "Enable Recurring Error Alerts",
+   "default": "1"
+  },
+  {
+   "fieldname": "occurrence_threshold",
+   "fieldtype": "Int",
+   "label": "Occurrence Threshold",
+   "default": "5",
+   "description": "Alert when the same error on the same site occurs at least this many times\u2026"
+  },
+  {
+   "fieldname": "window_minutes",
+   "fieldtype": "Int",
+   "label": "Window (minutes)",
+   "default": "60",
+   "description": "\u2026within this rolling window. Recovery is sent once it drops back under the threshold for the same window."
+  },
+  {
+   "fieldname": "column_break_alerts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "check_interval_minutes",
+   "fieldtype": "Int",
+   "label": "Check Interval (minutes)",
+   "default": "2"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "last_checked",
+   "fieldtype": "Datetime",
+   "label": "Last Checked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-database",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log Monitor",
+ "name": "ClickHouse Log Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

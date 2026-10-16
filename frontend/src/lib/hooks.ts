@@ -9,6 +9,10 @@ import type {
   HostMonitorSettings,
   ImportableMonitor,
   LlmUsageLog,
+  LogFilterOptions,
+  LogPage,
+  LogSettings,
+  LogSummary,
   MonitoredHost,
   MonitoredHostSite,
   ProxmoxAlertLog,
@@ -19,6 +23,7 @@ import type {
   ProxmoxHostMetricLog,
   ProxmoxMonitorSettings,
   ProxmoxServer,
+  RecurringErrorRow,
   ServiceStatusLog,
   UptimeHistoryPoint,
   UptimeKumaInstance,
@@ -621,4 +626,88 @@ export function useWeeklyAiReports() {
     undefined,
     { refreshInterval: SLOW_POLL_MS },
   )
+}
+
+// ---------------------------------------------------------------------------
+// Log Monitor (ClickHouse). Queried live on every call — there's no local
+// sync cadence to match, so these refresh on a moderate 30s interval.
+// ---------------------------------------------------------------------------
+const LOG_POLL_MS = 30000
+
+export interface LogFilters {
+  startDate: string
+  endDate: string
+  sites: string[]
+  logTypes: string[]
+  search: string
+  signature?: string
+}
+
+function logFilterParams(f: LogFilters) {
+  return {
+    start_date: f.startDate,
+    end_date: f.endDate,
+    site_url: serializeFilterList(f.sites),
+    log_type: serializeFilterList(f.logTypes),
+    search: f.search || undefined,
+  }
+}
+
+export function useLogSettings() {
+  const result = useFrappeGetCall<{ message: LogSettings }>(
+    'alfaedge_pulse.log_monitor.api.get_log_settings',
+    undefined,
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useLogFilterOptions(enabled: boolean) {
+  const result = useFrappeGetCall<{ message: LogFilterOptions }>(
+    'alfaedge_pulse.log_monitor.api.get_log_filter_options',
+    undefined,
+    enabled ? undefined : null,
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useLogSummary(f: LogFilters, enabled: boolean) {
+  const params = logFilterParams(f)
+  const result = useFrappeGetCall<{ message: LogSummary }>(
+    'alfaedge_pulse.log_monitor.api.get_log_summary',
+    params,
+    enabled ? ['log-summary', JSON.stringify(params)] : null,
+    { refreshInterval: LOG_POLL_MS, keepPreviousData: true },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useLogs(f: LogFilters, page: number, pageLength: number, enabled: boolean) {
+  const params = { ...logFilterParams(f), signature: f.signature || undefined, page, page_length: pageLength }
+  const result = useFrappeGetCall<{ message: LogPage }>(
+    'alfaedge_pulse.log_monitor.api.get_logs',
+    params,
+    enabled ? ['logs', JSON.stringify(params)] : null,
+    { refreshInterval: LOG_POLL_MS, keepPreviousData: true },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+export function useRecurringErrors(f: LogFilters, minCount: number, enabled: boolean) {
+  const params = {
+    start_date: f.startDate,
+    end_date: f.endDate,
+    site_url: serializeFilterList(f.sites),
+    search: f.search || undefined,
+    min_count: minCount,
+  }
+  const result = useFrappeGetCall<{ message: RecurringErrorRow[] }>(
+    'alfaedge_pulse.log_monitor.api.get_recurring_errors',
+    params,
+    enabled ? ['recurring-errors', JSON.stringify(params)] : null,
+    { refreshInterval: LOG_POLL_MS, keepPreviousData: true },
+  )
+  return { ...result, data: result.data?.message }
 }
