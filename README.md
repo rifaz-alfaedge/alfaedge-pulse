@@ -497,6 +497,10 @@ recurring errors.
 - **Error vs General.** A row is an Error when its content contains the
   configured keyword (default `error`, case-insensitive). Every other row
   is General.
+- **Who gets alerted:** each engineer subscribes in their **Alert
+  Subscription**, under **Recurring Errors (Logs)**: either **All Sites**
+  or a list of sites. The global recipients only get recurring errors when
+  **Also Notify Global Recipients** is ticked in ClickHouse Log Settings.
 - **Recurring errors** are grouped per site by their normalized message
   (numbers, hashes and quoted values are stripped). When the same error
   occurs at least *N* times within *M* minutes, a `Recurring Error` alert

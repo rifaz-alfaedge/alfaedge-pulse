@@ -27,7 +27,9 @@ class AlertSubscription(Document):
 	instance's copy you pick here doesn't change what you're watching.
 	Watching a Monitored Host also catches its own per-service Service
 	Down alerts (matched indirectly via that log row's own
-	``monitored_host`` field), not just host-level ones.
+	``monitored_host`` field), not just host-level ones. Log Sites (or
+	All Sites) subscribes to Log Monitor's Recurring Error alerts for
+	those sites.
 	"""
 
 	def before_insert(self):
@@ -40,6 +42,22 @@ class AlertSubscription(Document):
 		for row in self.scenarios:
 			self._validate_server_is_pve(row)
 			self._validate_instance_belongs_to_server(row)
+		self._normalize_log_sites()
+
+	def _normalize_log_sites(self):
+		"""Store Log Monitor sites the way the Logs tab identifies them (bare
+		host, or an alias's display name), so "https://Altaza.alfacrm.org/"
+		and "altaza.alfacrm.org" are the same subscription — and drop dupes."""
+		from alfaedge_pulse.log_monitor.connection import normalize_site_label
+
+		seen = set()
+		for row in list(self.get("log_sites") or []):
+			row.site = normalize_site_label(row.site)
+			key = row.site.lower()
+			if not key or key in seen:
+				self.remove(row)
+				continue
+			seen.add(key)
 
 	def _validate_server_is_pve(self, row):
 		"""PBS servers don't run VMs/CTs, so they're not valid subscription

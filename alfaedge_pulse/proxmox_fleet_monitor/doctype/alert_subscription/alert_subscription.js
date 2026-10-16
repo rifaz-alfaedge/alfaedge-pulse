@@ -29,6 +29,17 @@ frappe.ui.form.on("Alert Subscription", {
 			return { query: "alfaedge_pulse.uptime_monitor.api.uptime_site_query" };
 		};
 
+		// Log Monitor sites live in ClickHouse, not a doctype, so offer the
+		// sites seen there (as the Logs tab names them) as suggestions.
+		frappe.call({
+			method: "alfaedge_pulse.log_monitor.api.get_log_filter_options",
+			callback: (r) => {
+				const sites = ((r.message && r.message.sites) || []).map((s) => s.site_url);
+				frm.fields_dict["log_sites"].grid.update_docfield_property("site", "options", sites);
+			},
+			error: () => {},
+		});
+
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Send Test Alert"), () => {
 				frappe.call({

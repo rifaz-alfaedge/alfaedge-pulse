@@ -513,6 +513,7 @@ export interface LogSettings extends LogSettingsPublic {
   occurrence_threshold: number
   window_minutes: number
   check_interval_minutes: number
+  notify_global_recipients: 0 | 1
   has_username: boolean
   has_password: boolean
   has_api_key: boolean

@@ -200,11 +200,19 @@ export function LogSettingsDialog({
           </TextField>
         </Section>
 
-        <Section title="Recurring error alerts" hint="Sent through the existing Email/WhatsApp alert channels, batched every 2 minutes.">
+        <Section
+          title="Recurring error alerts"
+          hint="Sent by email/WhatsApp to engineers who subscribed to the site (Alert Subscription → Log Sites), batched every 2 minutes."
+        >
           <Check
             label="Enable recurring error alerts"
             checked={!!values.enable_recurring_alerts}
             onChange={(v) => set('enable_recurring_alerts', v ? 1 : 0)}
+          />
+          <Check
+            label="Also send to the global recipients in Proxmox Monitor Settings"
+            checked={!!values.notify_global_recipients}
+            onChange={(v) => set('notify_global_recipients', v ? 1 : 0)}
           />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <TextField label="Alert at ≥ occurrences">

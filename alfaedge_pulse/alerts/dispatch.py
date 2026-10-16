@@ -253,16 +253,26 @@ def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> 
 			"Alert Subscription Monitored Host", filters={"monitored_host": monitored_host}, fields=["parent"]
 		)
 	elif reference_doctype == "Recurring Error":
-		# A recurring error belongs to a site, and a site belongs to the
-		# Monitored Host that reports it (tasks/log_monitor.py resolves and
-		# stores that link) — so a subscriber watching the host also gets
-		# its sites' recurring errors.
-		monitored_host = frappe.db.get_value("Recurring Error", reference_name, "monitored_host")
-		if not monitored_host:
-			return []
-		rows = frappe.get_all(
-			"Alert Subscription Monitored Host", filters={"monitored_host": monitored_host}, fields=["parent"]
-		)
+		# Matched three ways: the subscription watches All Sites, lists this
+		# site under Log Sites, or watches the Monitored Host that reports
+		# the site (tasks/log_monitor.py resolves and stores that link).
+		site_url, monitored_host = frappe.db.get_value(
+			"Recurring Error", reference_name, ["site_url", "monitored_host"]
+		) or (None, None)
+		parents = set(frappe.get_all("Alert Subscription", filters={"all_log_sites": 1}, pluck="name"))
+		if site_url:
+			parents.update(
+				r.parent
+				for r in frappe.get_all("Alert Subscription Log Site", fields=["parent", "site"])
+				if (r.site or "").strip().lower() == site_url.strip().lower()
+			)
+		if monitored_host:
+			parents.update(
+				frappe.get_all(
+					"Alert Subscription Monitored Host", filters={"monitored_host": monitored_host}, pluck="parent"
+				)
+			)
+		rows = [frappe._dict(parent=p) for p in parents]
 	else:
 		return []
 

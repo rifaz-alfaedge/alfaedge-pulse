@@ -28,6 +28,13 @@ All notable changes to this project are documented here.
     linked to the Monitored Host that reports its site, so an Alert
     Subscription on that host also receives the host's site errors. Local
     alert state lives in the new `Recurring Error` doctype.
+  - **Recurring-error alerts go to engineers individually by default.**
+    Alert Subscription has a new **Recurring Errors (Logs)** section: tick
+    **All Sites**, or list specific sites, picked from the sites seen on
+    the Logs tab. Each engineer only receives errors from their own sites.
+    The global recipients in Proxmox Monitor Settings get recurring errors
+    only when **Also Notify Global Recipients** is ticked in ClickHouse Log
+    Settings (off by default).
   - **Sites are identified by host.** The same host under `http://` and
     `https://` (or with a different port or trailing slash) counts as one
     site, e.g. `anson.alfaedge.org`. A site logged under a bare name such
@@ -52,6 +59,12 @@ All notable changes to this project are documented here.
     requests run with `readonly=1`. A ClickHouse user whose profile is
     already `readonly=1` rejects per-request settings, so the client
     detects that and retries without them.
+
+### Fixed
+- An Alert Subscription whose email or WhatsApp number was also on the
+  global recipient list never received batched alerts that the global
+  list itself wasn't sent, such as load/swap alerts on non-Production
+  hosts. It now receives them.
 
 ### Changed
 - The 2-minute batched alert email is now titled "Alert Summary" rather

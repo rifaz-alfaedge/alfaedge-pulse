@@ -50,7 +50,7 @@ EDITABLE_FIELDS = (
 	"api_key_header", "api_key_prefix", "database_name", "table_name",
 	"ts_column", "site_column", "content_column", "title_column", "id_column", "log_type_column",
 	"error_keyword", "enable_recurring_alerts", "occurrence_threshold", "window_minutes",
-	"check_interval_minutes",
+	"check_interval_minutes", "notify_global_recipients",
 )
 
 

@@ -39,6 +39,7 @@
   "window_minutes",
   "column_break_alerts",
   "check_interval_minutes",
+  "notify_global_recipients",
   "status_section",
   "last_checked",
   "column_break_status",
@@ -67,7 +68,7 @@
    "fieldname": "host",
    "fieldtype": "Data",
    "label": "Host",
-   "description": "Hostname or IP only, no scheme/port \u2014 e.g. 10.10.10.202 or chlogs.alfaedge.in"
+   "description": "Hostname or IP only, no scheme/port — e.g. 10.10.10.202 or chlogs.alfaedge.in"
   },
   {
    "fieldname": "port",
@@ -122,7 +123,7 @@
    "fieldname": "api_key",
    "fieldtype": "Password",
    "label": "API Key / Token",
-   "description": "Optional \u2014 only for a reverse proxy in front of ClickHouse that requires its own key. Stored encrypted."
+   "description": "Optional — only for a reverse proxy in front of ClickHouse that requires its own key. Stored encrypted."
   },
   {
    "fieldname": "api_key_header",
@@ -202,7 +203,7 @@
    "fieldname": "log_type_column",
    "fieldtype": "Data",
    "label": "Log Type Column",
-   "description": "Optional \u2014 if the table already stores a type, map it here. Blank = classify by the Error keyword below."
+   "description": "Optional — if the table already stores a type, map it here. Blank = classify by the Error keyword below."
   },
   {
    "fieldname": "classification_section",
@@ -232,14 +233,14 @@
    "fieldtype": "Int",
    "label": "Occurrence Threshold",
    "default": "5",
-   "description": "Alert when the same error on the same site occurs at least this many times\u2026"
+   "description": "Alert when the same error on the same site occurs at least this many times…"
   },
   {
    "fieldname": "window_minutes",
    "fieldtype": "Int",
    "label": "Window (minutes)",
    "default": "60",
-   "description": "\u2026within this rolling window. Recovery is sent once it drops back under the threshold for the same window."
+   "description": "…within this rolling window. Recovery is sent once it drops back under the threshold for the same window."
   },
   {
    "fieldname": "column_break_alerts",
@@ -250,6 +251,13 @@
    "fieldtype": "Int",
    "label": "Check Interval (minutes)",
    "default": "2"
+  },
+  {
+   "fieldname": "notify_global_recipients",
+   "fieldtype": "Check",
+   "label": "Also Notify Global Recipients",
+   "default": "0",
+   "description": "Off: recurring errors go only to engineers who subscribed to the site (Alert Subscription → Log Sites). On: also to the global Email/WhatsApp recipients in Proxmox Monitor Settings."
   },
   {
    "fieldname": "status_section",
@@ -277,7 +285,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-16 21:00:00.000000",
+ "modified": "2026-10-16 21:30:00.000000",
  "modified_by": "Administrator",
  "module": "Log Monitor",
  "name": "ClickHouse Log Settings",

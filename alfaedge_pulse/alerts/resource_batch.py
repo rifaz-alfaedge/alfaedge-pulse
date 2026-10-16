@@ -77,6 +77,9 @@ def send_resource_alert_batch() -> None:
 	# Monitored Host, whose role is a cheap lookup either way.
 	section_by_key: dict[tuple, str] = {}
 	global_eligible: set[tuple] = set()
+	recurring_to_global = bool(
+		frappe.db.get_single_value("ClickHouse Log Settings", "notify_global_recipients")
+	)
 	for key, occurrences in groups.items():
 		alert_type, reference_doctype, reference_name = key
 		# still_open reflects the *current* state, independent of which
@@ -90,9 +93,9 @@ def send_resource_alert_batch() -> None:
 		section_by_key[key] = f"{alert_type} — {reference_name}{count_suffix}: {occurrences[-1].message}"
 		if reference_doctype == "Monitored Host" and get_host_role(reference_name) == "Production":
 			global_eligible.add(key)
-		elif reference_doctype == "Recurring Error":
-			# Log Monitor only ever ingests production sites' logs (that's
-			# what the server script ships), so always fleet-wide.
+		elif reference_doctype == "Recurring Error" and recurring_to_global:
+			# Off by default — recurring errors go to subscribed engineers
+			# only unless ClickHouse Log Settings opts the global list in.
 			global_eligible.add(key)
 
 	settings = frappe.get_cached_doc("Proxmox Monitor Settings")
@@ -111,9 +114,14 @@ def send_resource_alert_batch() -> None:
 	for key in groups:
 		_, reference_doctype, reference_name = key
 		for s in _get_matching_subscriptions(reference_doctype, reference_name):
-			if s.enable_email and s.email and s.email.lower() not in global_email_keys:
+			# Skip only when the global send below already covers this
+			# recipient *for this alert* — a subscriber who's also on the
+			# global list must still get alerts the global list doesn't
+			# receive (e.g. recurring errors, non-Production hosts).
+			covered = key in global_eligible
+			if s.enable_email and s.email and not (covered and s.email.lower() in global_email_keys):
 				subscriber_email_keys.setdefault(s.email, set()).add(key)
-			if s.enable_whatsapp and s.whatsapp_number and s.whatsapp_number not in global_number_keys:
+			if s.enable_whatsapp and s.whatsapp_number and not (covered and s.whatsapp_number in global_number_keys):
 				subscriber_number_keys.setdefault(s.whatsapp_number, set()).add(key)
 
 	def _ordered_sections(keys) -> str:
