@@ -30,6 +30,11 @@ class ClickHouseLogSettings(Document):
 		return build_base_url(self.protocol, self.host, self.port, self.url_path)
 
 	def validate(self):
+		# Pasted values often carry a stray tab/newline; credentials are sent
+		# as HTTP headers, which reject them outright.
+		for field in ("host", "url_path", "api_key_header", "username", "password", "api_key"):
+			if self.get(field):
+				self.set(field, self.get(field).strip())
 		if self.enabled and not (self.host or "").strip():
 			frappe.throw(frappe._("Host is required when Log Monitor is enabled"))
 		for field in ("database_name", "table_name", "ts_column", "site_column", "content_column"):

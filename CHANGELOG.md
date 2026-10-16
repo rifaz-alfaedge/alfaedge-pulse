@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [4.3.1] - 2026-10-16
+
+### Fixed
+- **Log Monitor connection failed when a credential was pasted with
+  stray whitespace.** A username copied with a leading tab
+  (`'\tpulse_reader'`) made every request fail with "Invalid leading
+  whitespace ... in header value", since credentials are sent as HTTP
+  headers. Host, path, username, password and API key are now trimmed on
+  save and again when building each request, so values that are already
+  saved work too.
+
 ## [4.3.0] - 2026-10-16
 
 ### Added

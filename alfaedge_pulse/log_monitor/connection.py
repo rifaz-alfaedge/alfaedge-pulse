@@ -143,11 +143,14 @@ def get_client(overrides: dict | None = None, require_enabled: bool = True) -> C
 	s = get_settings()
 	values = {k: s.get(k) for k in ("enabled", "protocol", "host", "port", "url_path", "verify_ssl",
 		"query_timeout_seconds", "database_name", "api_key_header", "api_key_prefix")}
-	secrets = {k: get_secret(k) for k in SECRET_FIELDS}
+	# Stripped: they're sent as HTTP header values, which can't carry
+	# leading/trailing whitespace — and a credential pasted from a table or
+	# document often brings a stray tab or newline along with it.
+	secrets = {k: (get_secret(k) or "").strip() or None for k in SECRET_FIELDS}
 	for key, value in (overrides or {}).items():
 		if key in SECRET_FIELDS:
-			if value:
-				secrets[key] = value
+			if value and value.strip():
+				secrets[key] = value.strip()
 		elif key in values:
 			values[key] = value
 
@@ -160,7 +163,7 @@ def get_client(overrides: dict | None = None, require_enabled: bool = True) -> C
 	extra_headers = {}
 	if secrets["api_key"]:
 		header = (values["api_key_header"] or "Authorization").strip()
-		extra_headers[header] = f"{values['api_key_prefix'] or ''}{secrets['api_key']}"
+		extra_headers[header] = f"{(values['api_key_prefix'] or '').lstrip()}{secrets['api_key']}"
 
 	return ClickHouseClient(
 		base_url=build_base_url(values["protocol"], values["host"], values["port"], values["url_path"]),
