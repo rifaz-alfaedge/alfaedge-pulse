@@ -12,6 +12,7 @@ import type {
   LogFilterOptions,
   LogPage,
   LogSettings,
+  LogSettingsPublic,
   LogSummary,
   MonitoredHost,
   MonitoredHostSite,
@@ -654,7 +655,7 @@ function logFilterParams(f: LogFilters) {
 }
 
 export function useLogSettings() {
-  const result = useFrappeGetCall<{ message: LogSettings }>(
+  const result = useFrappeGetCall<{ message: LogSettingsPublic & Partial<LogSettings> }>(
     'alfaedge_pulse.log_monitor.api.get_log_settings',
     undefined,
     undefined,

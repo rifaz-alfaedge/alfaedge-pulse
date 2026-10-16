@@ -9,7 +9,7 @@ import {
   useLogs,
   useRecurringErrors,
 } from '../lib/hooks'
-import type { LogDetail, LogRow, RecurringErrorRow } from '../lib/types'
+import type { LogDetail, LogRow, LogSettings, RecurringErrorRow } from '../lib/types'
 import { timeAgo } from '../lib/format'
 import { getErrorMessage } from '../lib/errors'
 import { type DateRangePreset, resolveDateRange } from '../lib/dateRange'
@@ -72,7 +72,8 @@ export function LogsPanel() {
   useEffect(() => setPage(1), [filters])
 
   const { data: settings, mutate: refreshSettings } = useLogSettings()
-  const ready = !!settings?.enabled && !!settings?.host
+  const ready = !!settings?.configured
+  const canEdit = !!settings?.can_edit
   const { data: options } = useLogFilterOptions(ready)
   const { data: summary, error: summaryError } = useLogSummary(filters, ready)
   const { data: logs, error: logsError, isLoading: logsLoading } = useLogs(filters, page, PAGE_LENGTH, ready && subTab === 'All Logs')
@@ -112,14 +113,16 @@ export function LogsPanel() {
             {!settings
               ? 'Loading…'
               : !ready
-                ? 'Log Monitor is not configured — open Settings to connect ClickHouse.'
+                ? canEdit
+                  ? 'Log Monitor is not configured — open Settings to connect ClickHouse.'
+                  : 'Log Monitor is not configured yet — ask a Proxmox Monitor Manager to connect ClickHouse.'
                 : queryError
                   ? 'ClickHouse query failed'
-                  : `ClickHouse ${settings.effective_url}${
+                  : `${canEdit && settings.effective_url ? `ClickHouse ${settings.effective_url}` : 'Live from ClickHouse'}${
                       settings.last_checked ? ` · alerts checked ${timeAgo(settings.last_checked)}` : ''
                     }`}
           </span>
-          {ready && (
+          {canEdit && ready && (
             <button
               type="button"
               onClick={() => setSitesOpen(true)}
@@ -128,7 +131,7 @@ export function LogsPanel() {
               Sites
             </button>
           )}
-          {settings?.can_edit && (
+          {canEdit && (
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
@@ -162,7 +165,7 @@ export function LogsPanel() {
           {getErrorMessage(queryError)}
         </div>
       )}
-      {settings?.last_error && (
+      {canEdit && settings?.last_error && (
         <div className="mb-6 rounded-xl border border-status-warning/40 bg-status-warning/10 px-4 py-3 text-sm text-ink-primary">
           <span className="font-semibold">Last recurring-error check failed.</span>{' '}
           <span className="break-words font-mono text-xs">{settings.last_error.trim().split('\n').pop()}</span>
@@ -223,9 +226,9 @@ export function LogsPanel() {
       )}
 
       {selectedLog && <LogDetailDialog log={selectedLog} onClose={() => setSelectedLog(null)} />}
-      {sitesOpen && (
+      {canEdit && sitesOpen && (
         <ManageSitesDialog
-          canEdit={!!settings?.can_edit}
+          canEdit
           onClose={() => setSitesOpen(false)}
           onChanged={() => {
             // An alias regroups every query on this tab — drop the site
@@ -235,9 +238,9 @@ export function LogsPanel() {
           }}
         />
       )}
-      {settingsOpen && settings && (
+      {canEdit && settingsOpen && settings && (
         <LogSettingsDialog
-          settings={settings}
+          settings={settings as LogSettings}
           onClose={() => setSettingsOpen(false)}
           onSaved={() => refreshSettings()}
         />

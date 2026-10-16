@@ -15,7 +15,7 @@ from alfaedge_pulse.log_monitor.connection import (
 	validate_identifier,
 )
 
-MANAGER_ROLES = ("System Manager", "Proxmox Monitor Manager")
+MANAGER_ROLES = ("Proxmox Monitor Manager",)
 
 
 class ClickHouseLogSettings(Document):

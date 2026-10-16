@@ -492,6 +492,8 @@ recurring errors.
   of one host count as one site. A host logged under a bare name (e.g.
   `https://lulu`) can be merged into its real site, or given a display
   name, under Logs → **Sites**. This also regroups past logs.
+- **Access:** only **Proxmox Monitor Manager** can change settings or
+  site aliases. Every other dashboard role can only view and filter.
 - **Error vs General.** A row is an Error when its content contains the
   configured keyword (default `error`, case-insensitive). Every other row
   is General.

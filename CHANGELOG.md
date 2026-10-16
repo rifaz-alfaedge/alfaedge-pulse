@@ -42,6 +42,11 @@ All notable changes to this project are documented here.
     password, and optional reverse-proxy API key are encrypted Password
     fields. They are never sent back to the browser, and the dialog treats
     them as write-only.
+  - **Access.** Only **Proxmox Monitor Manager** can open Settings or
+    Sites, test the connection, or change aliases, in the dashboard and in
+    Desk. Every other dashboard role (including System Manager without
+    that role) can view and filter the logs and recurring errors, and
+    isn't shown where ClickHouse is or how it's configured.
   - Security: every filter value is passed as a ClickHouse query parameter
     rather than interpolated into the SQL. Identifiers are validated, and
     requests run with `readonly=1`. A ClickHouse user whose profile is

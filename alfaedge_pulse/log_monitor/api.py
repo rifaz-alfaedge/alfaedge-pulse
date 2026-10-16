@@ -35,7 +35,9 @@ from alfaedge_pulse.log_monitor.connection import (
 from alfaedge_pulse.log_monitor.queries import base_params, build_filtered, site_host_expr, ts_out
 
 VIEW_ROLES = ("System Manager", "Proxmox Monitor Manager", "Proxmox Monitor Viewer")
-MANAGER_ROLES = ("System Manager", "Proxmox Monitor Manager")
+#: Connection settings and site aliases are managed by this role alone —
+#: every other dashboard role can only view and filter the logs.
+MANAGER_ROLES = ("Proxmox Monitor Manager",)
 MAX_PAGE_LENGTH = 200
 PREVIEW_CHARS = 400
 #: ~this many points per trend chart, whatever the selected range.
@@ -245,7 +247,7 @@ def get_site_overview(days: int = 30) -> dict:
 	raw URLs it appeared under, its log count, and what it's shown as —
 	plus suggestions for alias targets (other hosts, Monitored Host sites,
 	existing alias names)."""
-	frappe.only_for(VIEW_ROLES)
+	frappe.only_for(MANAGER_ROLES)
 	cols = get_column_map()
 	start, end = _range(None, None, default_days=cint(days) or 30)
 	params = base_params(start, end)
@@ -308,18 +310,29 @@ def save_site_alias(source_host: str, site: str | None = None) -> dict:
 
 @frappe.whitelist()
 def get_log_settings() -> dict:
-	"""Non-secret settings plus has_<secret> flags. Secrets are never sent."""
+	"""What the Logs tab needs to know about the connection.
+
+	Managers get every non-secret setting plus has_<secret> flags (secrets
+	are never sent to anyone). Everyone else only learns whether Log
+	Monitor is set up — not where ClickHouse lives or how it's configured."""
 	frappe.only_for(VIEW_ROLES)
 	settings = get_settings()
-	data = {field: settings.get(field) for field in EDITABLE_FIELDS}
-	data.update({f"has_{field}": bool(get_secret(field)) for field in SECRET_FIELDS})
-	data.update({
-		"effective_url": settings.effective_url,
+	can_edit = _is_manager()
+	data = {
+		"enabled": settings.enabled,
+		"configured": bool(settings.enabled and (settings.host or "").strip()),
 		"last_checked": settings.last_checked,
-		"last_error": settings.last_error,
-		"can_edit": bool(set(frappe.get_roles()) & set(MANAGER_ROLES)),
-	})
+		"can_edit": can_edit,
+	}
+	if can_edit:
+		data.update({field: settings.get(field) for field in EDITABLE_FIELDS})
+		data.update({f"has_{field}": bool(get_secret(field)) for field in SECRET_FIELDS})
+		data.update({"effective_url": settings.effective_url, "last_error": settings.last_error})
 	return data
+
+
+def _is_manager() -> bool:
+	return bool(set(frappe.get_roles()) & set(MANAGER_ROLES))
 
 
 def _clean_values(values) -> dict:

@@ -7,13 +7,13 @@ import { getErrorMessage } from '../lib/errors'
 type SecretField = 'username' | 'password' | 'api_key'
 type EditableValues = Omit<
   LogSettings,
-  'has_username' | 'has_password' | 'has_api_key' | 'effective_url' | 'last_checked' | 'last_error' | 'can_edit'
+  'has_username' | 'has_password' | 'has_api_key' | 'effective_url' | 'last_checked' | 'last_error' | 'can_edit' | 'configured'
 >
 
 const inputClass =
   'w-full rounded-lg border border-border-hairline bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20'
 
-const READ_ONLY_KEYS = ['has_username', 'has_password', 'has_api_key', 'effective_url', 'last_checked', 'last_error', 'can_edit'] as const
+const READ_ONLY_KEYS = ['has_username', 'has_password', 'has_api_key', 'effective_url', 'last_checked', 'last_error', 'can_edit', 'configured'] as const
 
 function pickEditable(s: LogSettings): EditableValues {
   const copy: Record<string, unknown> = { ...s }

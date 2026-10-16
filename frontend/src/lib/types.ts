@@ -482,8 +482,16 @@ export interface RecurringErrorRow {
   monitored_host: string | null
 }
 
-export interface LogSettings {
+/** What every Logs-tab viewer gets from get_log_settings. */
+export interface LogSettingsPublic {
   enabled: 0 | 1
+  configured: boolean
+  last_checked: string | null
+  can_edit: boolean
+}
+
+/** The full settings — only returned to Proxmox Monitor Manager. */
+export interface LogSettings extends LogSettingsPublic {
   protocol: 'http' | 'https'
   host: string | null
   port: number | null
@@ -509,9 +517,7 @@ export interface LogSettings {
   has_password: boolean
   has_api_key: boolean
   effective_url: string
-  last_checked: string | null
   last_error: string | null
-  can_edit: boolean
 }
 
 export interface SiteOverviewHost {
