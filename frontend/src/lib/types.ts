@@ -513,3 +513,16 @@ export interface LogSettings {
   last_error: string | null
   can_edit: boolean
 }
+
+export interface SiteOverviewHost {
+  host: string
+  urls: string[]
+  logs: number
+  last_seen: string
+  alias: string | null
+}
+
+export interface SiteOverview {
+  hosts: SiteOverviewHost[]
+  suggestions: string[]
+}

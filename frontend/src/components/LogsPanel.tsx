@@ -19,6 +19,8 @@ import { SearchInput } from './SearchInput'
 import { Tabs } from './Tabs'
 import { TrendChart } from './TrendChart'
 import { LogSettingsDialog } from './LogSettingsDialog'
+import { ManageSitesDialog } from './ManageSitesDialog'
+import { useSWRConfig } from 'frappe-react-sdk'
 
 const SUB_TABS = ['All Logs', 'Recurring Errors'] as const
 const LOG_TYPE_OPTIONS = ['Error', 'General']
@@ -54,6 +56,8 @@ export function LogsPanel() {
   const [page, setPage] = useState(1)
   const [selectedLog, setSelectedLog] = useState<Pick<LogRow, 'log_id' | 'ts'> | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sitesOpen, setSitesOpen] = useState(false)
+  const { mutate: globalMutate } = useSWRConfig()
   const search = useDebounced(searchInput.trim(), 400)
 
   const { startDate, endDate } = useMemo(
@@ -115,6 +119,15 @@ export function LogsPanel() {
                       settings.last_checked ? ` · alerts checked ${timeAgo(settings.last_checked)}` : ''
                     }`}
           </span>
+          {ready && (
+            <button
+              type="button"
+              onClick={() => setSitesOpen(true)}
+              className="shrink-0 rounded-lg border border-border-hairline bg-surface-card px-3 py-1.5 text-xs font-medium text-ink-primary hover:border-accent"
+            >
+              Sites
+            </button>
+          )}
           {settings?.can_edit && (
             <button
               type="button"
@@ -210,6 +223,18 @@ export function LogsPanel() {
       )}
 
       {selectedLog && <LogDetailDialog log={selectedLog} onClose={() => setSelectedLog(null)} />}
+      {sitesOpen && (
+        <ManageSitesDialog
+          canEdit={!!settings?.can_edit}
+          onClose={() => setSitesOpen(false)}
+          onChanged={() => {
+            // An alias regroups every query on this tab — drop the site
+            // from any active filter (it may no longer exist) and refetch.
+            setSites([])
+            globalMutate(() => true)
+          }}
+        />
+      )}
       {settingsOpen && settings && (
         <LogSettingsDialog
           settings={settings}

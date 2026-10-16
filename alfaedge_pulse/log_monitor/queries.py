@@ -12,7 +12,13 @@ collide with a real column name, which ClickHouse rejects as a cyclic
 alias) — so nothing downstream depends on how the
 server script happened to name its columns. The timestamp range and site
 filter sit on the inner SELECT (where ClickHouse can use the table's sort
-key); derived-column filters (type, signature, search) sit outside it.
+key); derived-column filters (site, type, signature, search) sit outside
+it.
+
+- **Site**: the URL column's bare lower-cased host, so http/https/port/
+  trailing-slash variants of one site are one site; then any Log Site
+  Alias (e.g. ``lulu`` -> ``lulu.alfaedge.org``) is applied on top via
+  ``transform()``, so aliases regroup history too, not just new rows.
 
 - **Log type**: "Error" when the content (or the mapped Log Type column,
   if one is configured) contains the configured keyword, case-
@@ -37,7 +43,7 @@ from __future__ import annotations
 
 from frappe.utils import get_system_timezone
 
-from alfaedge_pulse.log_monitor.connection import ColumnMap, get_column_map, get_settings
+from alfaedge_pulse.log_monitor.connection import ColumnMap, get_column_map, get_settings, get_site_aliases
 
 LOG_TYPES = ("Error", "General")
 
@@ -68,43 +74,51 @@ def title_expr(cols: ColumnMap) -> str:
 	)
 
 
+def site_host_expr(cols: ColumnMap) -> str:
+	"""Bare lower-cased host of the site URL column — must match
+	``connection.normalize_site``. (ClickHouse's own ``domain()`` returns
+	'' for single-label hosts like ``https://lulu``, hence the regex.)"""
+	return (
+		f"lower(replaceRegexpOne(toString({cols.site}), "
+		f"'^(?:[a-zA-Z][a-zA-Z0-9+.-]*://)?([^/:?#]+).*$', '\\\\1'))"
+	)
+
+
 def log_type_expr(cols: ColumnMap) -> str:
 	source = cols.log_type or cols.content
 	return f"if(positionCaseInsensitive(toString({source}), {{kw:String}}) > 0, 'Error', 'General')"
 
 
-def base_query(cols: ColumnMap, site_filter: bool = False) -> str:
-	"""Inner SELECT over [start, end). Needs params ``start``, ``end``,
-	``tz``, ``kw`` (see ``base_params``), plus ``sites`` if site_filter."""
+def base_query(cols: ColumnMap) -> str:
+	"""Inner SELECT over [start, end). Needs the params from ``base_params``."""
 	title = title_expr(cols)
 	log_id = f"toString({cols.id})" if cols.id else f"toString(cityHash64({cols.ts}, {cols.site}, {cols.content}))"
-	where = [
-		f"{cols.ts} >= toDateTime({{start:String}}, {{tz:String}})",
-		f"{cols.ts} < toDateTime({{end:String}}, {{tz:String}})",
-	]
-	if site_filter:
-		where.append(f"toString({cols.site}) IN {{sites:Array(String)}}")
+	host = site_host_expr(cols)
 	return f"""
 		SELECT
 			{cols.ts} AS lm_ts,
-			toString({cols.site}) AS lm_site,
+			transform({host}, {{site_from:Array(String)}}, {{site_to:Array(String)}}, {host}) AS lm_site,
 			toString({cols.content}) AS lm_content,
 			{title} AS lm_title,
 			{log_type_expr(cols)} AS lm_type,
 			toString(cityHash64(lm_site, replaceRegexpAll(lm_title, '{_NORMALIZE_RE}', '?'))) AS lm_sig,
 			{log_id} AS lm_id
 		FROM {cols.table}
-		WHERE {" AND ".join(where)}
+		WHERE {cols.ts} >= toDateTime({{start:String}}, {{tz:String}})
+			AND {cols.ts} < toDateTime({{end:String}}, {{tz:String}})
 	"""
 
 
 def base_params(start: str, end: str) -> dict:
 	settings = get_settings()
+	aliases = get_site_aliases()
 	return {
 		"start": str(start),
 		"end": str(end),
 		"tz": get_system_timezone(),
 		"kw": (settings.error_keyword or "error").strip() or "error",
+		"site_from": list(aliases.keys()),
+		"site_to": list(aliases.values()),
 	}
 
 
@@ -127,9 +141,10 @@ def build_filtered(
 	applied — callers prepend their own SELECT and append GROUP/ORDER."""
 	cols = cols or get_column_map()
 	params = base_params(start, end)
-	if sites:
-		params["sites"] = list(sites)
 	outer = []
+	if sites:
+		outer.append("lm_site IN {sites:Array(String)}")
+		params["sites"] = list(sites)
 	types = [t for t in (log_types or []) if t in LOG_TYPES]
 	if types and len(types) < len(LOG_TYPES):
 		outer.append("lm_type IN {types:Array(String)}")
@@ -143,7 +158,7 @@ def build_filtered(
 	if search:
 		outer.append("(positionCaseInsensitive(lm_content, {q:String}) > 0 OR positionCaseInsensitive(lm_site, {q:String}) > 0)")
 		params["q"] = str(search)
-	sql = f"FROM ({base_query(cols, site_filter=bool(sites))})"
+	sql = f"FROM ({base_query(cols)})"
 	if outer:
 		sql += " WHERE " + " AND ".join(outer)
 	return sql, params

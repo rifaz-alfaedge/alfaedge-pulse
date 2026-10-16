@@ -25,13 +25,11 @@ Settings' ``last_error``.
 
 from __future__ import annotations
 
-import re
-
 import frappe
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from alfaedge_pulse.alerts.dispatch import dispatch_alert, dispatch_recovery, has_open_alert, resolve_alert
-from alfaedge_pulse.log_monitor.connection import SETTINGS_DOCTYPE, get_client, get_settings
+from alfaedge_pulse.log_monitor.connection import SETTINGS_DOCTYPE, get_client, get_settings, get_site_aliases, normalize_site
 from alfaedge_pulse.log_monitor.queries import build_filtered, ts_out
 
 ALERT_TYPE = "Recurring Error"
@@ -96,7 +94,7 @@ def run_check(settings=None, now=None) -> dict:
 			"signature": sig,
 			"title": row["title"] or "(no message)",
 			"site_url": row["site_url"],
-			"monitored_host": host_by_site.get(_site_key(row["site_url"])),
+			"monitored_host": host_by_site.get(normalize_site(row["site_url"])),
 			"window_count": count,
 			"peak_window_count": max(cint(doc.peak_window_count), count),
 			"last_seen": row["last_seen"],
@@ -136,13 +134,6 @@ def run_check(settings=None, now=None) -> dict:
 	return {"breaching": len(breaching), "alerted": alerted, "recovered": recovered}
 
 
-def _site_key(url: str | None) -> str:
-	"""Compare site URLs scheme/port/slash/case-insensitively."""
-	url = (url or "").strip().lower()
-	url = re.sub(r"^[a-z]+://", "", url)
-	return url.split("/")[0].split(":")[0]
-
-
 def _monitored_hosts_by_site() -> dict[str, str]:
 	"""Map each Monitored Host's reported sites (URL and site name) to the
 	host, so a Recurring Error links back to it — that link is what lets
@@ -151,5 +142,11 @@ def _monitored_hosts_by_site() -> dict[str, str]:
 	for row in frappe.get_all("Monitored Host Site", fields=["parent", "site_url", "site_name"]):
 		for value in (row.site_url, row.site_name):
 			if value:
-				mapping.setdefault(_site_key(value), row.parent)
+				mapping.setdefault(normalize_site(value), row.parent)
+	# An aliased site (e.g. "lulu" shown as "lulu.alfaedge.org") still
+	# belongs to whichever host reports either name.
+	for source, target in get_site_aliases().items():
+		host = mapping.get(source) or mapping.get(normalize_site(target))
+		if host:
+			mapping.setdefault(normalize_site(target), host)
 	return mapping

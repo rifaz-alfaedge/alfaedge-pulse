@@ -1,0 +1,87 @@
+{
+ "actions": [],
+ "autoname": "field:source_host",
+ "creation": "2026-10-16 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "source_host",
+  "site",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_host",
+   "fieldtype": "Data",
+   "label": "Host in Logs",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "The host as reported by the server script, e.g. lulu (from https://lulu). The scheme, port and path are stripped automatically."
+  },
+  {
+   "fieldname": "site",
+   "fieldtype": "Data",
+   "label": "Show As",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "An existing site's host (e.g. lulu.alfaedge.org) to merge into, or any display name."
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log Monitor",
+ "name": "Log Site Alias",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer",
+   "share": 1,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "source_host",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "source_host"
+}

@@ -28,6 +28,13 @@ All notable changes to this project are documented here.
     linked to the Monitored Host that reports its site, so an Alert
     Subscription on that host also receives the host's site errors. Local
     alert state lives in the new `Recurring Error` doctype.
+  - **Sites are identified by host.** The same host under `http://` and
+    `https://` (or with a different port or trailing slash) counts as one
+    site, e.g. `anson.alfaedge.org`. A site logged under a bare name such
+    as `https://lulu` can be merged into its real site, or given any
+    display name, from the Logs → **Sites** dialog or the new **Log Site
+    Alias** doctype. Aliases are applied inside every ClickHouse query, so
+    they also regroup logs recorded before the alias existed.
   - **`ClickHouse Log Settings`** can be edited both in Desk and in the
     dashboard's Logs → Settings dialog. Every setting is configurable:
     protocol, host, port, URL path, timeout, database, table, the column

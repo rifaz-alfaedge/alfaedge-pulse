@@ -74,6 +74,35 @@ class ColumnMap:
 	log_type: str | None
 
 
+def normalize_site(value: str | None) -> str:
+	"""A site's identity in Log Monitor: its bare lower-cased host, so
+	``http://Anson.example.org/`` and ``https://anson.example.org:443``
+	are the same site. Must match ``queries.site_host_expr``."""
+	value = (value or "").strip().lower()
+	value = re.sub(r"^[a-z][a-z0-9+.-]*://", "", value)
+	return re.split(r"[/:?#]", value, maxsplit=1)[0]
+
+
+def normalize_site_label(value: str | None) -> str:
+	"""An alias target: a URL/host is normalized like ``normalize_site``;
+	a free-text display name (anything with a space) is kept as typed."""
+	value = (value or "").strip()
+	if " " in value and "://" not in value:
+		return value
+	return normalize_site(value)
+
+
+def get_site_aliases() -> dict[str, str]:
+	"""{source_host: site} for every Log Site Alias, cached until one changes."""
+	from alfaedge_pulse.log_monitor.doctype.log_site_alias.log_site_alias import ALIAS_CACHE_KEY
+
+	aliases = frappe.cache().get_value(ALIAS_CACHE_KEY)
+	if aliases is None:
+		aliases = {r.source_host: r.site for r in frappe.get_all("Log Site Alias", fields=["source_host", "site"])}
+		frappe.cache().set_value(ALIAS_CACHE_KEY, aliases)
+	return aliases
+
+
 def get_settings():
 	return frappe.get_cached_doc(SETTINGS_DOCTYPE)
 

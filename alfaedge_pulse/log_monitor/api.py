@@ -26,10 +26,13 @@ from alfaedge_pulse.log_monitor.connection import (
 	SETTINGS_DOCTYPE,
 	LogMonitorNotConfigured,
 	get_client,
+	get_column_map,
 	get_secret,
 	get_settings,
+	get_site_aliases,
+	normalize_site,
 )
-from alfaedge_pulse.log_monitor.queries import build_filtered, ts_out
+from alfaedge_pulse.log_monitor.queries import base_params, build_filtered, site_host_expr, ts_out
 
 VIEW_ROLES = ("System Manager", "Proxmox Monitor Manager", "Proxmox Monitor Viewer")
 MANAGER_ROLES = ("System Manager", "Proxmox Monitor Manager")
@@ -229,6 +232,73 @@ def get_recurring_errors(
 		r["alert_count"] = cint(local.alert_count) if local else 0
 		r["monitored_host"] = local.monitored_host if local else None
 	return rows
+
+
+# ---------------------------------------------------------------------------
+# Site aliases (Log Site Alias) — merging hosts that are really one site
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist()
+def get_site_overview(days: int = 30) -> dict:
+	"""Every host seen in the last ``days`` days (before aliasing), with the
+	raw URLs it appeared under, its log count, and what it's shown as —
+	plus suggestions for alias targets (other hosts, Monitored Host sites,
+	existing alias names)."""
+	frappe.only_for(VIEW_ROLES)
+	cols = get_column_map()
+	start, end = _range(None, None, default_days=cint(days) or 30)
+	params = base_params(start, end)
+	host = site_host_expr(cols)
+	with _clickhouse_errors():
+		rows = get_client().query(
+			f"""SELECT {host} AS host, groupUniqArray(10)(toString({cols.site})) AS urls, count() AS logs,
+				{ts_out(f"max({cols.ts})")} AS last_seen
+				FROM {cols.table}
+				WHERE {cols.ts} >= toDateTime({{start:String}}, {{tz:String}}) AND {cols.ts} < toDateTime({{end:String}}, {{tz:String}})
+				GROUP BY host ORDER BY logs DESC LIMIT 2000""",
+			params,
+		)
+	aliases = get_site_aliases()
+	hosts = []
+	for r in rows:
+		if not r["host"]:
+			continue
+		hosts.append({
+			"host": r["host"],
+			"urls": sorted(r["urls"]),
+			"logs": cint(r["logs"]),
+			"last_seen": r["last_seen"],
+			"alias": aliases.get(r["host"]),
+		})
+	monitored = {
+		normalize_site(v)
+		for row in frappe.get_all("Monitored Host Site", fields=["site_url", "site_name"])
+		for v in (row.site_url, row.site_name)
+		if v
+	}
+	suggestions = sorted({h["host"] for h in hosts} | set(aliases.values()) | monitored)
+	return {"hosts": hosts, "suggestions": [s for s in suggestions if s]}
+
+
+@frappe.whitelist(methods=["POST"])
+def save_site_alias(source_host: str, site: str | None = None) -> dict:
+	"""Show ``source_host`` as ``site``. A blank ``site`` (or one equal to
+	the host) removes the alias."""
+	frappe.only_for(MANAGER_ROLES)
+	source_host = normalize_site(source_host)
+	if not source_host:
+		frappe.throw(frappe._("Host is required"))
+	existing = frappe.db.get_value("Log Site Alias", {"source_host": source_host})
+	site = (site or "").strip()
+	if not site or normalize_site(site) == source_host:
+		if existing:
+			frappe.delete_doc("Log Site Alias", existing, ignore_permissions=True)
+		return {"source_host": source_host, "site": None}
+	doc = frappe.get_doc("Log Site Alias", existing) if existing else frappe.new_doc("Log Site Alias")
+	doc.update({"source_host": source_host, "site": site})
+	doc.save(ignore_permissions=True)
+	return {"source_host": doc.source_host, "site": doc.site}
 
 
 # ---------------------------------------------------------------------------

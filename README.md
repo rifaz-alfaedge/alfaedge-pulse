@@ -488,6 +488,10 @@ recurring errors.
   optional API key for a reverse proxy) are stored encrypted and are never
   shown again after you save them. Use **Test Connection** to check the
   settings. Give Pulse a read-only ClickHouse user.
+- **Sites** are identified by host, so the `http://` and `https://` URLs
+  of one host count as one site. A host logged under a bare name (e.g.
+  `https://lulu`) can be merged into its real site, or given a display
+  name, under Logs → **Sites**. This also regroups past logs.
 - **Error vs General.** A row is an Error when its content contains the
   configured keyword (default `error`, case-insensitive). Every other row
   is General.
