@@ -17,10 +17,11 @@ key); derived-column filters (type, signature, search) sit outside it.
 - **Log type**: "Error" when the content (or the mapped Log Type column,
   if one is configured) contains the configured keyword, case-
   insensitively; "General" otherwise.
-- **Title**: the mapped Title column if set; otherwise the last non-empty
-  line of a Python traceback (the actual ``SomeError: message`` line —
-  the first line is always just "Traceback (most recent call last):"), or
-  the first non-empty line of anything else.
+- **Title**: the mapped Title column if set; otherwise, for a row holding
+  a Python traceback, its last non-empty line (the actual
+  ``SomeError: message`` line), prefixed with the first line when that
+  first line is a context message rather than "Traceback ..." itself;
+  for anything else, its first non-empty line.
 - **Signature** (what "the same error" means for recurring-error
   grouping): a hash of the site URL plus the title with every volatile
   token — numbers, long hex runs (hashes, docnames), and quoted values —
@@ -53,9 +54,17 @@ def title_expr(cols: ColumnMap) -> str:
 	if cols.title:
 		return f"substring(trimBoth(toString({cols.title})), 1, 300)"
 	lines = _lines(cols.content)
+	first = f"trimBoth(arrayElement({lines}, 1))"
+	last = f"trimBoth(arrayElement({lines}, -1))"
+	# A traceback's useful line is its last one (the exception). Frappe's
+	# log_error() often prefixes it with a context line ("Error @ fetch_order:")
+	# — kept, since it's what tells two PermissionErrors apart.
+	has_traceback = f"positionCaseInsensitive(toString({cols.content}), 'Traceback') > 0"
+	starts_with_traceback = f"startsWith({first}, 'Traceback')"
 	return (
-		f"substring(trimBoth(if(startsWith(trimLeft(toString({cols.content})), 'Traceback'), "
-		f"arrayElement({lines}, -1), arrayElement({lines}, 1))), 1, 300)"
+		f"substring(if({has_traceback}, "
+		f"if({starts_with_traceback}, {last}, concat(trimRight({first}, ':'), ': ', {last})), "
+		f"{first}), 1, 300)"
 	)
 
 
