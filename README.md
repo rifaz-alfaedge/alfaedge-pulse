@@ -31,13 +31,20 @@ self-hosted [Bifrost](https://getbifrost.ai) gateway (see
   spike routinely and won't page anyone for it. The host itself, its
   storage pools, and its backups are still alerted on regardless of role.
 - **Backup tracking that matches how Proxmox actually reports it.** Both
-  local vzdump backups and PBS-remote backups are tracked per guest for
-  history (grouped and sortable in the Backups tab, one table per
-  server/PBS destination), but *alerting* judges the underlying backup
-  **task** as a whole — a bulk nightly job covering the whole fleet is one
-  pass/fail outcome, not one alert per affected guest, and a host that has
-  never run a single backup task is flagged just as critically as one
-  whose latest task failed.
+  local vzdump and PBS-remote backups are tracked per guest. The history
+  is grouped and sortable in the Backups tab, with one table per server or
+  PBS destination. Backups are alerted at two levels:
+  - **Backup Failure** (host): no successful backup anywhere on the host
+    for 24 hours.
+  - **Backup Overdue** (guest): a running VM/CT with no successful backup
+    within *Backup Overdue After (hours)*, 26 by default. These are
+    batched, so a broken nightly job sends one message. Tag a guest
+    `no-backup` to exempt it.
+
+  Both send a recovery message once backups succeed again. The poller is
+  self-healing: a poll job left stuck by a killed worker is cleared
+  automatically, and **Poller Stalled** alerts if no server has synced for
+  5 minutes.
 - **Multi-channel alerting without owning any credentials.** Email uses
   whatever Email Account is already configured in core Frappe. Telegram
   and WhatsApp defer entirely to separate, already-installed integration

@@ -40,6 +40,11 @@ _LAST_RUN_CACHE_KEY = "alfaedge_pulse:resource_alert_batch_last_run"
 _MAX_LOOKBACK_MINUTES = 10
 
 
+def _guest_role(guest_name: str) -> str | None:
+	server = frappe.db.get_value("Proxmox Guest", guest_name, "server")
+	return frappe.db.get_value("Proxmox Server", server, "role") if server else None
+
+
 def _parse_recipient_list(value: str | None) -> list[str]:
 	return [v.strip() for v in (value or "").split(",") if v.strip()]
 
@@ -92,6 +97,10 @@ def send_resource_alert_batch() -> None:
 		count_suffix = f" ({len(occurrences)}x, {status_label})" if len(occurrences) > 1 else f" ({status_label})"
 		section_by_key[key] = f"{alert_type} — {reference_name}{count_suffix}: {occurrences[-1].message}"
 		if reference_doctype == "Monitored Host" and get_host_role(reference_name) == "Production":
+			global_eligible.add(key)
+		elif reference_doctype == "Proxmox Guest" and _guest_role(reference_name) == "Production":
+			# Backup Overdue — same Production-only global rule as every
+			# other per-guest alert (see poller._upsert_guest).
 			global_eligible.add(key)
 		elif reference_doctype == "Recurring Error" and recurring_to_global:
 			# Off by default — recurring errors go to subscribed engineers

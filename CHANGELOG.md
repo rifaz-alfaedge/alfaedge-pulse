@@ -2,6 +2,46 @@
 
 All notable changes to this project are documented here.
 
+## [4.6.0] - 2026-10-22
+
+### Fixed
+- **The Proxmox poller could stop permanently after a worker restart.**
+  When a worker was killed mid-run (for example by
+  `supervisorctl restart` during a deploy), RQ kept the poll job marked
+  "started". Frappe's `deduplicate=True` then refused every re-enqueue
+  from the 1-minute watchdog, so polling never resumed. Dashboard data,
+  Server Offline, Critical Resource and backup checks all froze with
+  nothing raised; this happened in production from 16 Oct.
+  `ensure_poller_running` now deletes a queued/started poll job older
+  than the bounded run time (`MAX_LOOP_SECONDS` + 5 min), logs it as
+  "cleared stale poller job", and restarts the loop.
+
+### Added
+- **Poller Stalled alert.** The 1-minute watchdog alerts globally when no
+  enabled Proxmox Server has synced for 5 minutes (or 5 poll intervals),
+  and sends a recovery once syncing resumes.
+- **Per-guest Backup Overdue alert.** Previously only the host as a whole
+  was checked, so one guest backing up kept every guest green. Now each
+  running VM/CT with no successful backup within **Backup Overdue After
+  (hours)** (new Proxmox Monitor Settings field, default 26; 0 turns it
+  off) raises Backup Overdue, with a recovery once it backs up again.
+  - Exempt: stopped guests, guests tagged `no-backup` in Proxmox, and
+    guests created within the window.
+  - Batched through the 2-minute alert batch, so a host-wide failure
+    arrives as one message.
+  - The global recipients only get Production hosts' guests;
+    per-instance Alert Subscriptions get theirs regardless.
+  - The Usage Metrics "Last backup" colour uses the same window.
+- **Backup Failure recovery message** when a host's backups succeed
+  again (previously the alert was only closed silently).
+
+### Changed
+- vzdump task window raised from 50 to 200 per cycle, so frequent
+  per-guest jobs don't push results out between cycles. Tasks already
+  recorded are still skipped by UPID.
+- A PBS snapshot is linked to a guest only when its VMID is unique across
+  the fleet; otherwise it's recorded unlinked rather than guessed.
+
 ## [4.5.0] - 2026-10-22
 
 ### Changed

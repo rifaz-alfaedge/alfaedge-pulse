@@ -443,6 +443,7 @@ export function GuestUsageTable({
   loads,
   severityOf,
   thresholds,
+  backupOverdueHours,
   filters,
   onFiltersChange,
   onOpen,
@@ -453,6 +454,9 @@ export function GuestUsageTable({
   loads?: GuestLoadAverages
   severityOf: (g: ProxmoxGuest) => Severity
   thresholds: Thresholds
+  /** Proxmox Monitor Settings' backup_overdue_hours — same window the
+   * Backup Overdue alert uses, so the colour and the alert agree. */
+  backupOverdueHours: number
   filters: GuestFilters
   onFiltersChange: (f: GuestFilters) => void
   onOpen: (g: ProxmoxGuest) => void
@@ -619,7 +623,8 @@ export function GuestUsageTable({
       render: (g) => {
         const t = ts(g.last_successful_backup)
         const ageH = t === null ? null : (Date.now() - t) / 3_600_000
-        const cls = ageH === null ? 'text-status-critical' : ageH > 48 ? 'text-status-warning' : 'text-ink-secondary'
+        const overdue = backupOverdueHours > 0 && ageH !== null && ageH > backupOverdueHours
+        const cls = ageH === null ? 'text-status-critical' : overdue ? 'text-status-warning' : 'text-ink-secondary'
         return <span className={cls} title={g.last_successful_backup ?? 'No successful backup recorded'}>{timeAgo(g.last_successful_backup)}</span>
       },
     },

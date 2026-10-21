@@ -223,6 +223,7 @@ function App() {
               loads={guestLoads}
               severityOf={guestSeverity}
               thresholds={{ warning: warningThreshold, critical: criticalThreshold }}
+              backupOverdueHours={settings?.backup_overdue_hours ?? 26}
               filters={guestFilters}
               onFiltersChange={setGuestFilters}
               onOpen={(g) => setSelected({ kind: 'guest', doc: g })}

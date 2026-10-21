@@ -59,6 +59,10 @@ DIGEST_ONLY_ALERT_TYPES = {
 BATCHED_RESOURCE_ALERT_TYPES = {
 	"High Load Average",
 	"High Swap Usage",
+	# Per-guest backup checks (poller._check_guest_backups) — a broken
+	# backup job or full backup drive makes every guest on a host overdue
+	# at once.
+	"Backup Overdue",
 	# Log Monitor (tasks/log_monitor.py) — a bad deploy commonly makes
 	# several distinct errors spike across sites at once; batching turns
 	# that into one message instead of one per error signature.

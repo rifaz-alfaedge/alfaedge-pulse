@@ -11,6 +11,7 @@
   "warning_threshold_percent",
   "critical_threshold_percent",
   "confirmation_checks",
+  "backup_overdue_hours",
   "resource_history_section",
   "resource_history_enabled",
   "column_break_resource_history",
@@ -70,6 +71,13 @@
    "fieldtype": "Int",
    "label": "Confirmation Checks",
    "non_negative": 1
+  },
+  {
+   "fieldname": "backup_overdue_hours",
+   "fieldtype": "Int",
+   "label": "Backup Overdue After (hours)",
+   "default": "26",
+   "description": "Alert (Backup Overdue, batched) when a running VM/CT has no successful backup for this long. 0 turns it off. Tag a guest 'no-backup' in Proxmox to exempt it."
   },
   {
    "fieldname": "resource_history_section",
@@ -180,7 +188,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-06 11:16:25.155498",
+ "modified": "2026-10-22 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Proxmox Fleet Monitor",
  "name": "Proxmox Monitor Settings",

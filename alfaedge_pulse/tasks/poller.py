@@ -72,7 +72,7 @@ from __future__ import annotations
 import re
 import signal
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 import frappe
@@ -93,6 +93,19 @@ HEARTBEAT_CACHE_KEY = "alfaedge_pulse:poller_heartbeat"
 # Comfortably inside the long queue's stopwaitsecs, and short enough that
 # the 1-minute watchdog cron picks the loop back up almost immediately.
 MAX_LOOP_SECONDS = 300
+
+#: A queued/started poll job older than this can't be a live loop (one run
+#: is bounded to MAX_LOOP_SECONDS) — it's a leftover from a worker that was
+#: killed mid-job, and RQ still reports it as started. See
+#: ``_clear_stale_poller_job``.
+STALE_JOB_SECONDS = MAX_LOOP_SECONDS + 300
+
+#: No enabled Proxmox Server synced for this long (or 5 poll intervals,
+#: whichever is longer) means the poller itself has stopped — see
+#: ``_check_poller_stall``.
+POLLER_STALL_SECONDS = 300
+POLLER_STALL_ALERT = "Poller Stalled"
+POLLER_STALL_REFERENCE = ("Proxmox Monitor Settings", "Proxmox Monitor Settings")
 
 
 class Thresholds(NamedTuple):
@@ -126,10 +139,20 @@ def ensure_poller_running() -> None:
 	``after_migrate`` so the loop comes up automatically after installing
 	or updating the app without any manual step. Also what picks the loop
 	back up after each bounded ``run_poll_loop`` invocation ends normally.
+
+	Also raises/clears the ``Poller Stalled`` alert (see
+	``_check_poller_stall``) — this cron is the one thing that keeps
+	running even when the loop itself doesn't.
 	"""
+	try:
+		_check_poller_stall()
+	except Exception:
+		frappe.log_error(title="alfaEdge Pulse: poller stall check failed", message=frappe.get_traceback())
+
 	if frappe.cache().get_value(HEARTBEAT_CACHE_KEY):
 		return  # loop is alive and ticking; nothing to do
 
+	_clear_stale_poller_job()
 	frappe.enqueue(
 		"alfaedge_pulse.tasks.poller.run_poll_loop",
 		queue="long",
@@ -146,6 +169,73 @@ def ensure_poller_running() -> None:
 		# this closes the same race window explicitly rather than by luck.
 		deduplicate=True,
 	)
+
+
+def _clear_stale_poller_job() -> None:
+	"""Delete a poll job RQ still reports as queued/started long after any
+	real run could have ended.
+
+	Frappe's ``deduplicate=True`` refuses to enqueue while a job with this
+	id is QUEUED or STARTED. When a worker is killed mid-run (e.g. a
+	``supervisorctl restart`` during a deploy), RQ can leave the job
+	recorded as STARTED with no worker behind it — the heartbeat expires,
+	but every watchdog enqueue is then silently deduped and the poller
+	never comes back. This happened in production on 2026-10-16: no
+	Proxmox sync (and so no backup checks) for days. A run is bounded to
+	MAX_LOOP_SECONDS, so anything older than STALE_JOB_SECONDS is dead.
+	"""
+	from frappe.utils.background_jobs import get_job
+	from rq.job import JobStatus
+
+	job = get_job(POLLER_JOB_ID)
+	if not job or job.get_status(refresh=False) not in (JobStatus.QUEUED, JobStatus.STARTED):
+		return
+	since = job.started_at or job.enqueued_at
+	if since is None:
+		return
+	if since.tzinfo is None:
+		since = since.replace(tzinfo=timezone.utc)  # RQ stores UTC
+	age = (datetime.now(timezone.utc) - since).total_seconds()
+	if age < STALE_JOB_SECONDS:
+		return  # genuinely pending/running — leave it alone
+	frappe.log_error(
+		title="alfaEdge Pulse: cleared stale poller job",
+		message=f"Poll job {job.id} was still {job.get_status(refresh=False)} after {int(age)}s "
+		f"(worker {job.worker_name or 'unknown'}); deleted so the watchdog can restart the poller.",
+	)
+	job.delete()
+
+
+def _check_poller_stall() -> None:
+	"""Alert when no enabled Proxmox Server has synced recently — i.e. the
+	poller itself has stopped, which otherwise goes unnoticed: a dead loop
+	can't raise Server Offline, Critical Resource or Backup Failure.
+	Recovers on its own once syncs resume."""
+	newest = frappe.db.sql(
+		"select max(last_synced) from `tabProxmox Server` where enabled = 1"
+	)[0][0]
+	if not frappe.db.count("Proxmox Server", {"enabled": 1}):
+		if has_open_alert(*POLLER_STALL_REFERENCE, POLLER_STALL_ALERT):
+			resolve_alert(*POLLER_STALL_REFERENCE, POLLER_STALL_ALERT)
+		return
+
+	interval = cint(frappe.db.get_single_value("Proxmox Monitor Settings", "poll_interval_seconds")) or 20
+	limit = max(POLLER_STALL_SECONDS, interval * 5)
+	age = (now_datetime() - get_datetime(newest)).total_seconds() if newest else None
+	stalled = age is None or age > limit
+	is_open = has_open_alert(*POLLER_STALL_REFERENCE, POLLER_STALL_ALERT)
+
+	if stalled and not is_open:
+		since = f"last sync {int(age // 60)} min ago" if age is not None else "no server has ever synced"
+		dispatch_alert(
+			POLLER_STALL_ALERT, *POLLER_STALL_REFERENCE,
+			f"alfaEdge Pulse: Proxmox polling has stopped ({since}). Dashboard data and backup checks are stale.",
+		)
+	elif not stalled and is_open:
+		resolve_alert(*POLLER_STALL_REFERENCE, POLLER_STALL_ALERT)
+		dispatch_recovery(
+			POLLER_STALL_ALERT, *POLLER_STALL_REFERENCE, "alfaEdge Pulse: Proxmox polling has resumed.",
+		)
 
 
 def run_poll_loop() -> None:
@@ -648,7 +738,11 @@ def _sync_pve_backups(server, client: PVEClient, node: str) -> None:
 	except ProxmoxAPIError:
 		backup_files = []
 
-	tasks = client.list_vzdump_tasks(node, limit=50)
+	# 200, not 50: per-guest jobs every 30-60 min across a few dozen guests
+	# can push results out of a 50-task window between cycles or after any
+	# poller downtime. Already-recorded tasks are skipped by UPID, so the
+	# larger window costs nothing extra per cycle.
+	tasks = client.list_vzdump_tasks(node, limit=200)
 
 	for task in tasks:
 		if not task.get("endtime"):
@@ -667,6 +761,7 @@ def _sync_pve_backups(server, client: PVEClient, node: str) -> None:
 	# time — that's what catches backups having quietly stopped altogether
 	# (no new tasks at all), not just "the last one failed".
 	_handle_backup_task_result(server)
+	_check_guest_backups(server)
 
 
 def _find_backup_notes(backup_files: list[dict], vmid: int, backup_time: datetime) -> str:
@@ -969,6 +1064,74 @@ def _handle_backup_task_result(server) -> None:
 		)
 	elif was_critical and not is_critical_now:
 		resolve_alert("Proxmox Server", server.name, "Backup Failure")
+		dispatch_recovery(
+			"Backup Failure", "Proxmox Server", server.name,
+			f"{server.server_name}: backups succeeding again (last successful backup {last_success})",
+		)
+
+
+#: Guests tagged with this (Proxmox tag) are deliberately not backed up and
+#: never raise Backup Overdue.
+NO_BACKUP_TAG = "no-backup"
+
+
+def _check_guest_backups(server) -> None:
+	"""Per-guest counterpart to ``_handle_backup_task_result``: raise
+	**Backup Overdue** for each running guest on this host whose latest
+	successful backup is older than Proxmox Monitor Settings'
+	``backup_overdue_hours`` (0 disables), and recover it once a new one
+	lands.
+
+	The host-level check alone misses the case that matters most in
+	practice — one guest backing up keeps the whole host green while
+	others silently haven't been backed up for days. Skips stopped guests,
+	guests tagged ``no-backup``, and guests younger than the window (no
+	backup can be expected yet). Backup Overdue is a batched alert type
+	(see alerts/dispatch.py), so a host-wide failure lands as one message,
+	not one per guest; the global recipients only get Production hosts'
+	guests, matching every other per-guest alert.
+	"""
+	hours = cint(frappe.db.get_single_value("Proxmox Monitor Settings", "backup_overdue_hours"))
+	if hours <= 0:
+		return
+	cutoff = add_to_date(now_datetime(), hours=-hours)
+	notify_global = server.role == "Production"
+	# One query for all of this host's open Backup Overdue alerts, rather
+	# than an has_open_alert() lookup per guest every 20s cycle.
+	open_alerts = set(
+		frappe.get_all(
+			"Proxmox Alert Log",
+			filters={"alert_type": "Backup Overdue", "reference_doctype": "Proxmox Guest", "resolved": 0},
+			pluck="reference_name",
+		)
+	)
+
+	for g in frappe.get_all(
+		"Proxmox Guest",
+		filters={"server": server.name},
+		fields=["name", "guest_name", "vmid", "status", "tags", "creation", "last_successful_backup"],
+	):
+		tags = {t.strip().lower() for t in (g.tags or "").replace(";", ",").split(",")}
+		exempt = g.status != "running" or NO_BACKUP_TAG in tags or get_datetime(g.creation) > cutoff
+		last = get_datetime(g.last_successful_backup) if g.last_successful_backup else None
+		overdue = not exempt and (last is None or last < cutoff)
+		is_open = g.name in open_alerts
+
+		if overdue and not is_open:
+			detail = f"last successful backup {last}" if last else "no successful backup recorded"
+			dispatch_alert(
+				"Backup Overdue", "Proxmox Guest", g.name,
+				f"{g.guest_name} ({g.vmid}) on {server.server_name}: no backup in over {hours}h ({detail})",
+				notify_global=notify_global,
+			)
+		elif not overdue and is_open:
+			resolve_alert("Proxmox Guest", g.name, "Backup Overdue")
+			if not exempt:
+				dispatch_recovery(
+					"Backup Overdue", "Proxmox Guest", g.name,
+					f"{g.guest_name} ({g.vmid}) on {server.server_name}: backed up again ({last})",
+					notify_global=notify_global,
+				)
 
 
 def _parse_vmid(raw) -> int | None:
@@ -1037,7 +1200,12 @@ def _backfill_pbs_snapshots(server, client: PBSClient, store: str) -> None:
 		if frappe.db.exists("Proxmox Backup Log", {"upid": synthetic_upid}):
 			continue
 
-		guest_name = frappe.db.get_value("Proxmox Guest", {"vmid": vmid})
+		# Only link when the vmid is unambiguous across the fleet — PBS
+		# snapshots don't say which host they came from, so two hosts
+		# sharing a vmid must not be guessed between (same rule as
+		# _match_guest_by_vmid).
+		matches = frappe.get_all("Proxmox Guest", filters={"vmid": vmid}, pluck="name", limit=2)
+		guest_name = matches[0] if len(matches) == 1 else None
 		backup_time = datetime.fromtimestamp(latest["backup-time"])
 		frappe.get_doc(
 			{

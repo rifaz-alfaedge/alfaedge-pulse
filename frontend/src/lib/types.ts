@@ -143,6 +143,7 @@ export type AlertType =
   | 'High Load Average'
   | 'High Swap Usage'
   | 'Recurring Error'
+  | 'Poller Stalled'
 
 export interface ProxmoxAlertLog {
   name: string
@@ -160,6 +161,7 @@ export interface ProxmoxMonitorSettings {
   warning_threshold_percent: number
   critical_threshold_percent: number
   confirmation_checks: number
+  backup_overdue_hours?: number
 }
 
 // Mirrors alfaedge_pulse/llm_usage_monitor/doctype — see those .json files
