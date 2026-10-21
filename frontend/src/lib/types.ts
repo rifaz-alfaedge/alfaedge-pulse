@@ -29,6 +29,9 @@ export interface ProxmoxServer {
   storage_usage?: number
   storage_total?: number
   uptime?: number
+  load_avg_1min?: number | null
+  load_avg_5min?: number | null
+  load_avg_15min?: number | null
   last_synced?: string
   last_error?: string
 }
@@ -536,4 +539,19 @@ export interface SiteOverviewHost {
 export interface SiteOverview {
   hosts: SiteOverviewHost[]
   suggestions: string[]
+}
+
+export interface GuestLoadAverage {
+  load_avg_1min: number
+  load_avg_5min: number
+  load_avg_15min: number
+  cpu_core_count: number
+  load_normalized_percent: number
+  collected_at: string
+}
+
+export interface GuestLoadAverages {
+  guests: Record<string, GuestLoadAverage>
+  warning_percent: number
+  critical_percent: number
 }

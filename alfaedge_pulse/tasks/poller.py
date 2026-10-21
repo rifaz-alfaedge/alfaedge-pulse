@@ -302,7 +302,7 @@ def sync_server(server) -> None:
 
 
 def _apply_host_status(server, status: dict, thresholds: Thresholds) -> None:
-	"""Populate CPU/RAM/swap/root-disk/uptime from a PVE or PBS `/nodes/{node}/status` response.
+	"""Populate CPU/RAM/swap/root-disk/uptime/load average from a PVE or PBS `/nodes/{node}/status` response.
 
 	``storage_usage``/``storage_total`` (the root `/` filesystem) and
 	``swap_usage``/``swap_total`` are kept as informational fields only —
@@ -339,6 +339,11 @@ def _apply_host_status(server, status: dict, thresholds: Thresholds) -> None:
 	server.storage_usage = storage_usage
 	server.storage_total = round(flt(rootfs.get("total")) / 1e9, 2)
 	server.uptime = cint(status.get("uptime"))
+	# PVE/PBS both report loadavg as three strings ("0.42", ...); missing on
+	# very old versions, in which case the previous values are kept.
+	loadavg = status.get("loadavg") or []
+	if len(loadavg) >= 3:
+		server.load_avg_1min, server.load_avg_5min, server.load_avg_15min = (flt(v) for v in loadavg[:3])
 
 	log_host_metrics(server, status)  # interval-gated append to Proxmox Host Metric Log — no new API call
 

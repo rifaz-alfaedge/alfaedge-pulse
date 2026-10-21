@@ -6,6 +6,7 @@ import type {
   FrappeActiveJob,
   FrappeFailedJobLog,
   FrappeWorkerHealthLog,
+  GuestLoadAverages,
   HostMonitorSettings,
   ImportableMonitor,
   LlmUsageLog,
@@ -47,13 +48,13 @@ const UI_POLL_MS = 7000
 const SERVER_FIELDS: (keyof ProxmoxServer)[] = [
   'name', 'server_name', 'hostname', 'port', 'server_type', 'role', 'datacenter_location',
   'cloud_provider', 'local_backup_retention', 'enabled', 'status', 'is_critical', 'backup_critical',
-  'cpu_usage', 'memory_usage', 'memory_total', 'swap_usage', 'swap_total', 'storage_usage', 'storage_total',
-  'uptime', 'last_synced', 'last_error',
+  'cpu_usage', 'cores', 'memory_usage', 'memory_total', 'swap_usage', 'swap_total', 'storage_usage', 'storage_total',
+  'uptime', 'load_avg_1min', 'load_avg_5min', 'load_avg_15min', 'last_synced', 'last_error',
 ]
 
 const GUEST_FIELDS: (keyof ProxmoxGuest)[] = [
   'name', 'server', 'node', 'vmid', 'guest_name', 'guest_type', 'status', 'is_critical', 'is_warning',
-  'cpu_usage', 'memory_usage', 'memory_total', 'disk_usage', 'disk_total', 'uptime',
+  'cpu_usage', 'cpus', 'memory_usage', 'memory_total', 'disk_usage', 'disk_total', 'uptime',
   'last_synced', 'last_successful_backup', 'ip_address', 'network_mode',
   'public_ip', 'access_url', 'assigned_engineer', 'tags',
 ]
@@ -709,6 +710,19 @@ export function useRecurringErrors(f: LogFilters, minCount: number, enabled: boo
     params,
     enabled ? ['recurring-errors', JSON.stringify(params)] : null,
     { refreshInterval: LOG_POLL_MS, keepPreviousData: true },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+/** Latest resource-agent load average per Proxmox Guest (Usage Metrics'
+ * Load avg column). The agent pushes every ~3 minutes, so a 60s refresh
+ * is plenty. */
+export function useGuestLoadAverages() {
+  const result = useFrappeGetCall<{ message: GuestLoadAverages }>(
+    'alfaedge_pulse.host_health.api.get_guest_load_averages',
+    undefined,
+    undefined,
+    { refreshInterval: SLOW_POLL_MS },
   )
   return { ...result, data: result.data?.message }
 }

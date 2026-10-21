@@ -46,17 +46,17 @@ self-hosted [Bifrost](https://getbifrost.ai) gateway (see
   fire when a critical condition clears, and individual engineers can
   self-subscribe to specific VM/CT instances on top of the global
   recipients — see [Alert Subscriptions](#alert-subscriptions).
-- **A live, glanceable dashboard.** CPU/RAM/Swap/storage rings with
-  at-a-glance icons, a heartbeat indicator tied to how recently each node
-  actually synced, click-through detail views, and dashboard ordering
-  that groups every server (and its guests) by role — Production first,
-  then Staging, then Development, then PBS — so what matters most is
-  always at the top. A ring past its warning/critical threshold swaps its
-  percentage for a warning/critical icon (with a pulsing glow on
-  critical), two persistent summary cards list every critical/warning
-  instance by name, and VM/CT cards can be sorted by CPU, RAM, or Storage —
-  each card's own meter rings reorder to lead with whichever metric you're
-  currently sorting by.
+- **A live dashboard, with Usage Metrics as plain tables.** There are two
+  sortable, filterable tables:
+  - **Hosts and backup server:** CPU, RAM, swap and per-drive disk, each
+    as used/total, plus load average and uptime.
+  - **VMs and containers:** CPU, RAM and disk, each as used/allocated,
+    plus load average from the Pulse resource agent, IP, uptime, last
+    backup and Host Health.
+
+  Values past the warning/critical thresholds are coloured. A heartbeat
+  indicator shows how recently each node synced, and clicking a row
+  opens its detail view.
 - **AI Usage analytics for a self-hosted Bifrost gateway.** Cost, tokens,
   provider/model breakdowns, and historical trend charts, synced from
   Bifrost's own request logs into this app's permanent storage — see

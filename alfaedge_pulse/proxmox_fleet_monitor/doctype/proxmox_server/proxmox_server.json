@@ -43,6 +43,9 @@
   "storage_usage",
   "storage_total",
   "uptime",
+  "load_avg_1min",
+  "load_avg_5min",
+  "load_avg_15min",
   "column_break_sync",
   "last_synced",
   "last_error"
@@ -296,6 +299,27 @@
    "read_only": 1
   },
   {
+   "fieldname": "load_avg_1min",
+   "fieldtype": "Float",
+   "label": "Load Avg (1 min)",
+   "read_only": 1,
+   "precision": "2"
+  },
+  {
+   "fieldname": "load_avg_5min",
+   "fieldtype": "Float",
+   "label": "Load Avg (5 min)",
+   "read_only": 1,
+   "precision": "2"
+  },
+  {
+   "fieldname": "load_avg_15min",
+   "fieldtype": "Float",
+   "label": "Load Avg (15 min)",
+   "read_only": 1,
+   "precision": "2"
+  },
+  {
    "fieldname": "column_break_sync",
    "fieldtype": "Column Break"
   },
@@ -315,7 +339,7 @@
  "icon": "fa fa-server",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-06 11:16:25.155498",
+ "modified": "2026-10-22 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Proxmox Fleet Monitor",
  "name": "Proxmox Server",

@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented here.
 
+## [4.5.0] - 2026-10-22
+
+### Changed
+- **Usage Metrics is now two plain tables instead of cards.** The meter
+  rings, icons, card grid and Uptime summary tile are gone.
+  - **Hosts and Backup Server:** status, CPU (used/total cores), RAM,
+    swap, each drive (used/total), load average (1·5·15), uptime and
+    last sync.
+  - **VMs and Containers:** host, status, CPU (used/allocated vCPU),
+    RAM and disk (used/allocated), load average, IP, uptime, last
+    backup and Host Health status.
+  - Values past the warning/critical thresholds are coloured, and a
+    critical or warning row gets a coloured left edge.
+  - **Sorting:** every column sorts in either direction, with missing
+    values kept last, and the choice is remembered per browser.
+  - **Filtering:** each table has its own filters. Hosts filter by
+    role, status and severity. Guests filter by search (name, VMID, IP,
+    tag), host, status, VM/CT, Host Health and severity. A
+    "Showing X of Y" count and Clear filters appear while filtering.
+  - The header's Servers filter and the status strip's Critical/Offline
+    pills feed the same filters.
+  - Clicking a row still opens the detail dialog.
+- **Console links removed** from the VM/CT detail dialog and the Host
+  Health detail dialog, ahead of a different console approach.
+  `lib/consoleUrl.ts` was deleted; the dormant `console_relay/` backend
+  is untouched.
+
+### Added
+- **Host load average:** `Proxmox Server.load_avg_1min/5min/15min`,
+  read from the node status the poller already fetches, so there are no
+  new API calls.
+- **`host_health.api.get_guest_load_averages`:** the latest
+  resource-agent load average per guest. Only guests running the Pulse
+  resource agent report load; Proxmox doesn't expose guest load. A
+  reading older than 15 minutes shows greyed, with its age.
+
 ## [4.4.0] - 2026-10-21
 
 ### Added

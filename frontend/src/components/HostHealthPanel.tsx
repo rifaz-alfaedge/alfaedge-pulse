@@ -22,7 +22,6 @@ import type {
   MonitoredHostSite,
   ServiceStatusLog,
 } from '../lib/types'
-import { buildConsoleUrl } from '../lib/consoleUrl'
 import { getErrorMessage } from '../lib/errors'
 import { formatUptime, timeAgo } from '../lib/format'
 import { HeartbeatDot } from './HeartbeatDot'
@@ -162,15 +161,6 @@ export function HostHealthPanel() {
           failedJobs={allFailedJobs.filter((j) => j.monitored_host === selectedHost.name)}
           activeJobs={allActiveJobs.filter((j) => j.monitored_host === selectedHost.name)}
           sites={allSites.filter((s) => s.parent === selectedHost.name)}
-          // Host Health only ever tracks a Frappe agent running *inside* a
-          // guest (see Monitored Host's own proxmox_guest field) — never a
-          // bare Proxmox host/PBS server, so this is always a guest console
-          // link, same restriction the Usage Metrics tab's own Open
-          // Console enforces (see lib/consoleUrl.ts).
-          consoleUrl={(() => {
-            const guest = guestByName.get(selectedHost.proxmox_guest)
-            return guest ? buildConsoleUrl(guest, serverByName.get(guest.server)) : null
-          })()}
           onClose={() => setSelectedHost(null)}
         />
       )}
@@ -272,7 +262,6 @@ function HostDetailDialog({
   failedJobs,
   activeJobs,
   sites,
-  consoleUrl,
   onClose,
 }: {
   host: MonitoredHost
@@ -282,7 +271,6 @@ function HostDetailDialog({
   failedJobs: FrappeFailedJobLog[]
   activeJobs: FrappeActiveJob[]
   sites: MonitoredHostSite[]
-  consoleUrl: string | null
   onClose: () => void
 }) {
   const benchNames = [...new Set(workerLogs.map((w) => w.bench_name))]
@@ -466,16 +454,6 @@ function HostDetailDialog({
                 Failed Job Root Causes ({(failedJobGroups ?? []).length || failedJobs.length})
               </h3>
               <div className="flex items-center gap-2">
-                {consoleUrl && (
-                  <a
-                    href={consoleUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-lg border border-border-hairline px-2.5 py-1 text-xs text-ink-secondary hover:bg-ink-primary/5"
-                  >
-                    Open Console ↗
-                  </a>
-                )}
                 <button
                   type="button"
                   onClick={downloadLog}

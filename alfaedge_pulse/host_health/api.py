@@ -296,3 +296,49 @@ def get_disk_forecasts(monitored_host: str | None = None) -> list[dict]:
 		results.append({**mount, "forecast": forecast})
 
 	return results
+
+
+@frappe.whitelist()
+def get_guest_load_averages() -> dict:
+	"""Latest load average per Proxmox Guest, from the resource agent's most
+	recent Resource Metric Log row for that guest's Monitored Host — for the
+	Usage Metrics table's Load avg column. Only guests running the Pulse
+	resource agent appear; Proxmox itself doesn't report guest load.
+
+	Returns ``{"guests": {proxmox_guest: {...}}, "warning_percent": n,
+	"critical_percent": n}`` — thresholds from Resource Monitor Settings,
+	applied to ``load_normalized_percent`` (load ÷ cores) for colouring."""
+	frappe.only_for(("System Manager", "Proxmox Monitor Manager", "Proxmox Monitor Viewer"))
+	rows = frappe.db.sql(
+		"""
+		SELECT mh.proxmox_guest, r.load_avg_1min, r.load_avg_5min, r.load_avg_15min,
+			r.cpu_core_count, r.load_normalized_percent, r.collected_at
+		FROM `tabResource Metric Log` r
+		JOIN (
+			SELECT monitored_host, MAX(collected_at) AS latest
+			FROM `tabResource Metric Log`
+			WHERE collected_at > %(since)s
+			GROUP BY monitored_host
+		) last ON last.monitored_host = r.monitored_host AND last.latest = r.collected_at
+		JOIN `tabMonitored Host` mh ON mh.name = r.monitored_host
+		WHERE IFNULL(mh.proxmox_guest, '') != ''
+		""",
+		{"since": frappe.utils.add_to_date(None, hours=-24)},
+		as_dict=True,
+	)
+	settings = frappe.get_cached_doc("Resource Monitor Settings")
+	return {
+		"guests": {
+			r.proxmox_guest: {
+				"load_avg_1min": r.load_avg_1min,
+				"load_avg_5min": r.load_avg_5min,
+				"load_avg_15min": r.load_avg_15min,
+				"cpu_core_count": r.cpu_core_count,
+				"load_normalized_percent": r.load_normalized_percent,
+				"collected_at": str(r.collected_at),
+			}
+			for r in rows
+		},
+		"warning_percent": settings.load_warning_percent,
+		"critical_percent": settings.load_critical_percent,
+	}
