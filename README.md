@@ -497,6 +497,9 @@ recurring errors.
 - **Error vs General.** A row is an Error when its content contains the
   configured keyword (default `error`, case-insensitive). Every other row
   is General.
+- **Resolve:** marking a recurring error resolved hides it, and stops it
+  counting towards alerts, until it happens again. It then comes back as
+  **Reopened**, with only the new occurrences counted.
 - **Who gets alerted:** each engineer subscribes in their **Alert
   Subscription**, under **Recurring Errors (Logs)**: either **All Sites**
   or a list of sites. The global recipients only get recurring errors when

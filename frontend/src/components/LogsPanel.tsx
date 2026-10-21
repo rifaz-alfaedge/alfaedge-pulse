@@ -77,7 +77,7 @@ export function LogsPanel() {
   const { data: options } = useLogFilterOptions(ready)
   const { data: summary, error: summaryError } = useLogSummary(filters, ready)
   const { data: logs, error: logsError, isLoading: logsLoading } = useLogs(filters, page, PAGE_LENGTH, ready && subTab === 'All Logs')
-  const { data: recurring, error: recurringError, isLoading: recurringLoading } = useRecurringErrors(
+  const { data: recurring, error: recurringError, isLoading: recurringLoading, mutate: refreshRecurring } = useRecurringErrors(
     filters,
     2,
     ready && subTab === 'Recurring Errors',
@@ -220,8 +220,13 @@ export function LogsPanel() {
           </Card>
         </>
       ) : (
-        <Card title="Recurring errors (2+ occurrences, grouped by error and site)" noPadding>
-          <RecurringTable rows={recurring ?? []} loading={recurringLoading && !recurring} onOpen={openSignature} />
+        <Card title="Recurring errors (2+ occurrences, grouped by error and site; resolved ones hidden until they recur)" noPadding>
+          <RecurringTable
+            rows={recurring ?? []}
+            loading={recurringLoading && !recurring}
+            onOpen={openSignature}
+            onResolved={() => refreshRecurring()}
+          />
         </Card>
       )}
 
@@ -320,16 +325,44 @@ function RecurringTable({
   rows,
   loading,
   onOpen,
+  onResolved,
 }: {
   rows: RecurringErrorRow[]
   loading: boolean
   onOpen: (row: RecurringErrorRow) => void
+  onResolved: () => void
 }) {
+  const { call: resolve } = useFrappePostCall('alfaedge_pulse.log_monitor.api.resolve_error')
+  // Hidden optimistically the moment Resolve is clicked, rather than
+  // waiting for the refetch.
+  const [resolving, setResolving] = useState<Set<string>>(new Set())
+  const [resolveError, setResolveError] = useState<string | null>(null)
+  const visible = rows.filter((r) => !resolving.has(r.signature))
+
+  const onResolve = async (row: RecurringErrorRow) => {
+    setResolveError(null)
+    setResolving((s) => new Set(s).add(row.signature))
+    try {
+      await resolve({ signature: row.signature })
+      onResolved()
+    } catch (e) {
+      setResolveError(getErrorMessage(e))
+      setResolving((s) => {
+        const next = new Set(s)
+        next.delete(row.signature)
+        return next
+      })
+    }
+  }
+
   if (loading) return <Empty text="Loading…" />
-  if (rows.length === 0) return <Empty text="No error has repeated in this range." />
+  if (visible.length === 0) return <Empty text="No unresolved error has repeated in this range." />
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-left text-sm">
+      {resolveError && (
+        <p className="border-b border-border-hairline px-5 py-2 text-sm text-status-critical">{resolveError}</p>
+      )}
+      <table className="w-full min-w-[820px] text-left text-sm">
         <thead className="border-b border-border-hairline text-xs uppercase tracking-wide text-ink-muted">
           <tr>
             <th className="px-5 py-3 font-medium">Error</th>
@@ -337,11 +370,12 @@ function RecurringTable({
             <th className="px-3 py-3 text-right font-medium">Occurrences</th>
             <th className="px-3 py-3 font-medium">First seen</th>
             <th className="px-3 py-3 font-medium">Last seen</th>
-            <th className="px-5 py-3 font-medium">Alert</th>
+            <th className="px-3 py-3 font-medium">Alert</th>
+            <th className="px-5 py-3" />
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {visible.map((row) => (
             <tr
               key={row.signature}
               onClick={() => onOpen(row)}
@@ -349,6 +383,14 @@ function RecurringTable({
             >
               <td className="px-5 py-3 align-top">
                 <div className="line-clamp-2 font-mono text-xs text-ink-primary" title={row.title}>
+                  {row.reopened && (
+                    <span
+                      className="mr-1.5 inline-flex rounded-full bg-status-warning/15 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase text-status-warning"
+                      title={`Resolved ${row.resolved_at ?? ''} — happened again since`}
+                    >
+                      Reopened
+                    </span>
+                  )}
                   {row.title || '(empty)'}
                 </div>
               </td>
@@ -362,7 +404,7 @@ function RecurringTable({
               <td className="whitespace-nowrap px-3 py-3 align-top text-ink-secondary" title={row.last_seen}>
                 {timeAgo(row.last_seen)}
               </td>
-              <td className="px-5 py-3 align-top">
+              <td className="px-3 py-3 align-top">
                 {row.is_critical ? (
                   <span className="inline-flex rounded-full bg-status-critical/10 px-2 py-0.5 text-xs font-medium text-status-critical">
                     Alerting
@@ -372,6 +414,19 @@ function RecurringTable({
                 ) : (
                   <span className="text-xs text-ink-muted">—</span>
                 )}
+              </td>
+              <td className="px-5 py-3 text-right align-top">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onResolve(row)
+                  }}
+                  className="rounded-lg border border-border-hairline px-3 py-1 text-xs font-medium text-ink-primary hover:border-status-good hover:text-status-good"
+                  title="Hide this error until it happens again"
+                >
+                  Resolve
+                </button>
               </td>
             </tr>
           ))}

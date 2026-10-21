@@ -33,6 +33,10 @@ it.
   token — numbers, long hex runs (hashes, docnames), and quoted values —
   replaced by ``?``, so "Sales Invoice SINV-00123 not found" and
   "... SINV-00456 not found" on the same site count as one error.
+- **Resolved errors**: with ``exclude_resolved``, occurrences of a
+  signature at or before its Recurring Error's ``resolved_at`` are
+  dropped. A resolved error therefore vanishes from recurring-error views
+  and alert counts until it happens again.
 - **Timestamps** go in as ``String`` params converted with an explicit
   timezone (the site's system timezone), and come back formatted in that
   same timezone, so the dashboard's "naive string = site-local" convention
@@ -41,6 +45,7 @@ it.
 
 from __future__ import annotations
 
+import frappe
 from frappe.utils import get_system_timezone
 
 from alfaedge_pulse.log_monitor.connection import ColumnMap, get_column_map, get_settings, get_site_aliases
@@ -127,6 +132,17 @@ def ts_out(alias: str = "lm_ts") -> str:
 	return f"formatDateTime(toTimeZone({alias}, {{tz:String}}), '%Y-%m-%d %H:%i:%S')"
 
 
+def get_resolutions() -> dict[str, str]:
+	"""{signature: resolved_at} for every Recurring Error marked resolved,
+	as site-timezone "YYYY-MM-DD HH:MM:SS" strings."""
+	return {
+		r.signature: r.resolved_at.strftime("%Y-%m-%d %H:%M:%S")
+		for r in frappe.get_all(
+			"Recurring Error", filters={"resolved_at": ["is", "set"]}, fields=["signature", "resolved_at"]
+		)
+	}
+
+
 def build_filtered(
 	start: str,
 	end: str,
@@ -135,6 +151,7 @@ def build_filtered(
 	signature: str | None = None,
 	search: str | None = None,
 	log_id: str | None = None,
+	exclude_resolved: bool = False,
 	cols: ColumnMap | None = None,
 ) -> tuple[str, dict]:
 	"""``FROM (...) WHERE ...`` fragment + params with all dashboard filters
@@ -155,6 +172,17 @@ def build_filtered(
 	if log_id:
 		outer.append("lm_id = {log_id:String}")
 		params["log_id"] = str(log_id)
+	if exclude_resolved:
+		resolutions = get_resolutions()
+		if resolutions:
+			# Drop every occurrence at or before its signature's resolved_at;
+			# signatures never resolved compare against the epoch, i.e. keep all.
+			outer.append(
+				"lm_ts > parseDateTime64BestEffort(transform(lm_sig, {res_sigs:Array(String)}, "
+				"{res_ats:Array(String)}, '1970-01-01 00:00:00'), 3, {tz:String})"
+			)
+			params["res_sigs"] = list(resolutions.keys())
+			params["res_ats"] = list(resolutions.values())
 	if search:
 		outer.append("(positionCaseInsensitive(lm_content, {q:String}) > 0 OR positionCaseInsensitive(lm_site, {q:String}) > 0)")
 		params["q"] = str(search)

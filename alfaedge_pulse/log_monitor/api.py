@@ -201,11 +201,24 @@ def get_log_detail(log_id: str, ts: str) -> dict:
 @frappe.whitelist()
 def get_recurring_errors(
 	start_date=None, end_date=None, site_url=None, search=None, min_count: int = 2, limit: int = 200,
+	hide_resolved: int = 1,
 ) -> list[dict]:
 	"""Error rows grouped by signature, most frequent first, annotated with
-	this app's own alert state for that signature."""
+	this app's own alert state for that signature.
+
+	With ``hide_resolved`` (the default), occurrences at or before an
+	error's resolution don't count — a resolved error is absent until it
+	happens again, and then comes back flagged ``reopened`` with only the
+	new occurrences counted."""
 	frappe.only_for(VIEW_ROLES)
-	from_sql, params = _filters(start_date, end_date, site_url, ["Error"], search=search)
+	start, end = _range(start_date, end_date)
+	from_sql, params = build_filtered(
+		start, end,
+		sites=_parse_list(site_url),
+		log_types=["Error"],
+		search=(search or "").strip() or None,
+		exclude_resolved=bool(cint(hide_resolved)),
+	)
 	params.update({"min_count": max(cint(min_count), 1), "limit": min(max(cint(limit), 1), 1000)})
 	with _clickhouse_errors():
 		rows = get_client().query(
@@ -223,7 +236,7 @@ def get_recurring_errors(
 			for r in frappe.get_all(
 				"Recurring Error",
 				filters={"signature": ["in", [r["signature"] for r in rows]]},
-				fields=["name", "signature", "is_critical", "peak_window_count", "alert_count", "monitored_host"],
+				fields=["name", "signature", "is_critical", "alert_count", "monitored_host", "resolved_at", "resolved_by"],
 			)
 		}
 	for r in rows:
@@ -233,7 +246,66 @@ def get_recurring_errors(
 		r["recurring_error"] = local.name if local else None
 		r["alert_count"] = cint(local.alert_count) if local else 0
 		r["monitored_host"] = local.monitored_host if local else None
+		r["resolved_at"] = str(local.resolved_at) if local and local.resolved_at else None
+		r["resolved_by"] = local.resolved_by if local else None
+		# Shown despite a resolution → it has happened again since.
+		r["reopened"] = bool(r["resolved_at"]) and bool(cint(hide_resolved))
 	return rows
+
+
+@frappe.whitelist(methods=["POST"])
+def resolve_error(signature: str) -> dict:
+	"""Mark one recurring error (one signature = one error on one site) as
+	resolved as of now. Its existing occurrences stop counting everywhere
+	recurring errors are shown or alerted on; it reappears on its own if it
+	happens again. Also closes any open Recurring Error alert for it, with a
+	"back to normal" to its subscribers."""
+	frappe.only_for(VIEW_ROLES)
+	from alfaedge_pulse.alerts.dispatch import dispatch_recovery, has_open_alert, resolve_alert
+
+	signature = (signature or "").strip()
+	if not signature.isdigit():
+		frappe.throw(frappe._("Invalid error signature"))
+
+	# Look the error up in ClickHouse rather than trusting display fields
+	# from the client — the signature must be a real one.
+	start, end = _range(None, None, default_days=30)
+	from_sql, params = build_filtered(start, end, log_types=["Error"], signature=signature)
+	with _clickhouse_errors():
+		found = get_client().query(
+			f"""SELECT any(lm_site) AS site_url, argMax(lm_title, lm_ts) AS title,
+				{ts_out('min(lm_ts)')} AS first_seen, {ts_out('max(lm_ts)')} AS last_seen, count() AS c
+				{from_sql}""",
+			params,
+		)
+	if not found or not cint(found[0]["c"]):
+		frappe.throw(frappe._("No error with this signature in the last 30 days"), frappe.DoesNotExistError)
+	info = found[0]
+
+	now = now_datetime()
+	name = frappe.db.get_value("Recurring Error", {"signature": signature})
+	doc = frappe.get_doc("Recurring Error", name) if name else frappe.new_doc("Recurring Error")
+	doc.update({
+		"signature": signature,
+		"title": doc.title or info["title"] or "(no message)",
+		"site_url": doc.site_url or info["site_url"],
+		"first_seen": doc.first_seen or info["first_seen"],
+		"last_seen": info["last_seen"],
+		"is_critical": 0,
+		"window_count": 0,
+		"resolved_at": now,
+		"resolved_by": frappe.session.user,
+	})
+	doc.save(ignore_permissions=True)
+
+	if has_open_alert("Recurring Error", doc.name, "Recurring Error"):
+		resolve_alert("Recurring Error", doc.name, "Recurring Error")
+		who = frappe.utils.get_fullname(frappe.session.user)
+		dispatch_recovery(
+			"Recurring Error", "Recurring Error", doc.name,
+			f"Marked resolved by {who}: {doc.title} on {doc.site_url}",
+		)
+	return {"signature": signature, "resolved_at": str(now), "resolved_by": frappe.session.user}
 
 
 # ---------------------------------------------------------------------------

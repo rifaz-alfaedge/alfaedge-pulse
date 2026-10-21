@@ -18,6 +18,9 @@ errors "the same") over the trailing ``window_minutes``:
   together (e.g. one bad deploy) arrive as one message, not a burst.
 - **A critical signature back under the threshold** for the window →
   resolved, with a recovery message through the same batch.
+- Occurrences at or before a signature's manual resolution (Resolve on
+  the Logs tab / task board, see ``log_monitor.api.resolve_error``) don't
+  count, so a resolved error only alerts again once it repeats afterwards.
 
 Never raises into the scheduler: failures land on ClickHouse Log
 Settings' ``last_error``.
@@ -71,7 +74,7 @@ def run_check(settings=None, now=None) -> dict:
 	start = add_to_date(now, minutes=-window).strftime("%Y-%m-%d %H:%M:%S")
 	end = add_to_date(now, seconds=1).strftime("%Y-%m-%d %H:%M:%S")
 
-	from_sql, params = build_filtered(start, end, log_types=["Error"])
+	from_sql, params = build_filtered(start, end, log_types=["Error"], exclude_resolved=True)
 	params.update({"threshold": threshold, "max_groups": _MAX_GROUPS})
 	rows = get_client().query(
 		f"""SELECT lm_sig AS signature, any(lm_site) AS site_url, any(lm_title) AS title, count() AS occurrences,

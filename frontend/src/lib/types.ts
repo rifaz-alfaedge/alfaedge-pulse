@@ -480,6 +480,10 @@ export interface RecurringErrorRow {
   recurring_error: string | null
   alert_count: number
   monitored_host: string | null
+  resolved_at: string | null
+  resolved_by: string | null
+  /** Resolved before, and has happened again since (counts are post-resolution). */
+  reopened: boolean
 }
 
 /** What every Logs-tab viewer gets from get_log_settings. */

@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## [4.4.0] - 2026-10-21
+
+### Added
+- **Resolve recurring errors.** Each error on Logs → Recurring Errors
+  (and on any page using the `resolve_error` API) has a **Resolve**
+  button. Resolving stamps the error's `Recurring Error` record with
+  `resolved_at` / `resolved_by`, and from then on its earlier occurrences
+  no longer count:
+  - The error disappears from the recurring-errors list (and from
+    per-site totals built on it).
+  - It reappears by itself if it happens again, flagged **Reopened**
+    and counting only the occurrences since the resolution.
+  - The recurring-error alert check ignores the resolved occurrences too.
+  - Any open alert for the error is closed, with a "Marked resolved by
+    …" message to its subscribers.
+
+  Proxmox Monitor Manager and Proxmox Monitor Viewer can resolve.
+  `get_recurring_errors` hides resolved occurrences by default; pass
+  `hide_resolved=0` to see everything. All Logs is unaffected.
+
 ## [4.3.1] - 2026-10-16
 
 ### Fixed
