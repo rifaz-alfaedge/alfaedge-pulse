@@ -9,6 +9,45 @@ frappe.ui.form.on("Proxmox Server", {
 		// we can show progress/result feedback.
 		frm.set_df_property("sync_now", "read_only", frm.is_new());
 		frm.set_df_property("backfill_resource_history", "read_only", frm.is_new());
+
+		// Delete with archive — disabled servers only, Proxmox Monitor
+		// Manager only (enforced server-side too). Runs in the background;
+		// see proxmox_fleet_monitor/server_deletion.py.
+		if (!frm.is_new() && !frm.doc.enabled && frappe.user.has_role("Proxmox Monitor Manager")) {
+			frm.add_custom_button(__("Delete Server…"), () => {
+				frappe.prompt(
+					{
+						fieldname: "confirm_name",
+						fieldtype: "Data",
+						label: __("Type {0} to confirm", [frm.doc.server_name]),
+						reqd: 1,
+						description: __(
+							"Deletes this server and everything linked to it (VMs/CTs, datastores, backups, alerts, metric history, Host Health agents, sites, NPM). An archive is saved first under Proxmox Server Archive.",
+						),
+					},
+					(values) => {
+						frappe.call({
+							method: "alfaedge_pulse.proxmox_fleet_monitor.server_deletion.request_server_deletion",
+							args: { server: frm.doc.name, confirm_name: values.confirm_name },
+							freeze: true,
+							callback(r) {
+								if (!r.message) return;
+								frappe.msgprint({
+									title: __("Deletion started"),
+									indicator: "orange",
+									message: __("{0} You can follow it in {1}.", [
+										r.message.message,
+										`<a href="/app/proxmox-server-archive/${encodeURIComponent(r.message.archive)}">Proxmox Server Archive</a>`,
+									]),
+								});
+							},
+						});
+					},
+					__("Delete {0}", [frm.doc.server_name]),
+					__("Delete"),
+				);
+			}).addClass("btn-danger");
+		}
 	},
 
 	backfill_resource_history(frm) {

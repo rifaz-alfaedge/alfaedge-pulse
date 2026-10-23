@@ -14,6 +14,7 @@ import {
 import { hostHealthStatus, isHostCritical, isHostWarning } from './lib/severity'
 import { GuestUsageTable, HostUsageTable } from './components/UsageTables'
 import { SiteSourcesDialog } from './components/SiteSourcesDialog'
+import { DisabledServersPanel } from './components/DisabledServersPanel'
 import { EMPTY_GUEST_FILTERS, EMPTY_HOST_FILTERS, type GuestFilters, type HostFilters, type Severity } from './lib/usageFilters'
 import { AlertsPopup } from './components/AlertsPopup'
 import { MultiSelectFilter } from './components/MultiSelectFilter'
@@ -246,6 +247,8 @@ function App() {
               onOpen={(g) => setSelected({ kind: 'guest', doc: g })}
             />
           </section>
+
+          {siteIndex?.can_manage && <DisabledServersPanel />}
         </>
       )}
 

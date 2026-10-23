@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented here.
 
+## [4.8.0] - 2026-10-23
+
+### Added
+- **Delete a disabled Proxmox Server, with an archive.** This is
+  available from a **Delete Server…** button on the Proxmox Server form
+  in Desk, or a managers-only **Disabled servers** panel at the bottom of
+  Usage Metrics. It needs Proxmox Monitor Manager, works only on disabled
+  servers, and you confirm by typing the server's name.
+  - **Runs in the background.** A server can drag along tens of thousands
+    of backup, alert and metric-history rows.
+  - **Removes everything linked:**
+    - the server's VMs/CTs and datastores;
+    - backup and console-session logs;
+    - discovered sites and its NPM;
+    - every alert on any of these;
+    - Host Health records for its VMs/CTs, with their services, jobs,
+      mounts and history (their agent keys stop working);
+    - the matching rows in Alert Subscriptions (the subscriptions
+      themselves stay);
+    - stored secrets.
+
+    Recurring Errors are kept, just unlinked.
+  - **Archived first:** a new **Proxmox Server Archive** record holds who,
+    when, per-type counts, and a gzipped JSON with full copies of every
+    deleted record. Metric history is kept as counts and date ranges only,
+    and secrets are never included.
+  - **Safe on failure:** if anything fails, the whole deletion is rolled
+    back and the archive is marked Failed with the error.
+
 ## [4.7.2] - 2026-10-23
 
 ### Changed
