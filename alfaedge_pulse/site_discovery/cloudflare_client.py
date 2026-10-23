@@ -57,8 +57,10 @@ class CloudflareClient:
 
 	def list_zones(self, only: list[str] | None = None) -> list[dict]:
 		zones = self._paged("/zones", per_page=50)
-		if only:
-			wanted = {z.strip().lower() for z in only if z.strip()}
+		# An empty filter field arrives as [""] (from "".split(",")) — that
+		# must mean "every zone", not "only a zone named ''".
+		wanted = {z.strip().lower() for z in (only or []) if z and z.strip()}
+		if wanted:
 			zones = [z for z in zones if z.get("name", "").lower() in wanted]
 		return zones
 
