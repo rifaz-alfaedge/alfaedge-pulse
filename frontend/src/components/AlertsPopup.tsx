@@ -7,6 +7,7 @@ import {
   useServiceStatusLogs,
   useUptimeInstances,
   useUptimeSites,
+  onEnabledServers,
 } from '../lib/hooks'
 import { hostHealthStatus, isHostCritical, isHostWarning } from '../lib/severity'
 import { groupSites } from '../lib/uptimeGroups'
@@ -71,7 +72,7 @@ export function AlertsPopup() {
   const { data: services } = useServiceStatusLogs()
 
   const allServers = servers ?? []
-  const allGuests = guests ?? []
+  const allGuests = onEnabledServers(guests ?? [], allServers)
   const allDatastores = datastores ?? []
   const allHosts = hosts ?? []
   const allServices = services ?? []

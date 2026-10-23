@@ -71,10 +71,12 @@ const ALERT_LOG_FIELDS: (keyof ProxmoxAlertLog)[] = [
   'channels_sent', 'sent_at', 'resolved',
 ]
 
+/** Enabled Proxmox Servers only — a server disabled in Desk disappears from
+ * the whole dashboard (and so do its VMs/CTs, see ``onEnabledServers``). */
 export function useServers() {
   return useFrappeGetDocList<ProxmoxServer>(
     'Proxmox Server',
-    { fields: SERVER_FIELDS, limit: 0, orderBy: { field: 'server_name', order: 'asc' } },
+    { fields: SERVER_FIELDS, filters: [['enabled', '=', 1]], limit: 0, orderBy: { field: 'server_name', order: 'asc' } },
     undefined,
     { refreshInterval: UI_POLL_MS },
   )
@@ -749,4 +751,11 @@ export function useInstanceSites(kind: 'guest' | 'server', name: string) {
     ['instance-sites', kind, name],
   )
   return { ...result, data: result.data?.message }
+}
+
+/** Drop VMs/CTs whose Proxmox Server isn't in ``servers`` (i.e. is disabled).
+ * Proxmox Guests have no enable switch of their own. */
+export function onEnabledServers<T extends { server: string }>(guests: T[], servers: { name: string }[]): T[] {
+  const enabled = new Set(servers.map((s) => s.name))
+  return guests.filter((g) => enabled.has(g.server))
 }

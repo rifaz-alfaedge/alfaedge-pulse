@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## [4.7.2] - 2026-10-23
+
+### Changed
+- **Disabled Proxmox Servers are hidden from the dashboard.** A server
+  disabled in Desk no longer appears in Usage Metrics, the status strip,
+  the Critical/Offline counts, the Backups tab or the alerts popup, and
+  neither do its VMs/CTs. Previously a disabled PBS kept showing as
+  Offline.
+- **Open alerts for a disabled server are closed automatically.** Its
+  VMs/CTs and datastores are covered too. A disabled server is never
+  polled again, so its last alert (e.g. "Server Offline") would otherwise
+  stay open forever and keep counting under Open Alerts.
+
 ## [4.7.1] - 2026-10-23
 
 ### Fixed

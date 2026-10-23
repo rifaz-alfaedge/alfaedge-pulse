@@ -263,8 +263,31 @@ def run_poll_loop() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_disabled_server_alerts() -> None:
+	"""Close open alerts for disabled servers and their VMs/CTs/datastores.
+
+	A disabled server is never polled again, so nothing would ever resolve
+	its last alert (e.g. a PBS left "Server Offline" forever), and it would
+	keep counting under the dashboard's Open Alerts. One cheap UPDATE per
+	cycle; a no-op when nothing is disabled.
+	"""
+	disabled = frappe.get_all("Proxmox Server", filters={"enabled": 0}, pluck="name")
+	if not disabled:
+		return
+	refs = set(disabled)
+	refs |= set(frappe.get_all("Proxmox Guest", filters={"server": ["in", disabled]}, pluck="name"))
+	refs |= set(frappe.get_all("Proxmox Datastore", filters={"server": ["in", disabled]}, pluck="name"))
+	frappe.db.sql(
+		"""update `tabProxmox Alert Log` set resolved = 1
+		where resolved = 0 and reference_doctype in ('Proxmox Server', 'Proxmox Guest', 'Proxmox Datastore')
+		and reference_name in %(refs)s""",
+		{"refs": tuple(refs)},
+	)
+
+
 def sync_all_servers() -> None:
 	"""Sync every enabled Proxmox Server, isolating failures per server."""
+	_resolve_disabled_server_alerts()
 	server_names = frappe.get_all("Proxmox Server", filters={"enabled": 1}, pluck="name")
 	for server_name in server_names:
 		try:

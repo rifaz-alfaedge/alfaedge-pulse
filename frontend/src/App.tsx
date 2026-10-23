@@ -6,6 +6,7 @@ import {
   useGuestLoadAverages,
   useGuests,
   useMonitoredHosts,
+  onEnabledServers,
   useServers,
   useSiteIndex,
   useSettings,
@@ -62,7 +63,7 @@ function App() {
   const [selected, setSelected] = useState<SelectedNode | null>(null)
 
   const allServers = servers ?? []
-  const allGuests = guests ?? []
+  const allGuests = onEnabledServers(guests ?? [], allServers)
   const allDatastores = datastores ?? []
   const allBackupLogs = backupLogs ?? []
   const allAlertLogs = alertLogs ?? []
