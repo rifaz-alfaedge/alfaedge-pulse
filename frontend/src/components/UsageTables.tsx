@@ -57,6 +57,14 @@ function ipSortKey(ip?: string): string | null {
   return parts.length === 4 && parts.every((p) => /^\d+$/.test(p)) ? parts.map((p) => p.padStart(3, '0')).join('.') : ip
 }
 
+/** Actual amount used (cores, GB) from a percentage and its total — what
+ * the CPU/RAM/disk/swap columns sort by, so a 43%-full 8 GB disk (3.4 GB)
+ * sorts below a 20%-full 100 GB one (20 GB). */
+function used(pctValue?: number | null, total?: number | null): number | null {
+  if (pctValue === undefined || pctValue === null || !total) return null
+  return (pctValue / 100) * total
+}
+
 function ts(value?: string | null): number | null {
   if (!value) return null
   const t = new Date(value.replace(' ', 'T')).getTime()
@@ -321,7 +329,7 @@ export function HostUsageTable({
     {
       key: 'cpu',
       label: 'CPU',
-      sortValue: (s) => s.cpu_usage ?? null,
+      sortValue: (s) => used(s.cpu_usage, s.cores),
       render: (s) => (
         <span className={toneClass(s.cpu_usage, thresholds)}>
           {s.cores && s.cpu_usage !== undefined ? `${num((s.cpu_usage / 100) * s.cores)} / ${s.cores} cores` : '—'}
@@ -332,7 +340,7 @@ export function HostUsageTable({
     {
       key: 'ram',
       label: 'RAM',
-      sortValue: (s) => s.memory_usage ?? null,
+      sortValue: (s) => used(s.memory_usage, s.memory_total),
       render: (s) => (
         <span className={toneClass(s.memory_usage, thresholds)}>
           {sizePair(s.memory_usage !== undefined && s.memory_total ? (s.memory_usage / 100) * s.memory_total : null, s.memory_total)}
@@ -343,7 +351,7 @@ export function HostUsageTable({
     {
       key: 'swap',
       label: 'Swap',
-      sortValue: (s) => s.swap_usage ?? null,
+      sortValue: (s) => used(s.swap_usage, s.swap_total),
       render: (s) =>
         s.swap_total ? (
           <>
@@ -357,9 +365,10 @@ export function HostUsageTable({
     {
       key: 'disks',
       label: 'Disks',
+      // Total GB used across the host's drives (not the fullest drive's %).
       sortValue: (s) => {
-        const vals = (drivesBy.get(s.name) ?? []).map((d) => d.usage_percent).filter((v): v is number => v !== undefined && v !== null)
-        return vals.length ? Math.max(...vals) : null
+        const vals = (drivesBy.get(s.name) ?? []).map((d) => d.used).filter((v): v is number => v !== undefined && v !== null)
+        return vals.length ? vals.reduce((a, b) => a + b, 0) : null
       },
       render: (s) => {
         const drives = drivesBy.get(s.name) ?? []
@@ -379,7 +388,7 @@ export function HostUsageTable({
     {
       key: 'load',
       label: 'Load avg',
-      sortValue: (s) => loadPct(s),
+      sortValue: (s) => s.load_avg_1min ?? null,
       render: (s) =>
         s.load_avg_1min === undefined || s.load_avg_1min === null ? (
           <span className="text-ink-muted">—</span>
@@ -534,7 +543,7 @@ export function GuestUsageTable({
     {
       key: 'cpu',
       label: 'CPU',
-      sortValue: (g) => (running(g) ? g.cpu_usage ?? null : null),
+      sortValue: (g) => (running(g) ? used(g.cpu_usage, g.cpus) : null),
       render: (g) => {
         const on = running(g) && g.cpu_usage !== undefined
         return (
@@ -548,7 +557,7 @@ export function GuestUsageTable({
     {
       key: 'ram',
       label: 'RAM',
-      sortValue: (g) => (running(g) ? g.memory_usage ?? null : null),
+      sortValue: (g) => (running(g) ? used(g.memory_usage, g.memory_total) : null),
       render: (g) => {
         const on = running(g) && g.memory_usage !== undefined
         return (
@@ -562,7 +571,7 @@ export function GuestUsageTable({
     {
       key: 'disk',
       label: 'Disk',
-      sortValue: (g) => g.disk_usage ?? null,
+      sortValue: (g) => used(g.disk_usage, g.disk_total),
       render: (g) => {
         const known = g.disk_usage !== undefined && g.disk_usage !== null
         return (
@@ -580,7 +589,7 @@ export function GuestUsageTable({
     {
       key: 'load',
       label: 'Load avg',
-      sortValue: (g) => loadOf(g)?.load_normalized_percent ?? null,
+      sortValue: (g) => loadOf(g)?.load_avg_1min ?? null,
       render: (g) => {
         const l = loadOf(g)
         if (!l) return <span className="text-ink-muted">—</span>
