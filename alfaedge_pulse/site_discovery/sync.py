@@ -183,9 +183,34 @@ def fetch_cloudflare() -> CFResult:
 
 
 def load_guests() -> list[dict]:
-	return frappe.get_all(
-		"Proxmox Guest", fields=["name", "server", "guest_name", "ip_address", "public_ip"]
+	"""Guests with ``ips``: every IPv4 they have. The poller stores only one
+	(``ip_address``), and none at all for a stopped CT or a VM without the
+	guest agent — so the daily sync also asks Proxmox for each guest's
+	static (config) and live interface IPs. A host whose API fails just
+	falls back to the stored IPs."""
+	guests = frappe.get_all(
+		"Proxmox Guest", fields=["name", "server", "node", "vmid", "guest_type", "status", "guest_name", "ip_address", "public_ip"]
 	)
+	for g in guests:
+		g.ips = {ip.strip() for ip in (g.ip_address, g.public_ip) if ip and ip.strip()}
+
+	from alfaedge_pulse.proxmox_client.base import ProxmoxAPIError
+	from alfaedge_pulse.proxmox_client.pve import PVEClient
+
+	by_server: dict[str, list] = defaultdict(list)
+	for g in guests:
+		by_server[g.server].append(g)
+	for server in frappe.get_all("Proxmox Server", filters={"enabled": 1, "server_type": "PVE"}, fields=["name", "hostname", "port", "api_token_id", "verify_ssl"]):
+		try:
+			secret = get_decrypted_password("Proxmox Server", server.name, "api_token_secret", raise_exception=False)
+			client = PVEClient(server.hostname, server.port, server.api_token_id, secret, cint(server.verify_ssl))
+			default_node = None
+			for g in by_server.get(server.name, []):
+				node = g.node or default_node or (default_node := client.discover_node_name())
+				g.ips |= client.get_guest_ipv4s(node, cint(g.vmid), g.guest_type == "LXC (CT)", g.status == "running")
+		except (ProxmoxAPIError, frappe.ValidationError):
+			frappe.log_error(title=f"alfaEdge Pulse: site sync couldn't read guest IPs on {server.name}", message=frappe.get_traceback())
+	return guests
 
 
 def load_agent_sites() -> list[dict]:
@@ -219,15 +244,12 @@ def cf_lookup(records: dict[str, list[dict]], domain: str) -> tuple[str | None, 
 
 	Returns ``(target, proxied, found)``: target is an IP when the chain ends
 	at an A/AAAA record inside Cloudflare, else the last CNAME target
-	(pointing outside Cloudflare). Wildcards (``*.example.com``) apply when
+	(pointing outside Cloudflare). Wildcards (``*.example.com``, at any depth) apply when
 	no exact record exists.
 	"""
 	name, proxied, found = domain, False, False
 	for hop in range(MAX_CNAME_HOPS + 1):
-		recs = records.get(name)
-		if not recs:
-			parent = name.split(".", 1)[1] if "." in name else ""
-			recs = records.get(f"*.{parent}") if parent else None
+		recs = records.get(name) or _wildcard_records(records, name)
 		if not recs:
 			return (name if found else None), proxied, found
 		found = True
@@ -240,12 +262,35 @@ def cf_lookup(records: dict[str, list[dict]], domain: str) -> tuple[str | None, 
 	return name, proxied, found
 
 
+def _wildcard_records(records: dict[str, list[dict]], name: str) -> list[dict] | None:
+	"""DNS wildcard semantics: ``*.example.com`` answers any name below
+	example.com (``a.example.com``, ``a.b.example.com``) that has no closer
+	record — the nearest wildcard wins (``*.b.example.com`` before
+	``*.example.com``)."""
+	labels = name.split(".")
+	for i in range(1, len(labels) - 1):
+		recs = records.get("*." + ".".join(labels[i:]))
+		if recs:
+			return recs
+	return None
+
+
+def _guest_ips(g) -> set[str]:
+	return g.get("ips") or {ip.strip() for ip in (g.get("ip_address"), g.get("public_ip")) if ip and ip.strip()}
+
+
+def _who(target: str | None, npm_ips: dict[str, set[str]]) -> str:
+	"""Describe a Cloudflare target: the NPM owning that IP, if any."""
+	owner = next((name for name, ips in npm_ips.items() if target and target in ips), None)
+	return f"{target} ({owner} NPM, which has no proxy host for it)" if owner else str(target)
+
+
 def _guest_for_target(target: str, server: str | None, guests: list[dict]) -> str | None:
 	"""Match an NPM forward host (IP or hostname) to a Proxmox Guest."""
 	target = (target or "").strip().lower()
 	if not target:
 		return None
-	by_ip = [g for g in guests if target in {(g.ip_address or "").strip(), (g.public_ip or "").strip()}]
+	by_ip = [g for g in guests if target in _guest_ips(g)]
 	if by_ip:
 		same_host = [g for g in by_ip if g.server == server]
 		return (same_host or by_ip)[0].name
@@ -289,7 +334,8 @@ def resolve(
 			if cf_checked and not in_cf:
 				status, note = "Not in Cloudflare", "No Cloudflare DNS record for this domain."
 			elif cf_checked and ips and target not in ips:
-				status, note = "DNS Mismatch", f"Cloudflare points to {target}, not this NPM ({', '.join(sorted(ips))})."
+				status = "DNS Mismatch"
+				note = f"Not live on {names[0]}: Cloudflare sends it to {_who(target, npm_ips)}."
 			elif cf_checked and not ips:
 				note = f"Set {names[0]}'s public IP to verify DNS (Cloudflare → {target})."
 		else:
@@ -301,7 +347,7 @@ def resolve(
 			else:
 				status = "Ambiguous"
 				why = "Cloudflare not checked" if not cf_checked else (
-					"no Cloudflare record" if not in_cf else f"Cloudflare → {target} matches none of their public IPs"
+					"no Cloudflare record" if not in_cf else f"Cloudflare sends it to {_who(target, npm_ips)}, not to any of them"
 				)
 				note = f"In {listing}; {why}."
 
@@ -330,7 +376,8 @@ def resolve(
 			if not row["proxmox_guest"] and status == "Active":
 				row["status"] = "Unmatched"
 				row["note"] = (row["note"] + " " if row["note"] else "") + (
-					f"Forwards to {chosen['forward_host']}, which isn't a known VM/CT IP or name."
+					f"Forwards to {chosen['forward_host']}, which no current VM/CT has — a leftover proxy host for a "
+					"deleted container, or a container whose (DHCP) IP changed."
 				)
 		rows[domain] = row
 
@@ -338,8 +385,8 @@ def resolve(
 	if cf_checked:
 		guest_by_ip: dict[str, str] = {}
 		for g in guests:
-			for ip in ((g.ip_address or "").strip(), (g.public_ip or "").strip()):
-				if ip:
+			for ip in _guest_ips(g):
+				if not ipaddress.ip_address(ip).is_private:  # a public A record can't target a LAN IP
 					guest_by_ip.setdefault(ip, g.name)
 		for name, recs in cf.records.items():
 			if name.startswith("*.") or name in rows:

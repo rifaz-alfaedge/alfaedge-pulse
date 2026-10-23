@@ -55,7 +55,7 @@ def get_site_index() -> dict:
 	frappe.only_for(VIEW_ROLES)
 	index: dict[str, list[str]] = {}
 	for r in frappe.get_all(
-		"Instance Site", filters={"proxmox_guest": ["is", "set"]}, fields=["proxmox_guest", "domain"], order_by="domain asc"
+		"Instance Site", filters={"proxmox_guest": ["is", "set"], "status": "Active"}, fields=["proxmox_guest", "domain"], order_by="domain asc"
 	):
 		index.setdefault(r.proxmox_guest, []).append(r.domain)
 	return {"sites": index, "can_manage": bool(set(frappe.get_roles()) & set(MANAGER_ROLES))}
@@ -64,12 +64,16 @@ def get_site_index() -> dict:
 @frappe.whitelist()
 def get_instance_sites(guest: str | None = None, server: str | None = None) -> list[dict]:
 	"""Full rows for one VM/CT's popup (``guest``), or the sites served
-	through one Proxmox host's NPM (``server``)."""
+	through one Proxmox host's NPM (``server``).
+
+	Verified (Active) sites only: an NPM entry Cloudflare doesn't actually
+	send traffic to is a leftover, not a live site — those are listed under
+	Site sources → Needs attention instead."""
 	frappe.only_for(VIEW_ROLES)
 	if guest:
-		filters = {"proxmox_guest": guest}
+		filters = {"proxmox_guest": guest, "status": "Active"}
 	elif server:
-		filters = {"proxmox_server": server}
+		filters = {"proxmox_server": server, "status": "Active"}
 	else:
 		frappe.throw(frappe._("Pass guest or server"))
 	return frappe.get_all("Instance Site", filters=filters, fields=SITE_FIELDS, order_by="domain asc")

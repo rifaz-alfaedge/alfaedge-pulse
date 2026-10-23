@@ -203,6 +203,55 @@ class PVEClient(BaseProxmoxClient):
 		"""
 		return self.post(f"/nodes/{node}/lxc/{vmid}/termproxy")
 
+	def get_guest_ipv4s(self, node: str, vmid: int, is_lxc: bool, running: bool) -> set[str]:
+		"""Every IPv4 a guest has — static ones from its Proxmox config
+		(LXC ``netN: ...,ip=a.b.c.d/nn``; QEMU cloud-init ``ipconfigN:
+		ip=a.b.c.d/nn``), plus all live interface addresses when running
+		(LXC interfaces / QEMU guest agent). The 20s poller only records
+		one IP per guest; site discovery needs them all to match an NPM's
+		forward host (a CT with two networks, or a VM with no agent).
+		Best-effort: an endpoint that fails just contributes nothing."""
+		import ipaddress
+		import re
+
+		ips: set[str] = set()
+		kind = "lxc" if is_lxc else "qemu"
+		try:
+			config = self.get(f"/nodes/{node}/{kind}/{vmid}/config") or {}
+		except ProxmoxAPIError:
+			config = {}
+		key_re = re.compile(r"^net\d+$" if is_lxc else r"^ipconfig\d+$")
+		for key, value in config.items():
+			if key_re.match(key) and isinstance(value, str):
+				for match in re.finditer(r"(?:^|,)ip=([0-9.]+)", value):
+					ips.add(match.group(1))
+
+		if running:
+			try:
+				if is_lxc:
+					for iface in self.get(f"/nodes/{node}/lxc/{vmid}/interfaces", timeout=self.agent_timeout) or []:
+						if iface.get("name") != "lo" and iface.get("inet"):
+							ips.add(iface["inet"].split("/")[0])
+				else:
+					result = self.get(f"/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces", timeout=self.agent_timeout)
+					for iface in (result.get("result") if isinstance(result, dict) else result) or []:
+						if iface.get("name") == "lo":
+							continue
+						for addr in iface.get("ip-addresses", []):
+							if addr.get("ip-address-type") == "ipv4":
+								ips.add(addr.get("ip-address"))
+			except ProxmoxAPIError:
+				pass
+
+		valid = set()
+		for ip in ips:
+			try:
+				if not ipaddress.ip_address(ip).is_loopback:
+					valid.add(ip)
+			except ValueError:
+				continue
+		return valid
+
 	def get_lxc_ip(self, node: str, vmid: int) -> str | None:
 		"""Best-effort primary IPv4 address for a running LXC container."""
 		try:
