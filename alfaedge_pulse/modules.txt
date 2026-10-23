@@ -5,3 +5,4 @@ Host Health
 Proxmox Resource History
 AI Insights
 Log Monitor
+Site Discovery

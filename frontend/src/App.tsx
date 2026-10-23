@@ -7,10 +7,12 @@ import {
   useGuests,
   useMonitoredHosts,
   useServers,
+  useSiteIndex,
   useSettings,
 } from './lib/hooks'
 import { hostHealthStatus, isHostCritical, isHostWarning } from './lib/severity'
 import { GuestUsageTable, HostUsageTable } from './components/UsageTables'
+import { SiteSourcesDialog } from './components/SiteSourcesDialog'
 import { EMPTY_GUEST_FILTERS, EMPTY_HOST_FILTERS, type GuestFilters, type HostFilters, type Severity } from './lib/usageFilters'
 import { AlertsPopup } from './components/AlertsPopup'
 import { MultiSelectFilter } from './components/MultiSelectFilter'
@@ -46,6 +48,8 @@ function App() {
   const { data: settings } = useSettings()
   const { data: monitoredHosts } = useMonitoredHosts()
   const { data: guestLoads } = useGuestLoadAverages()
+  const { data: siteIndex, mutate: refreshSiteIndex } = useSiteIndex()
+  const [siteSourcesOpen, setSiteSourcesOpen] = useState(false)
 
   const warningThreshold = settings?.warning_threshold_percent ?? DEFAULT_WARNING_THRESHOLD
   const criticalThreshold = settings?.critical_threshold_percent ?? DEFAULT_CRITICAL_THRESHOLD
@@ -196,6 +200,17 @@ function App() {
 
       {mainTab === 'Usage Metrics' && (
         <>
+          {siteIndex?.can_manage && (
+            <div className="mb-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSiteSourcesOpen(true)}
+                className="rounded-lg border border-border-hairline bg-surface-card px-3 py-1.5 text-xs font-medium text-ink-primary hover:border-accent"
+              >
+                Site sources
+              </button>
+            </div>
+          )}
           <section className="mb-12">
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest text-ink-muted">
               Hosts &amp; Backup Server
@@ -221,6 +236,7 @@ function App() {
               servers={allServers}
               monitoredHosts={allMonitoredHosts}
               loads={guestLoads}
+              siteIndex={siteIndex?.sites}
               severityOf={guestSeverity}
               thresholds={{ warning: warningThreshold, critical: criticalThreshold }}
               backupOverdueHours={settings?.backup_overdue_hours ?? 26}
@@ -242,10 +258,13 @@ function App() {
 
       <AlertsPopup />
 
+      {siteSourcesOpen && (
+        <SiteSourcesDialog servers={allServers} onClose={() => setSiteSourcesOpen(false)} onChanged={() => refreshSiteIndex()} />
+      )}
+
       <NodeDetailDialog
         selected={selected}
         onClose={() => setSelected(null)}
-        datastores={allDatastores}
         backupLogs={allBackupLogs}
         alertLogs={allAlertLogs}
       />

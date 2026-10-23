@@ -187,6 +187,9 @@ scheduler_events = {
 			# throttled on ClickHouse Log Settings' check_interval_minutes, same
 			# pattern as bifrost_sync above.
 			"alfaedge_pulse.tasks.log_monitor.check_recurring_errors",
+			# Daily NPM + Cloudflare site discovery — self-throttled to once a
+			# day after Cloudflare Settings' sync_hour (see its docstring).
+			"alfaedge_pulse.site_discovery.sync.sync_sites",
 		],
 		# Host Health's own alert types (Service Down, Worker Degraded,
 		# Failed Job Threshold, Long Running Job, Scheduler Stalled, Host

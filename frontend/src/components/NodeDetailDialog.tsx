@@ -1,11 +1,10 @@
 import { type ReactNode, useState } from 'react'
 import { Dialog } from '@rtcamp/frappe-ui-react'
-import { useGuestMetricHistory, useHostMetricHistory } from '../lib/hooks'
-import type { ProxmoxAlertLog, ProxmoxBackupLog, ProxmoxDatastore, ProxmoxGuest, ProxmoxServer } from '../lib/types'
-import { formatGB, formatPercent, formatUptime, timeAgo } from '../lib/format'
+import { useGuestMetricHistory, useHostMetricHistory, useInstanceSites } from '../lib/hooks'
+import type { InstanceSite, ProxmoxAlertLog, ProxmoxBackupLog, ProxmoxGuest, ProxmoxServer } from '../lib/types'
+import { formatGB, formatPercent, timeAgo } from '../lib/format'
 import { StatusBadge } from './StatusBadge'
 import { TrendChart } from './TrendChart'
-import { UsageBar } from './UsageBar'
 
 /** Resource History trend-chart window presets, in minutes — same shape as
  * Host Health's own TREND_RANGE_OPTIONS (HostHealthPanel.tsx), duplicated
@@ -32,13 +31,11 @@ export type SelectedNode =
 export function NodeDetailDialog({
   selected,
   onClose,
-  datastores,
   backupLogs,
   alertLogs,
 }: {
   selected: SelectedNode | null
   onClose: () => void
-  datastores: ProxmoxDatastore[]
   backupLogs: ProxmoxBackupLog[]
   alertLogs: ProxmoxAlertLog[]
 }) {
@@ -60,11 +57,10 @@ export function NodeDetailDialog({
       options={{ title, size: '2xl' }}
     >
       <div className="space-y-8 py-2">
-        {isServer ? (
-          <HostDetail server={selected.doc as ProxmoxServer} datastores={datastores.filter((d) => d.server === selected.doc.name)} />
-        ) : (
-          <GuestDetail guest={selected.doc as ProxmoxGuest} />
-        )}
+        {/* Only what the Usage Metrics table doesn't already show. */}
+        {isServer ? <HostDetail server={selected.doc as ProxmoxServer} /> : <GuestDetail guest={selected.doc as ProxmoxGuest} />}
+
+        <SitesSection kind={isServer ? 'server' : 'guest'} name={selected.doc.name} />
 
         {isServer ? (
           <HostResourceHistory serverName={selected.doc.name} />
@@ -212,66 +208,96 @@ function GuestResourceHistory({ guestName, guestType }: { guestName: string; gue
   )
 }
 
-function HostDetail({ server, datastores }: { server: ProxmoxServer; datastores: ProxmoxDatastore[] }) {
+function HostDetail({ server }: { server: ProxmoxServer }) {
   return (
     <div className="grid grid-cols-2 gap-x-10 gap-y-5 text-base">
-      <Field label="Status"><StatusBadge status={server.status} /></Field>
-      <Field label="Role">{server.role || '—'}</Field>
-      <Field label="Hostname">{server.hostname}</Field>
       <Field label="Datacenter">{server.datacenter_location ? `${server.datacenter_location} (${server.cloud_provider})` : '—'}</Field>
-      <Field label="CPU">{formatPercent(server.cpu_usage)}</Field>
-      <Field label="Memory">{formatPercent(server.memory_usage)} of {formatGB(server.memory_total)}</Field>
       <Field label="Root Filesystem (/)">{formatPercent(server.storage_usage)} of {formatGB(server.storage_total)}</Field>
-      <Field label="Uptime">{formatUptime(server.uptime)}</Field>
-      <Field label="Backup Task Status">
+      <Field label="Backups">
         <span className={server.backup_critical ? 'font-semibold text-status-critical' : undefined}>
-          {server.backup_critical ? 'Last task failed' : 'OK'}
+          {server.backup_critical ? 'No successful backup in 24h' : 'OK'}
         </span>
       </Field>
       <Field label="Local Backup Retention">{server.local_backup_retention || '—'}</Field>
-      <Field label="Last Synced">{timeAgo(server.last_synced)}</Field>
       {server.last_error && (
         <div className="col-span-2 rounded-lg bg-status-critical/10 p-3 text-sm text-status-critical">{server.last_error}</div>
-      )}
-      {datastores.length > 0 && (
-        <div className="col-span-2 mt-3">
-          <h5 className="mb-3 text-xs font-semibold uppercase tracking-widest text-ink-muted">Storage</h5>
-          <div className="space-y-3">
-            {datastores.map((d) => (
-              <UsageBar
-                key={d.name}
-                label={`${d.datastore_name} (${formatGB(d.used)}/${formatGB(d.total)})`}
-                percent={d.usage_percent ?? 0}
-                critical={!!d.is_critical}
-              />
-            ))}
-          </div>
-        </div>
       )}
     </div>
   )
 }
 
 function GuestDetail({ guest }: { guest: ProxmoxGuest }) {
+  const fields: [string, ReactNode][] = [
+    ['Network Mode', guest.network_mode],
+    ['Access URL', guest.access_url],
+    ['Assigned Engineer', guest.assigned_engineer],
+    ['Last Synced', guest.last_synced ? timeAgo(guest.last_synced) : null],
+  ]
+  const shown = fields.filter(([, v]) => v)
+  if (!shown.length) return null
   return (
     <div className="grid grid-cols-2 gap-x-10 gap-y-5 text-base">
-      <Field label="Status"><StatusBadge status={guest.status} /></Field>
-      <Field label="Type">{guest.guest_type}</Field>
-      <Field label="VMID">{guest.vmid}</Field>
-      <Field label="CPU">{formatPercent(guest.cpu_usage)}</Field>
-      <Field label="Memory">{formatPercent(guest.memory_usage)} of {formatGB(guest.memory_total)}</Field>
-      <Field label="Disk">{formatPercent(guest.disk_usage)} of {formatGB(guest.disk_total)}</Field>
-      <Field label="Uptime">{formatUptime(guest.uptime)}</Field>
-      <Field label="Last Successful Backup">
-        {guest.last_successful_backup ? timeAgo(guest.last_successful_backup) : 'Never'}
-      </Field>
-      <Field label="IP Address">{guest.ip_address || guest.public_ip || '—'}</Field>
-      <Field label="Network Mode">{guest.network_mode || '—'}</Field>
-      <Field label="Access URL">{guest.access_url || '—'}</Field>
-      <Field label="Assigned Engineer">{guest.assigned_engineer || '—'}</Field>
-      <Field label="Tags">{guest.tags || '—'}</Field>
-      <Field label="Last Synced">{timeAgo(guest.last_synced)}</Field>
+      {shown.map(([label, value]) => (
+        <Field key={label} label={label}>{value}</Field>
+      ))}
     </div>
+  )
+}
+
+const SOURCE_LABEL: Record<InstanceSite['source'], string> = { NPM: 'NPM', 'Direct DNS': 'Direct DNS', 'Pulse Agent': 'Agent' }
+
+/** Site URLs on this VM/CT (or served through this host's NPM), from the
+ * daily NPM + Cloudflare + Pulse agent site sync (site_discovery/sync.py). */
+function SitesSection({ kind, name }: { kind: 'guest' | 'server'; name: string }) {
+  const { data, isLoading } = useInstanceSites(kind, name)
+  const sites = data ?? []
+  return (
+    <section>
+      <h4 className="mb-2.5 text-xs font-semibold uppercase tracking-widest text-ink-muted">
+        {kind === 'server' ? "Sites via this host's NPM" : 'Sites'} {sites.length > 0 && `(${sites.length})`}
+      </h4>
+      {isLoading && !data ? (
+        <p className="text-sm text-ink-muted">Loading…</p>
+      ) : sites.length === 0 ? (
+        <p className="text-sm text-ink-muted">No sites found yet.</p>
+      ) : (
+        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+          {sites.map((s) => (
+            <div key={s.name} className="rounded-lg border border-border-hairline px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={`https://${s.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-accent hover:underline"
+                >
+                  {s.domain} ↗
+                </a>
+                <span className="rounded-full bg-surface-page px-2 py-0.5 text-[11px] text-ink-secondary">{SOURCE_LABEL[s.source]}</span>
+                {s.status !== 'Active' && (
+                  <span
+                    className="rounded-full bg-status-warning/15 px-2 py-0.5 text-[11px] font-medium text-status-warning"
+                    title={s.note ?? undefined}
+                  >
+                    {s.status}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-xs text-ink-muted">
+                {[
+                  s.npm_instance && `via ${s.npm_instance}${s.forward_target ? ` → ${s.forward_target}` : ''}`,
+                  s.cloudflare_target && `Cloudflare → ${s.cloudflare_target}${s.cloudflare_proxied ? ' (proxied)' : ''}`,
+                  s.also_seen_in && `also: ${s.also_seen_in}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+              {s.status !== 'Active' && s.note && <div className="mt-1 text-xs text-status-warning">{s.note}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

@@ -2,6 +2,51 @@
 
 All notable changes to this project are documented here.
 
+## [4.7.0] - 2026-10-23
+
+### Added
+- **Site discovery: which site URLs live on which VM/CT.** A new
+  `Site Discovery` module runs once a day (after Cloudflare Settings'
+  sync hour) and on demand ("Sync now"). It merges three sources into
+  one `Instance Site` row per domain:
+  - **Nginx Proxy Manager:** each host's NPM proxy hosts. A domain maps
+    to a VM/CT through its forward IP (preferring guests on the NPM's own
+    host), then by name.
+  - **Direct DNS:** Cloudflare A/AAAA records pointing straight at a
+    guest's own IP.
+  - **Pulse agent:** sites reported by the Host Health agent. These are
+    merged into existing rows as "also seen in".
+
+  A domain in more than one NPM is assigned to the NPM whose public IP
+  its Cloudflare record points to (CNAME chains and wildcards are
+  followed). Problems are flagged rather than guessed: **Ambiguous**,
+  **DNS Mismatch**, **Not in Cloudflare** or **Unmatched**.
+
+  Outages never wipe data. Sites owned by an NPM that failed to sync keep
+  their previous owner, and while Cloudflare is down nothing is deleted
+  or overwritten.
+- **NPM Instance and Cloudflare Settings:** the NPM admin email/password
+  and Cloudflare API token are encrypted Password fields. An NPM with no
+  URL of its own defaults to `http://<Proxmox host>:81`.
+  - Managed from Usage Metrics → **Site sources** (Proxmox Monitor
+    Manager only): add, edit, delete and test NPMs, test Cloudflare,
+    Sync now, and a "Needs attention" list.
+  - Also managed from Desk. Secrets are write-only and never sent to the
+    browser.
+
+### Changed
+- **Usage Metrics:**
+  - The Uptime column is removed from both tables.
+  - The VM/CT table has a **Sites** count column, and its search also
+    matches site URLs.
+- **Detail popup:** shows only what the table doesn't: datacenter, root
+  filesystem, backup status and retention for hosts; network mode, access
+  URL, engineer and last sync for guests. It also lists the instance's
+  **Sites** (or, for a host, the sites served through its NPM), each with
+  its source, NPM target, Cloudflare target and any problem.
+- The stale-job guard from 4.6.0 is now a shared helper
+  (`tasks/jobs.py`), used by both the poller and the site sync.
+
 ## [4.6.0] - 2026-10-22
 
 ### Fixed

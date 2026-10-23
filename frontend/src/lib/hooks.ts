@@ -7,6 +7,7 @@ import type {
   FrappeFailedJobLog,
   FrappeWorkerHealthLog,
   GuestLoadAverages,
+  InstanceSite,
   HostMonitorSettings,
   ImportableMonitor,
   LlmUsageLog,
@@ -26,6 +27,7 @@ import type {
   ProxmoxMonitorSettings,
   ProxmoxServer,
   RecurringErrorRow,
+  SiteIndex,
   ServiceStatusLog,
   UptimeHistoryPoint,
   UptimeKumaInstance,
@@ -723,6 +725,28 @@ export function useGuestLoadAverages() {
     undefined,
     undefined,
     { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+/** Sites per VM/CT (Usage Metrics' Sites column and search). The sync runs
+ * daily, so a 5-minute refresh is plenty. */
+export function useSiteIndex() {
+  const result = useFrappeGetCall<{ message: SiteIndex }>(
+    'alfaedge_pulse.site_discovery.api.get_site_index',
+    undefined,
+    undefined,
+    { refreshInterval: 300000 },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+/** Full site rows for one VM/CT (``guest``) or one host's NPM (``server``). */
+export function useInstanceSites(kind: 'guest' | 'server', name: string) {
+  const result = useFrappeGetCall<{ message: InstanceSite[] }>(
+    'alfaedge_pulse.site_discovery.api.get_instance_sites',
+    { [kind]: name },
+    ['instance-sites', kind, name],
   )
   return { ...result, data: result.data?.message }
 }

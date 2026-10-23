@@ -557,3 +557,66 @@ export interface GuestLoadAverages {
   warning_percent: number
   critical_percent: number
 }
+
+// ---------------------------------------------------------------------------
+// Site discovery — see alfaedge_pulse/site_discovery/
+// ---------------------------------------------------------------------------
+export type SiteSource = 'NPM' | 'Direct DNS' | 'Pulse Agent'
+export type SiteStatus = 'Active' | 'Ambiguous' | 'DNS Mismatch' | 'Not in Cloudflare' | 'Unmatched'
+
+export interface InstanceSite {
+  name: string
+  domain: string
+  proxmox_guest: string | null
+  source: SiteSource
+  status: SiteStatus
+  npm_instance: string | null
+  proxmox_server: string | null
+  forward_target: string | null
+  cloudflare_target: string | null
+  cloudflare_proxied: 0 | 1
+  note: string | null
+  also_seen_in: string | null
+  last_seen: string | null
+}
+
+export interface SiteIndex {
+  sites: Record<string, string[]>
+  can_manage: boolean
+}
+
+export interface NPMInstanceInfo {
+  name: string
+  instance_name: string
+  proxmox_server: string
+  enabled: 0 | 1
+  public_ips: string | null
+  url: string | null
+  protocol: 'http' | 'https'
+  port: number | null
+  verify_ssl: 0 | 1
+  effective_url: string
+  last_synced: string | null
+  last_error: string | null
+  proxy_host_count: number | null
+  has_email: boolean
+  has_password: boolean
+}
+
+export interface CloudflareInfo {
+  enabled: 0 | 1
+  zones: string | null
+  sync_hour: number
+  has_api_token: boolean
+  last_synced: string | null
+  last_error: string | null
+  zone_count: number | null
+  record_count: number | null
+  site_count: number | null
+}
+
+export interface SiteSources {
+  cloudflare: CloudflareInfo
+  npms: NPMInstanceInfo[]
+  problems: InstanceSite[]
+}

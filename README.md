@@ -481,6 +481,30 @@ Critical (and merely-Down-somewhere) sites also surface in a persistent
 summary shown above every tab, the same way Proxmox's own Critical/
 Warning summary already does — not just on the Uptime tab itself.
 
+## Site discovery (NPM + Cloudflare)
+
+The **Sites** column in Usage Metrics, and the site list in each row's
+popup, come from a daily sync that combines three sources:
+
+- **Nginx Proxy Manager:** each Proxmox host's NPM. A proxy host's forward
+  IP identifies the VM/CT.
+- **Cloudflare DNS:** records pointing straight at a VM/CT's own IP.
+- **The Pulse agent:** sites reported from each bench.
+
+When the same domain exists in two or more NPMs, the NPM whose public IP
+the domain's Cloudflare record points to wins. Anything that can't be
+settled is listed under Usage Metrics → **Site sources** → *Needs
+attention*.
+
+To set it up, open **Site sources** (Proxmox Monitor Manager only):
+
+1. Add a Cloudflare API token with **Zone:Read** and **DNS:Read**.
+2. Add each NPM: its Proxmox host, admin login and public IP. The URL
+   defaults to `http://<host>:81`.
+3. Press **Sync now**.
+
+All credentials are stored encrypted.
+
 ## Log Monitor (ClickHouse)
 
 The **Logs** tab shows the Frappe Error Logs that each production site

@@ -72,7 +72,7 @@ from __future__ import annotations
 import re
 import signal
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import NamedTuple
 
 import frappe
@@ -172,38 +172,11 @@ def ensure_poller_running() -> None:
 
 
 def _clear_stale_poller_job() -> None:
-	"""Delete a poll job RQ still reports as queued/started long after any
-	real run could have ended.
+	"""See ``tasks.jobs.clear_stale_job`` — a poll run is bounded to
+	MAX_LOOP_SECONDS, so anything older than STALE_JOB_SECONDS is dead."""
+	from alfaedge_pulse.tasks.jobs import clear_stale_job
 
-	Frappe's ``deduplicate=True`` refuses to enqueue while a job with this
-	id is QUEUED or STARTED. When a worker is killed mid-run (e.g. a
-	``supervisorctl restart`` during a deploy), RQ can leave the job
-	recorded as STARTED with no worker behind it — the heartbeat expires,
-	but every watchdog enqueue is then silently deduped and the poller
-	never comes back. This happened in production on 2026-10-16: no
-	Proxmox sync (and so no backup checks) for days. A run is bounded to
-	MAX_LOOP_SECONDS, so anything older than STALE_JOB_SECONDS is dead.
-	"""
-	from frappe.utils.background_jobs import get_job
-	from rq.job import JobStatus
-
-	job = get_job(POLLER_JOB_ID)
-	if not job or job.get_status(refresh=False) not in (JobStatus.QUEUED, JobStatus.STARTED):
-		return
-	since = job.started_at or job.enqueued_at
-	if since is None:
-		return
-	if since.tzinfo is None:
-		since = since.replace(tzinfo=timezone.utc)  # RQ stores UTC
-	age = (datetime.now(timezone.utc) - since).total_seconds()
-	if age < STALE_JOB_SECONDS:
-		return  # genuinely pending/running — leave it alone
-	frappe.log_error(
-		title="alfaEdge Pulse: cleared stale poller job",
-		message=f"Poll job {job.id} was still {job.get_status(refresh=False)} after {int(age)}s "
-		f"(worker {job.worker_name or 'unknown'}); deleted so the watchdog can restart the poller.",
-	)
-	job.delete()
+	clear_stale_job(POLLER_JOB_ID, STALE_JOB_SECONDS, "poller")
 
 
 def _check_poller_stall() -> None:

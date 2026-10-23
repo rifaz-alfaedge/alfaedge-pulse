@@ -1,0 +1,178 @@
+{
+ "actions": [],
+ "creation": "2026-10-23 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "instance_name",
+  "proxmox_server",
+  "enabled",
+  "public_ips",
+  "column_break_main",
+  "url",
+  "protocol",
+  "port",
+  "verify_ssl",
+  "effective_url",
+  "credentials_section",
+  "email",
+  "column_break_creds",
+  "password",
+  "test_connection",
+  "status_section",
+  "last_synced",
+  "proxy_host_count",
+  "column_break_status",
+  "last_error"
+ ],
+ "fields": [
+  {
+   "fieldname": "instance_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "proxmox_server",
+   "fieldtype": "Link",
+   "label": "Proxmox Host",
+   "options": "Proxmox Server",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "public_ips",
+   "fieldtype": "Small Text",
+   "label": "Public IP(s)",
+   "description": "Comma-separated public IP(s) this NPM receives traffic on. Used to decide which NPM serves a domain that exists in several NPMs, by matching Cloudflare's DNS target."
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "url",
+   "fieldtype": "Data",
+   "label": "URL",
+   "description": "Optional, e.g. https://npm.example.com. Leave blank to use the Proxmox host's hostname with the protocol and port below."
+  },
+  {
+   "fieldname": "protocol",
+   "fieldtype": "Select",
+   "label": "Protocol",
+   "options": "http\nhttps",
+   "default": "http",
+   "depends_on": "eval:!doc.url"
+  },
+  {
+   "fieldname": "port",
+   "fieldtype": "Int",
+   "label": "Port",
+   "default": "81",
+   "depends_on": "eval:!doc.url"
+  },
+  {
+   "fieldname": "verify_ssl",
+   "fieldtype": "Check",
+   "label": "Verify SSL Certificate",
+   "default": "1"
+  },
+  {
+   "fieldname": "effective_url",
+   "fieldtype": "Data",
+   "label": "Effective URL",
+   "read_only": 1,
+   "is_virtual": 1
+  },
+  {
+   "fieldname": "credentials_section",
+   "fieldtype": "Section Break",
+   "label": "Credentials"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Password",
+   "label": "Email",
+   "description": "NPM admin login. Stored encrypted."
+  },
+  {
+   "fieldname": "column_break_creds",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "password",
+   "fieldtype": "Password",
+   "label": "Password",
+   "description": "Stored encrypted."
+  },
+  {
+   "fieldname": "test_connection",
+   "fieldtype": "Button",
+   "label": "Test Connection"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "last_synced",
+   "fieldtype": "Datetime",
+   "label": "Last Synced",
+   "read_only": 1
+  },
+  {
+   "fieldname": "proxy_host_count",
+   "fieldtype": "Int",
+   "label": "Proxy Hosts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-23 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Site Discovery",
+ "name": "NPM Instance",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:instance_name",
+ "title_field": "instance_name",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ]
+}

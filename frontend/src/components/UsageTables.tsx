@@ -6,7 +6,7 @@ import type {
   ProxmoxGuest,
   ProxmoxServer,
 } from '../lib/types'
-import { formatUptime, timeAgo } from '../lib/format'
+import { timeAgo } from '../lib/format'
 import { hostHealthStatus } from '../lib/severity'
 import { MultiSelectFilter } from './MultiSelectFilter'
 import { SearchInput } from './SearchInput'
@@ -391,12 +391,6 @@ export function HostUsageTable({
         ),
     },
     {
-      key: 'uptime',
-      label: 'Uptime',
-      sortValue: (s) => (s.status === 'Offline' ? null : s.uptime ?? null),
-      render: (s) => (s.status === 'Offline' ? <span className="text-ink-muted">—</span> : formatUptime(s.uptime)),
-    },
-    {
       key: 'synced',
       label: 'Last synced',
       sortValue: (s) => ts(s.last_synced),
@@ -441,6 +435,7 @@ export function GuestUsageTable({
   servers,
   monitoredHosts,
   loads,
+  siteIndex,
   severityOf,
   thresholds,
   backupOverdueHours,
@@ -452,6 +447,8 @@ export function GuestUsageTable({
   servers: ProxmoxServer[]
   monitoredHosts: MonitoredHost[]
   loads?: GuestLoadAverages
+  /** guest → site domains (site discovery); counted here, listed in the popup. */
+  siteIndex?: Record<string, string[]>
   severityOf: (g: ProxmoxGuest) => Severity
   thresholds: Thresholds
   /** Proxmox Monitor Settings' backup_overdue_hours — same window the
@@ -485,7 +482,9 @@ export function GuestUsageTable({
   const needle = filters.search.trim().toLowerCase()
   const rows = guests.filter((g) => {
     if (needle) {
-      const hay = [g.guest_name, String(g.vmid), g.ip_address ?? '', g.public_ip ?? '', g.tags ?? ''].join(' ').toLowerCase()
+      const hay = [g.guest_name, String(g.vmid), g.ip_address ?? '', g.public_ip ?? '', g.tags ?? '', ...(siteIndex?.[g.name] ?? [])]
+        .join(' ')
+        .toLowerCase()
       if (!hay.includes(needle)) return false
     }
     return (
@@ -611,10 +610,18 @@ export function GuestUsageTable({
       ),
     },
     {
-      key: 'uptime',
-      label: 'Uptime',
-      sortValue: (g) => (running(g) ? g.uptime ?? null : null),
-      render: (g) => (running(g) ? formatUptime(g.uptime) : <span className="text-ink-muted">—</span>),
+      key: 'sites',
+      label: 'Sites',
+      align: 'right',
+      sortValue: (g) => siteIndex?.[g.name]?.length ?? null,
+      render: (g) => {
+        const sites = siteIndex?.[g.name] ?? []
+        return sites.length ? (
+          <span className="tabular-nums text-ink-primary">{sites.length}</span>
+        ) : (
+          <span className="text-ink-muted">—</span>
+        )
+      },
     },
     {
       key: 'backup',
@@ -650,7 +657,7 @@ export function GuestUsageTable({
         <SearchInput
           value={filters.search}
           onChange={(search) => onFiltersChange({ ...filters, search })}
-          placeholder="Search name, VMID, IP, tag…"
+          placeholder="Search name, VMID, IP, tag, site URL…"
         />
         <MultiSelectFilter label="Host" options={hostOptions} selected={filters.host} onChange={(host) => onFiltersChange({ ...filters, host })} />
         <MultiSelectFilter label="Status" options={statusOptions} selected={filters.status} onChange={(status) => onFiltersChange({ ...filters, status })} />

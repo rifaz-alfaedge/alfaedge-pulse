@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "creation": "2026-10-23 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "api_token",
+  "zones",
+  "column_break_cf",
+  "sync_hour",
+  "test_connection",
+  "sync_now",
+  "status_section",
+  "last_synced",
+  "zone_count",
+  "record_count",
+  "column_break_status",
+  "site_count",
+  "last_error"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "api_token",
+   "fieldtype": "Password",
+   "label": "API Token",
+   "description": "Cloudflare API token with Zone:Read and DNS:Read on the zones to check. Stored encrypted."
+  },
+  {
+   "fieldname": "zones",
+   "fieldtype": "Small Text",
+   "label": "Only These Zones",
+   "description": "Optional, comma-separated zone names (e.g. alfaedge.org, alfacrm.org). Blank = every zone the token can read."
+  },
+  {
+   "fieldname": "column_break_cf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sync_hour",
+   "fieldtype": "Int",
+   "label": "Daily Sync Hour",
+   "default": "2",
+   "description": "Hour of day (site time, 0-23) after which the daily site sync runs."
+  },
+  {
+   "fieldname": "test_connection",
+   "fieldtype": "Button",
+   "label": "Test Connection"
+  },
+  {
+   "fieldname": "sync_now",
+   "fieldtype": "Button",
+   "label": "Sync Sites Now"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "last_synced",
+   "fieldtype": "Datetime",
+   "label": "Last Sync",
+   "read_only": 1
+  },
+  {
+   "fieldname": "zone_count",
+   "fieldtype": "Int",
+   "label": "Zones",
+   "read_only": 1
+  },
+  {
+   "fieldname": "record_count",
+   "fieldtype": "Int",
+   "label": "DNS Records",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "site_count",
+   "fieldtype": "Int",
+   "label": "Sites Found",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-23 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Site Discovery",
+ "name": "Cloudflare Settings",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "issingle": 1,
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ]
+}
