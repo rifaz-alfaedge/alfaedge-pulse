@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [4.7.1] - 2026-10-23
+
+### Fixed
+- **Usage Metrics sorting used percentages, not actual usage.** A
+  43%-full 8 GB disk (3.6 GB used) sorted above a 20%-full 100 GB disk
+  (20 GB used). CPU, RAM, disk and swap now sort by the actual amount
+  used (cores and GB); a host's Disks column sorts by total GB used
+  across its drives; load sorts by the 1-minute load average. The
+  warning/critical colours still follow the percentage thresholds.
+
 ## [4.7.0] - 2026-10-23
 
 ### Added
