@@ -37,7 +37,6 @@ from frappe.utils import add_to_date, now_datetime
 
 from alfaedge_pulse.alerts.dispatch import (
 	DIGEST_ONLY_ALERT_TYPES,
-	_get_matching_subscriptions,
 	_resolve_whatsapp_template,
 	_send_whatsapp,
 	has_open_alert,
@@ -93,15 +92,8 @@ def _parse_recipient_list(value: str | None) -> list[str]:
 
 def _send_health_digest(window_start, window_end, label: str) -> None:
 	"""Groups this window's digest-only Proxmox Alert Log rows by
-	(alert_type, host), then sends two shapes of message: the *global*
-	recipient list (Proxmox Monitor Settings) gets everything, same as it
-	always would for a fleet-wide watcher — but a per-guest Alert
-	Subscription only ever gets the groups for the host(s) they actually
-	subscribed to, each as its own separate send. A single combined digest
-	naively sent to everyone (subscribers included) would leak every other
-	host's health details to a subscriber who only ever asked to watch one
-	— something a per-incident dispatch_alert would never have done.
-	"""
+	(alert_type, host) and sends one combined digest to the global
+	recipient lists in Proxmox Monitor Settings."""
 	rows = frappe.get_all(
 		"Proxmox Alert Log",
 		filters={"alert_type": ["in", list(DIGEST_ONLY_ALERT_TYPES)], "sent_at": ["between", [window_start, window_end]]},
@@ -118,16 +110,9 @@ def _send_health_digest(window_start, window_end, label: str) -> None:
 
 	settings = frappe.get_cached_doc("Proxmox Monitor Settings")
 	global_emails = _parse_recipient_list(settings.email_recipients) if settings.enable_email_alerts else []
-	global_email_keys = {e.lower() for e in global_emails}
 	global_numbers = _parse_recipient_list(settings.whatsapp_recipients) if settings.enable_whatsapp_alerts else []
-	global_number_keys = set(global_numbers)
 
 	section_by_key: dict[tuple, str] = {}
-	# Only tracked for subscribers *not* already covered by the global list
-	# above — no point sending an already-global recipient a second, more
-	# narrowly-scoped copy of the same window.
-	subscriber_email_keys: dict[str, set[tuple]] = {}
-	subscriber_number_keys: dict[str, set[tuple]] = {}
 
 	for key, occurrences in groups.items():
 		alert_type, reference_doctype, reference_name = key
@@ -138,12 +123,6 @@ def _send_health_digest(window_start, window_end, label: str) -> None:
 			f" ({'still open' if still_open else 'resolved'})\n"
 			f"   latest: {occurrences[-1].message}"
 		)
-
-		for s in _get_matching_subscriptions(reference_doctype, reference_name):
-			if s.enable_email and s.email and s.email.lower() not in global_email_keys:
-				subscriber_email_keys.setdefault(s.email, set()).add(key)
-			if s.enable_whatsapp and s.whatsapp_number and s.whatsapp_number not in global_number_keys:
-				subscriber_number_keys.setdefault(s.whatsapp_number, set()).add(key)
 
 	def _issue_count(keys) -> int:
 		return sum(len(groups[k]) for k in keys)
@@ -167,18 +146,12 @@ def _send_health_digest(window_start, window_end, label: str) -> None:
 	all_keys = set(groups.keys())
 	if global_emails:
 		_send_email(global_emails, all_keys)
-	for email, keys in subscriber_email_keys.items():
-		_send_email([email], keys)
 
 	template_name = (
 		_resolve_whatsapp_template(settings.whatsapp_health_digest_template)
 		if settings.whatsapp_health_digest_template
 		else None
 	)
-	if template_name:
-		if global_numbers:
-			summary = f"{label}: {_issue_count(all_keys)} health issue(s) across {_host_count(all_keys)} host(s)."
-			_send_whatsapp(global_numbers, template_name, summary)
-		for number, keys in subscriber_number_keys.items():
-			summary = f"{label}: {_issue_count(keys)} health issue(s) across {_host_count(keys)} host(s)."
-			_send_whatsapp([number], template_name, summary)
+	if template_name and global_numbers:
+		summary = f"{label}: {_issue_count(all_keys)} health issue(s) across {_host_count(all_keys)} host(s)."
+		_send_whatsapp(global_numbers, template_name, summary)

@@ -38,7 +38,6 @@ export interface ProxmoxServer {
 
 export type GuestType = 'QEMU (VM)' | 'LXC (CT)'
 export type GuestStatus = 'running' | 'stopped' | 'paused' | 'unknown'
-export type NetworkMode = 'Direct Public IP' | 'Internal Bridge + Reverse Proxy'
 
 export interface ProxmoxGuest {
   name: string
@@ -60,10 +59,6 @@ export interface ProxmoxGuest {
   last_synced?: string
   last_successful_backup?: string
   ip_address?: string
-  network_mode?: NetworkMode
-  public_ip?: string
-  access_url?: string
-  assigned_engineer?: string
   tags?: string
 }
 

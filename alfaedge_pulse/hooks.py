@@ -134,13 +134,7 @@ after_migrate = [
 # -----------
 # Permissions evaluated in scripted ways
 
-permission_query_conditions = {
-	"Alert Subscription": "alfaedge_pulse.proxmox_fleet_monitor.doctype.alert_subscription.alert_subscription.get_permission_query_conditions",
-}
 
-has_permission = {
-	"Alert Subscription": "alfaedge_pulse.proxmox_fleet_monitor.doctype.alert_subscription.alert_subscription.has_permission",
-}
 
 # Document Events
 # ---------------

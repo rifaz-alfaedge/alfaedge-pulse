@@ -491,7 +491,7 @@ export function GuestUsageTable({
   const needle = filters.search.trim().toLowerCase()
   const rows = guests.filter((g) => {
     if (needle) {
-      const hay = [g.guest_name, String(g.vmid), g.ip_address ?? '', g.public_ip ?? '', g.tags ?? '', ...(siteIndex?.[g.name] ?? [])]
+      const hay = [g.guest_name, String(g.vmid), g.ip_address ?? '', g.tags ?? '', ...(siteIndex?.[g.name] ?? [])]
         .join(' ')
         .toLowerCase()
       if (!hay.includes(needle)) return false
@@ -611,12 +611,7 @@ export function GuestUsageTable({
       key: 'ip',
       label: 'IP',
       sortValue: (g) => ipSortKey(g.ip_address),
-      render: (g) => (
-        <>
-          <span className="font-mono text-xs text-ink-secondary">{g.ip_address || '—'}</span>
-          {g.public_ip && <Sub className="font-mono">{g.public_ip}</Sub>}
-        </>
-      ),
+      render: (g) => <span className="font-mono text-xs text-ink-secondary">{g.ip_address || '—'}</span>,
     },
     {
       key: 'sites',

@@ -64,7 +64,7 @@
    "read_only": 1
   },
   {
-   "description": "Comma-separated list of channels the alert was successfully dispatched to, e.g. \"Email, Telegram\".",
+   "description": "Comma-separated list of channels the alert was successfully dispatched to, e.g. \"Email, WhatsApp\".",
    "fieldname": "channels_sent",
    "fieldtype": "Data",
    "label": "Channels Sent",

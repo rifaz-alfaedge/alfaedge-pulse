@@ -49,9 +49,8 @@ Design notes (the "why" behind the shape of this module):
 - **Per-guest severity is tracked for every role, notified globally only
   for Production.** A Development/Staging/Backup host's VMs/CTs are still
   expected to spike routinely, but suppressing severity tracking entirely
-  would also hide it from the dashboard and make per-instance Alert
-  Subscriptions unable to ever see a transition. Instead, severity is
-  always tracked; only the *global* Settings recipient list is gated to
+  would also hide it from the dashboard. Instead, severity is always
+  tracked; only notifying the Settings recipient lists is gated to
   Production — see ``notify_global`` in ``_upsert_guest``.
 - **A server can be "critical" for two independent reasons.** Host
   resource usage (CPU/RAM, from ``_apply_host_status``) and backup task
@@ -535,10 +534,8 @@ def _upsert_guest(
 	# Severity is tracked for every guest regardless of role — a
 	# Development/Staging/Backup host's VMs/CTs are still expected to spike
 	# routinely, but suppressing that here would also hide it from the
-	# dashboard and make it impossible for an individual Alert Subscription
-	# to ever see a transition to notify on. Instead, the *global* Settings
-	# recipient list stays Production-only — see notify_global below and
-	# dispatch.py's _merge_contacts.
+	# dashboard. Instead, only notifying the Settings recipient lists is
+	# Production-only — see notify_global below and dispatch.py's _recipients.
 	readings = [cpu_usage, memory_usage] + ([disk_pct] if disk_pct is not None else [])
 	if readings:
 		is_critical, is_warning = _track_severity(doc, max(readings), thresholds)
@@ -568,11 +565,9 @@ def _upsert_guest(
 	doc.save(ignore_permissions=True)
 
 	metrics = [("CPU", cpu_usage), ("RAM", memory_usage)] + ([("Disk", disk_pct)] if disk_pct is not None else [])
-	# Global Settings recipients stay Production-only, matching this app's
-	# existing "Dev/Staging spikes routinely, would be noise" stance —
-	# individual Alert Subscriptions still get notified regardless of role
-	# (see _handle_transition/dispatch.py), since subscribing is an
-	# explicit, deliberate opt-in per instance.
+	# Settings recipients are notified for Production only, matching this
+	# app's existing "Dev/Staging spikes routinely, would be noise" stance —
+	# other roles' transitions are still logged (see _handle_transition).
 	notify_global = server.role == "Production"
 	_handle_transition(
 		old_is_critical, is_critical, "Proxmox Guest", doc.name,
@@ -1300,8 +1295,8 @@ def _handle_transition(
 	condition clears.
 
 	``notify_global`` gates whether Proxmox Monitor Settings' global
-	recipient lists get notified (see dispatch.py's _merge_contacts) —
-	individual Alert Subscriptions are notified either way. Only guest-level
+	recipient lists get notified (see dispatch.py's _recipients); the
+	alert is logged either way. Only guest-level
 	calls ever pass False (non-Production servers); every other caller
 	(server/datastore/offline/backup) keeps the default.
 	"""

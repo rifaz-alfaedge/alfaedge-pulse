@@ -57,8 +57,7 @@ const SERVER_FIELDS: (keyof ProxmoxServer)[] = [
 const GUEST_FIELDS: (keyof ProxmoxGuest)[] = [
   'name', 'server', 'node', 'vmid', 'guest_name', 'guest_type', 'status', 'is_critical', 'is_warning',
   'cpu_usage', 'cpus', 'memory_usage', 'memory_total', 'disk_usage', 'disk_total', 'uptime',
-  'last_synced', 'last_successful_backup', 'ip_address', 'network_mode',
-  'public_ip', 'access_url', 'assigned_engineer', 'tags',
+  'last_synced', 'last_successful_backup', 'ip_address', 'tags',
 ]
 
 const DATASTORE_FIELDS: (keyof ProxmoxDatastore)[] = [

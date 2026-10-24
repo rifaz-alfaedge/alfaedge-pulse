@@ -10,14 +10,12 @@ drags along tens of thousands of backup, alert and metric-history rows.
 
 What goes with the server:
 
-- its VMs/CTs, datastores, backup logs, console session logs, discovered
-  sites (Instance Site) and its NPM Instance;
+- its VMs/CTs, datastores, backup logs, discovered sites (Instance Site)
+  and its NPM Instance;
 - every alert raised on any of those;
 - Host Health (Monitored Host) records for its VMs/CTs, with their
   services, jobs, mounts and history — deleting a Monitored Host also
   revokes its agent key;
-- rows pointing at them from Alert Subscriptions (the subscriptions
-  themselves stay; just those rows go);
 - encrypted secrets stored for the server, its NPM and its Monitored
   Hosts.
 
@@ -175,9 +173,6 @@ def _collect(server: str) -> dict[str, list[str]]:
 		"Proxmox Backup Log": _union(
 			"Proxmox Backup Log", {"server": server}, {"guest": _in(guests)} if guests else None
 		),
-		"Proxmox Console Session Log": _union(
-			"Proxmox Console Session Log", {"server": server}, {"guest": _in(guests)} if guests else None
-		),
 		"Instance Site": _union(
 			"Instance Site", {"proxmox_server": server}, {"proxmox_guest": _in(guests)} if guests else None
 		),
@@ -192,12 +187,6 @@ def _collect(server: str) -> dict[str, list[str]]:
 
 	alert_refs = [server, *guests, *datastores, *hosts, *services]
 	plan["Proxmox Alert Log"] = _names("Proxmox Alert Log", {"reference_name": ["in", alert_refs]})
-	plan["Alert Subscription Item"] = _union(
-		"Alert Subscription Item", {"server": server}, {"instance": _in(guests)} if guests else None
-	)
-	plan["Alert Subscription Monitored Host"] = (
-		_names("Alert Subscription Monitored Host", {"monitored_host": ["in", hosts]}) if hosts else []
-	)
 	plan["Recurring Error (unlinked)"] = (
 		_names("Recurring Error", {"monitored_host": ["in", hosts]}) if hosts else []
 	)
@@ -283,11 +272,9 @@ def _delete(plan: dict[str, list[str]]) -> None:
 		frappe.db.set_value("Recurring Error", {"name": ["in", plan["Recurring Error (unlinked)"]]}, "monitored_host", None)
 
 	for doctype in (
-		"Alert Subscription Item", "Alert Subscription Monitored Host", "Proxmox Alert Log",
-		"Service Status Log", "Frappe Worker Health Log", "Frappe Failed Job Log", "Frappe Active Job",
+		"Proxmox Alert Log", "Service Status Log", "Frappe Worker Health Log", "Frappe Failed Job Log", "Frappe Active Job",
 		"Resource Mount", "Resource Metric Log", "Resource Disk Sample",
-		"Proxmox Host Metric Log", "Proxmox Guest Metric Log", "Proxmox Backup Log",
-		"Proxmox Console Session Log", "Instance Site",
+		"Proxmox Host Metric Log", "Proxmox Guest Metric Log", "Proxmox Backup Log", "Instance Site",
 	):
 		_bulk_delete(doctype, plan[doctype])
 
@@ -296,7 +283,7 @@ def _delete(plan: dict[str, list[str]]) -> None:
 			frappe.db.delete(child, {"parent": ["in", hosts], "parenttype": "Monitored Host"})
 	for doctype in ("Monitored Host", "NPM Instance", "Proxmox Datastore", "Proxmox Guest", "Proxmox Server"):
 		_bulk_delete(doctype, plan[doctype])
-		# Encrypted secrets stored for these records (server API token and
-		# console password, NPM login, Monitored Host agent secret).
+		# Encrypted secrets stored for these records (server API token,
+		# NPM login, Monitored Host agent secret).
 		if plan[doctype]:
 			frappe.db.delete("__Auth", {"doctype": doctype, "name": ["in", plan[doctype]]})

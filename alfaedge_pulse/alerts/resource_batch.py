@@ -26,7 +26,6 @@ from frappe.utils import add_to_date, now_datetime
 
 from alfaedge_pulse.alerts.dispatch import (
 	BATCHED_RESOURCE_ALERT_TYPES,
-	_get_matching_subscriptions,
 	_resolve_whatsapp_template,
 	_send_whatsapp,
 	has_open_alert,
@@ -103,44 +102,21 @@ def send_resource_alert_batch() -> None:
 			# other per-guest alert (see poller._upsert_guest).
 			global_eligible.add(key)
 		elif reference_doctype == "Recurring Error" and recurring_to_global:
-			# Off by default — recurring errors go to subscribed engineers
-			# only unless ClickHouse Log Settings opts the global list in.
+			# Off by default — recurring errors are only logged unless
+			# ClickHouse Log Settings opts the global list in.
 			global_eligible.add(key)
 
 	settings = frappe.get_cached_doc("Proxmox Monitor Settings")
 	global_emails = _parse_recipient_list(settings.email_recipients) if settings.enable_email_alerts else []
-	global_email_keys = {e.lower() for e in global_emails}
 	global_numbers = _parse_recipient_list(settings.whatsapp_recipients) if settings.enable_whatsapp_alerts else []
-	global_number_keys = set(global_numbers)
-
-	# Only tracked for subscribers *not* already covered by the global list
-	# above — no point sending an already-global recipient a second, more
-	# narrowly-scoped copy of the same window. Subscriptions receive their
-	# own host's alerts regardless of that host's role (matches dispatch_alert's
-	# own notify_global semantics: it only ever gates the *global* list).
-	subscriber_email_keys: dict[str, set[tuple]] = {}
-	subscriber_number_keys: dict[str, set[tuple]] = {}
-	for key in groups:
-		_, reference_doctype, reference_name = key
-		for s in _get_matching_subscriptions(reference_doctype, reference_name):
-			# Skip only when the global send below already covers this
-			# recipient *for this alert* — a subscriber who's also on the
-			# global list must still get alerts the global list doesn't
-			# receive (e.g. recurring errors, non-Production hosts).
-			covered = key in global_eligible
-			if s.enable_email and s.email and not (covered and s.email.lower() in global_email_keys):
-				subscriber_email_keys.setdefault(s.email, set()).add(key)
-			if s.enable_whatsapp and s.whatsapp_number and not (covered and s.whatsapp_number in global_number_keys):
-				subscriber_number_keys.setdefault(s.whatsapp_number, set()).add(key)
 
 	def _ordered_sections(keys) -> str:
 		return "\n".join(section_by_key[k] for k in groups if k in keys)  # preserve chronological first-seen order
 
 	# Per-key (not batch-wide) delivery bookkeeping — a batch commonly mixes
-	# a globally-eligible host with a subscriber-only one, and each can go
-	# out through a different channel combination, so a single shared
-	# "channels sent" string for every row in the batch would misreport
-	# delivery for whichever rows weren't actually part of every send.
+	# globally-eligible rows with ones nobody is sent (non-Production hosts),
+	# so a single shared "channels sent" string for every row in the batch
+	# would misreport delivery for the rows that weren't sent.
 	channels_by_key: dict[tuple, set[str]] = {}
 
 	def _mark(keys, channel: str) -> None:
@@ -159,17 +135,11 @@ def send_resource_alert_batch() -> None:
 
 	if global_emails and global_eligible:
 		_send_email(global_emails, global_eligible)
-	for email, keys in subscriber_email_keys.items():
-		_send_email([email], keys)
 
 	template_name = _resolve_whatsapp_template(settings.whatsapp_template) if settings.whatsapp_template else None
-	if template_name:
-		if global_numbers and global_eligible:
-			if _send_whatsapp(global_numbers, template_name, _ordered_sections(global_eligible)):
-				_mark(global_eligible, "WhatsApp")
-		for number, keys in subscriber_number_keys.items():
-			if _send_whatsapp([number], template_name, _ordered_sections(keys)):
-				_mark(keys, "WhatsApp")
+	if template_name and global_numbers and global_eligible:
+		if _send_whatsapp(global_numbers, template_name, _ordered_sections(global_eligible)):
+			_mark(global_eligible, "WhatsApp")
 
 	for row in rows:
 		key = (row.alert_type, row.reference_doctype, row.reference_name)

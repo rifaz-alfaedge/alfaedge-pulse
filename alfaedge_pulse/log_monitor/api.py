@@ -259,7 +259,7 @@ def resolve_error(signature: str) -> dict:
 	resolved as of now. Its existing occurrences stop counting everywhere
 	recurring errors are shown or alerted on; it reappears on its own if it
 	happens again. Also closes any open Recurring Error alert for it, with a
-	"back to normal" to its subscribers."""
+	"back to normal" to the global recipients if they're opted in."""
 	frappe.only_for(VIEW_ROLES)
 	from alfaedge_pulse.alerts.dispatch import dispatch_recovery, has_open_alert, resolve_alert
 

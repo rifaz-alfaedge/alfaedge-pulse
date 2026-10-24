@@ -9,7 +9,6 @@ class ProxmoxGuest(Document):
 
 	Fully auto-managed: created, updated, and deleted by the background
 	poller (``alfaedge_pulse.tasks.poller``) as it observes the real state
-	of each connected host. Only ``assigned_engineer``, ``network_mode``,
-	``public_ip`` and ``access_url`` are meant to be edited by hand — every
-	other field is overwritten on the next sync.
+	of each connected host. Only ``tags`` is meant to be edited by hand —
+	every other field is overwritten on the next sync.
 	"""

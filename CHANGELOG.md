@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## [5.0.0] - 2026-10-24
+
+### Removed
+Unused features are gone. None of them had any data on production.
+- **Alert Subscription**, with its Instances, Uptime Sites, Monitored
+  Hosts and Log Sites tables and the subscription test button. Alerts,
+  recovery messages, the Host Health digests and the 2-minute batch now go
+  only to the global Email/WhatsApp recipients in Proxmox Monitor
+  Settings. Non-Production alerts are still logged and shown on the
+  dashboard, but nobody is sent them.
+- **Telegram alerts** (Enable Telegram Alerts, Telegram Chat ID).
+- **Embedded console:** the console relay, the Proxmox Console Session
+  Log, the Console Username/Password fields on Proxmox Server, and the
+  noVNC/xterm and `websockets` dependencies.
+- **Client** doctype, and the Client field on Proxmox Server.
+- **Unused VM/CT fields:** Network Mode, Public IP, Access URL and
+  Assigned Engineer on Proxmox Guest. They're also gone from the VM/CT
+  popup, the IP column and search.
+
+A patch drops the removed tables and columns, the stored console
+passwords and the Telegram settings.
+
+### Changed
+- **Recurring-error alerts:** *Also Notify Global Recipients* in ClickHouse
+  Log Settings is now **Notify Global Recipients**. It's the only way
+  recurring errors are sent. When it's off (the default, and production's
+  current setting), they're recorded and shown in the Logs tab only.
+
 ## [4.8.0] - 2026-10-23
 
 ### Added

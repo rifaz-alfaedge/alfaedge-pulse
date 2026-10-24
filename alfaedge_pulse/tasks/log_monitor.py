@@ -139,8 +139,7 @@ def run_check(settings=None, now=None) -> dict:
 
 def _monitored_hosts_by_site() -> dict[str, str]:
 	"""Map each Monitored Host's reported sites (URL and site name) to the
-	host, so a Recurring Error links back to it — that link is what lets
-	an Alert Subscription on the host receive its sites' errors."""
+	host, so a Recurring Error links back to it."""
 	mapping = {}
 	for row in frappe.get_all("Monitored Host Site", fields=["parent", "site_url", "site_name"]):
 		for value in (row.site_url, row.site_name):

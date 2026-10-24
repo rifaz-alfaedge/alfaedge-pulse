@@ -202,7 +202,7 @@ export function LogSettingsDialog({
 
         <Section
           title="Recurring error alerts"
-          hint="Sent by email/WhatsApp to engineers who subscribed to the site (Alert Subscription → Log Sites), batched every 2 minutes."
+          hint="Recorded and shown in the dashboard. Sent by email/WhatsApp only if the global recipients are turned on below, batched every 2 minutes."
         >
           <Check
             label="Enable recurring error alerts"
@@ -210,7 +210,7 @@ export function LogSettingsDialog({
             onChange={(v) => set('enable_recurring_alerts', v ? 1 : 0)}
           />
           <Check
-            label="Also send to the global recipients in Proxmox Monitor Settings"
+            label="Send to the global recipients in Proxmox Monitor Settings"
             checked={!!values.notify_global_recipients}
             onChange={(v) => set('notify_global_recipients', v ? 1 : 0)}
           />

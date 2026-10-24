@@ -35,32 +35,6 @@ WRITE_ROLES = ("System Manager", "Proxmox Monitor Manager")
 READ_ROLES = ("System Manager", "Proxmox Monitor Manager", "Proxmox Monitor Viewer")
 
 
-@frappe.whitelist()
-@frappe.validate_and_sanitize_search_inputs
-def uptime_site_query(doctype, txt, searchfield, start, page_len, filters):
-	"""Link-field picker for Alert Subscription's "Uptime Sites" table —
-	one row per distinct site_name, not one per instance (a site otherwise
-	shows up once per connected instance, since each instance has its own
-	Uptime Site doc for it). Deliberately does *not* touch
-	show_title_field_in_link/title rendering — that's a separate, already-
-	working doctype-level setting; this only changes which options are
-	offered, the same as any other Link field's custom query. ``min(name)``
-	picks a deterministic representative — the same "alphabetically-first
-	sibling" convention already used when dispatching a Site Down alert
-	(see uptime_kuma_poller._reconcile_site_criticality)."""
-	return frappe.db.sql(
-		"""
-		select min(name) as name, site_name
-		from `tabUptime Site`
-		where site_name like %(txt)s
-		group by site_name
-		order by site_name
-		limit %(page_len)s offset %(start)s
-		""",
-		{"txt": f"%{txt}%", "start": cint(start), "page_len": cint(page_len)},
-	)
-
-
 def _get_client(instance_name: str) -> UptimeKumaClient:
 	instance = frappe.get_doc("Uptime Kuma Instance", instance_name)
 	password = get_decrypted_password("Uptime Kuma Instance", instance_name, "password", raise_exception=False)

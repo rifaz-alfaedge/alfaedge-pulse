@@ -46,13 +46,11 @@ self-hosted [Bifrost](https://getbifrost.ai) gateway (see
   automatically, and **Poller Stalled** alerts if no server has synced for
   5 minutes.
 - **Multi-channel alerting without owning any credentials.** Email uses
-  whatever Email Account is already configured in core Frappe. Telegram
-  and WhatsApp defer entirely to separate, already-installed integration
-  apps — this app never stores a bot token or a Cloud API credential
-  itself; see [Alerting](#alerting). "Back to normal" recovery messages
-  fire when a critical condition clears, and individual engineers can
-  self-subscribe to specific VM/CT instances on top of the global
-  recipients — see [Alert Subscriptions](#alert-subscriptions).
+  whatever Email Account is already configured in core Frappe. WhatsApp
+  defers entirely to a separate, already-installed integration app — this
+  app never stores a Cloud API credential itself; see
+  [Alerting](#alerting). "Back to normal" recovery messages fire when a
+  critical condition clears.
 - **A live dashboard, with Usage Metrics as plain tables.** There are two
   sortable, filterable tables:
   - **Hosts and backup server:** CPU, RAM, swap and per-drive disk, each
@@ -193,15 +191,12 @@ with `git checkout -- <file>` and reinstall.
 - `Proxmox Guest`, `Proxmox Datastore`, and `Proxmox Backup Log` records are
   fully auto-managed: created, updated, and removed by the poller. Don't
   create or delete them by hand — your edits will be overwritten on the next
-  cycle. The exceptions are a guest's `assigned_engineer`, `network_mode`,
-  `public_ip`, and `access_url` fields, which are yours to set.
+  cycle. The exception is a guest's `tags` field, which is yours to set.
 - A guest's `is_critical`/`is_warning` are CPU/RAM/disk only, and are
   tracked for every guest regardless of its server's `role` — see
-  `_upsert_guest`. What's role-gated is only whether the **global**
-  Proxmox Monitor Settings recipient list gets notified (Production
-  only); an individual Alert Subscription still gets notified for a
-  Dev/Staging/any-role instance it specifically watches — see
-  [Alert Subscriptions](#alert-subscriptions).
+  `_upsert_guest`. What's role-gated is only whether the Proxmox Monitor
+  Settings recipient lists get notified (Production only); other roles'
+  alerts are still logged and shown on the dashboard.
 - Neither tier is immediate. `_track_severity` only sets `is_warning`/
   `is_critical` once a reading has stayed at or above the relevant
   threshold continuously — tracked via each doctype's `warning_streak`/
@@ -264,7 +259,7 @@ Everything below lives in the single **Proxmox Monitor Settings** doctype
 | Warning Threshold (%) | 85 | See [How it works](#how-it-works) — the lower of the two tiers. |
 | Critical Threshold (%) | 95 | The higher, more urgent tier. |
 | Confirmation Checks | 3 | How many consecutive polls a reading must stay at/above the Warning/Critical Threshold, with no dip below it, before that alert fires. Applies to both tiers. |
-| Enable Email/Telegram/WhatsApp Alerts + recipients | off | See [Alerting](#alerting) below. |
+| Enable Email/WhatsApp Alerts + recipients | off | See [Alerting](#alerting) below. |
 
 ## Alerting
 
@@ -274,10 +269,6 @@ third-party notification credentials itself:
 - **Email** — just check "Enable Email Alerts" and add recipients; it uses
   whichever Email Account is already configured in core Frappe
   (*Settings → Email Account*).
-- **Telegram** — install and configure a Telegram bot app (e.g.
-  [`leam-tech/frappe_telegram`](https://github.com/leam-tech/frappe_telegram))
-  separately, with its own bot token. Then enable Telegram alerts here and
-  enter the chat/group ID you want notified.
 - **WhatsApp** — install and configure
   [`frappe_whatsapp`](https://github.com/shridarpatil/frappe_whatsapp)
   separately, with its own WhatsApp Cloud API credentials. Then enable
@@ -300,7 +291,7 @@ Log**) — the other channels are unaffected.
 Use the **Send Test Alert** button on the Proxmox Monitor Settings form to
 send a one-off test message through every currently enabled and fully
 configured channel, without waiting for a real Warning/Critical
-condition — useful for verifying SMTP/Telegram/WhatsApp setup end-to-end.
+condition — useful for verifying SMTP/WhatsApp setup end-to-end.
 
 ### Recovery ("back to normal") notifications
 
@@ -311,48 +302,9 @@ separate template — set **WhatsApp Recovery Template Name** in Proxmox
 Monitor Settings to a Meta-approved UTILITY template distinct from the
 main alert template, so a resolved message doesn't reuse the original
 alert's framing. Without it set, WhatsApp recovery sends are skipped
-(Email/Telegram recovery still send). Backup Failure does **not** get a
+(Email recovery still sends). Backup Failure does **not** get a
 recovery notification — backups often only run on a ~24h cadence, so
 "back to normal" would just be a stale, confusing non-sequitur.
-
-### Alert Subscriptions
-
-Beyond the global recipients above, individual engineers can self-subscribe
-to specific VM/CT alerts, and to specific Uptime Kuma sites, via
-*Desk → Alert Subscription* — one document per user. Set your own
-Email/WhatsApp contact info once at the top (Telegram is fleet-wide-only —
-see above — and isn't offered here), then:
-- add rows to the **Servers / Instances** table: pick a Proxmox Server,
-  then one of its VMs/CTs;
-- and/or add rows to the **Uptime Sites** table: pick any one instance's
-  copy of the site you want to watch — sites are shared across every
-  connected Uptime Kuma instance (see
-  [Uptime Monitoring](#uptime-monitoring-uptime-kuma)), so subscribing via
-  one instance's copy watches that site everywhere, not just that
-  instance.
-
-Add as many rows to either table as you like. Subscriptions are
-**additive** — they don't replace or affect the global recipients above.
-Each engineer only sees and manages their own subscription document
-(`Proxmox Monitor Manager`/System Manager can see everyone's, for audit).
-Use the **Send Test Alert** button on a saved subscription to verify your
-own channel/contact setup. VM/CT subscriptions don't cascade — watching a
-server itself, or a datastore, is handled purely by the global recipients
-above, not per-user subscriptions; only PVE servers are offered in the
-Server picker, since PBS hosts don't run VMs/CTs. **Site Down** (and its
-recovery notification) already goes out over Email/WhatsApp using the
-same approved template as every other alert type — see
-[Alerting](#alerting) — no separate uptime-specific template is needed.
-
-**Subscriptions reach Dev/Staging/Backup instances too.** Per-guest
-resource alerting (Critical Resource/Resource Warning) is normally scoped
-to Production servers — a Development/Staging VM is expected to spike
-routinely and the global recipient list is never notified about it. But if
-you specifically subscribe to a Dev/Staging VM/CT, you'll be notified about
-it regardless of its server's role — subscribing is a deliberate, per-
-instance opt-in. This also means every guest's warning/critical status is
-now tracked and shown on the dashboard honestly, whatever its server's
-role, even though the global list still only hears about Production ones.
 
 ## AI Usage (Bifrost)
 
@@ -531,17 +483,16 @@ recurring errors.
 - **Resolve:** marking a recurring error resolved hides it, and stops it
   counting towards alerts, until it happens again. It then comes back as
   **Reopened**, with only the new occurrences counted.
-- **Who gets alerted:** each engineer subscribes in their **Alert
-  Subscription**, under **Recurring Errors (Logs)**: either **All Sites**
-  or a list of sites. The global recipients only get recurring errors when
-  **Also Notify Global Recipients** is ticked in ClickHouse Log Settings.
+- **Who gets alerted:** recurring errors are always recorded and shown in
+  the dashboard. They're sent to the global recipients in Proxmox Monitor
+  Settings only when **Notify Global Recipients** is ticked in ClickHouse
+  Log Settings.
 - **Recurring errors** are grouped per site by their normalized message
   (numbers, hashes and quoted values are stripped). When the same error
   occurs at least *N* times within *M* minutes, a `Recurring Error` alert
   goes out. It shares the 2-minute batch with the load and swap alerts,
   and a recovery message is sent once the error drops back under the
-  threshold. Engineers subscribed to a Monitored Host also receive
-  recurring errors from that host's sites.
+  threshold.
 
 ## Known Proxmox API limitations (not bugs in this app)
 

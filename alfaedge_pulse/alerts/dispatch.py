@@ -1,7 +1,7 @@
 # Copyright (c) 2026, AlfaEdge and contributors
 # For license information, please see license.txt
 
-"""Fan-out alert dispatch for Email / Telegram / WhatsApp.
+"""Fan-out alert dispatch for Email / WhatsApp.
 
 Called exclusively by ``alfaedge_pulse.tasks.poller`` whenever it detects
 a state *transition* (not on every poll cycle) — a resource crossing the
@@ -13,9 +13,6 @@ module owns none of the actual notification credentials:
 - WhatsApp is sent by creating a document in the ``frappe_whatsapp`` app's
   own ``WhatsApp Message`` DocType, if that app is installed — its Meta/
   WhatsApp Cloud API credentials never pass through this app.
-- Telegram is sent through a dedicated Telegram integration app (e.g.
-  ``frappe_telegram``), if installed — its bot token never passes through
-  this app either.
 
 Every alert is written to ``Proxmox Alert Log`` regardless of whether any
 channel is enabled/configured, so there's always a dashboard-visible
@@ -82,8 +79,8 @@ def dispatch_alert(
 		message: Human-readable alert text, sent verbatim to every enabled channel.
 		notify_global: Whether Proxmox Monitor Settings' global recipient
 			lists get notified — False for guest-level alerts on
-			non-Production servers (see poller.py's _upsert_guest).
-			Individual Alert Subscriptions are notified either way.
+			non-Production servers (see poller.py's _upsert_guest), which
+			are then only logged.
 
 	Alert types in DIGEST_ONLY_ALERT_TYPES or BATCHED_RESOURCE_ALERT_TYPES
 	skip every channel below — they're still recorded in Proxmox Alert Log
@@ -95,34 +92,12 @@ def dispatch_alert(
 
 	if alert_type not in DIGEST_ONLY_ALERT_TYPES and alert_type not in BATCHED_RESOURCE_ALERT_TYPES:
 		settings = frappe.get_cached_doc("Proxmox Monitor Settings")
-		subscriptions = _get_matching_subscriptions(reference_doctype, reference_name)
 
-		email_recipients = _merge_contacts(
-			bool(settings.enable_email_alerts),
-			settings.email_recipients,
-			(s.email for s in subscriptions if s.enable_email),
-			include_global=notify_global,
-		)
+		email_recipients = _recipients(bool(settings.enable_email_alerts), settings.email_recipients, notify_global)
 		if email_recipients and _send_email(email_recipients, alert_type, message):
 			channels_sent.append("Email")
 
-		# Telegram is fleet-wide-only — Alert Subscription doesn't offer it, so
-		# there's no per-subscription contact to merge in here, unlike Email/WhatsApp.
-		telegram_ids = _merge_contacts(
-			bool(settings.enable_telegram_alerts),
-			settings.telegram_chat_id,
-			[],
-			include_global=notify_global,
-		)
-		if telegram_ids and any([_send_telegram(cid, message) for cid in telegram_ids]):
-			channels_sent.append("Telegram")
-
-		whatsapp_numbers = _merge_contacts(
-			bool(settings.enable_whatsapp_alerts),
-			settings.whatsapp_recipients,
-			(s.whatsapp_number for s in subscriptions if s.enable_whatsapp),
-			include_global=notify_global,
-		)
+		whatsapp_numbers = _recipients(bool(settings.enable_whatsapp_alerts), settings.whatsapp_recipients, notify_global)
 		template_name = _resolve_whatsapp_template(settings.whatsapp_template) if settings.whatsapp_template else None
 		if whatsapp_numbers and template_name and _send_whatsapp(whatsapp_numbers, template_name, message):
 			channels_sent.append("WhatsApp")
@@ -165,34 +140,12 @@ def dispatch_recovery(
 
 	if alert_type not in DIGEST_ONLY_ALERT_TYPES and alert_type not in BATCHED_RESOURCE_ALERT_TYPES:
 		settings = frappe.get_cached_doc("Proxmox Monitor Settings")
-		subscriptions = _get_matching_subscriptions(reference_doctype, reference_name)
 
-		email_recipients = _merge_contacts(
-			bool(settings.enable_email_alerts),
-			settings.email_recipients,
-			(s.email for s in subscriptions if s.enable_email),
-			include_global=notify_global,
-		)
+		email_recipients = _recipients(bool(settings.enable_email_alerts), settings.email_recipients, notify_global)
 		if email_recipients and _send_email(email_recipients, alert_type, message, severity="Resolved"):
 			channels_sent.append("Email")
 
-		# Telegram is fleet-wide-only — Alert Subscription doesn't offer it, so
-		# there's no per-subscription contact to merge in here, unlike Email/WhatsApp.
-		telegram_ids = _merge_contacts(
-			bool(settings.enable_telegram_alerts),
-			settings.telegram_chat_id,
-			[],
-			include_global=notify_global,
-		)
-		if telegram_ids and any([_send_telegram(cid, message) for cid in telegram_ids]):
-			channels_sent.append("Telegram")
-
-		whatsapp_numbers = _merge_contacts(
-			bool(settings.enable_whatsapp_alerts),
-			settings.whatsapp_recipients,
-			(s.whatsapp_number for s in subscriptions if s.enable_whatsapp),
-			include_global=notify_global,
-		)
+		whatsapp_numbers = _recipients(bool(settings.enable_whatsapp_alerts), settings.whatsapp_recipients, notify_global)
 		template_name = (
 			_resolve_whatsapp_template(settings.whatsapp_recovery_template) if settings.whatsapp_recovery_template else None
 		)
@@ -213,116 +166,24 @@ def dispatch_recovery(
 	).insert(ignore_permissions=True)
 
 
-def _get_matching_subscriptions(reference_doctype: str, reference_name: str) -> list:
-	"""Alert Subscription (parent, contact info) rows to additionally notify
-	for this alert/recovery, found via their Alert Subscription Item
-	(Proxmox Guest), Alert Subscription Uptime Site (Uptime Site), or
-	Alert Subscription Monitored Host (Monitored Host / Service Status Log)
-	rows.
+def _recipients(enabled: bool, value: str | None, include_global: bool = True) -> list[str]:
+	"""A channel's global recipient list (Proxmox Monitor Settings), split
+	on commas and deduped case/whitespace-insensitively.
 
-	Per-instance subscriptions only ever target a Proxmox Guest (VM/CT) —
-	watching a server itself, or a datastore, is handled purely by the
-	global recipients in Proxmox Monitor Settings, not individual
-	subscriptions. Uptime Site alerts are matched on their site_name, not
-	the literal reference_name docname — a "Site Down" alert always fires
-	against one deterministic sibling doc (see
-	``uptime_kuma_poller._reconcile_site_criticality``), but a subscriber
-	may have picked a *different* instance's copy of the same site when
-	subscribing, and both should match.
+	[] if the channel's "Enable ... Alerts" checkbox is off, or if
+	``include_global`` is False for this particular alert (e.g. a
+	non-Production guest).
 	"""
-	if reference_doctype == "Proxmox Guest":
-		rows = frappe.get_all("Alert Subscription Item", filters={"instance": reference_name}, fields=["parent"])
-	elif reference_doctype == "Uptime Site":
-		site_name = frappe.db.get_value("Uptime Site", reference_name, "site_name")
-		if not site_name:
-			return []
-		sibling_names = frappe.get_all("Uptime Site", filters={"site_name": site_name}, pluck="name")
-		rows = frappe.get_all(
-			"Alert Subscription Uptime Site", filters={"site": ["in", sibling_names]}, fields=["parent"]
-		)
-	elif reference_doctype == "Monitored Host":
-		rows = frappe.get_all(
-			"Alert Subscription Monitored Host", filters={"monitored_host": reference_name}, fields=["parent"]
-		)
-	elif reference_doctype == "Service Status Log":
-		# Service Down references the log row itself (upserted in place,
-		# stable docname — see host_health/ingest.py), not the host, so a
-		# subscriber who watches the *host* needs one hop through the log
-		# row's own monitored_host field to still match its per-service
-		# alerts.
-		monitored_host = frappe.db.get_value("Service Status Log", reference_name, "monitored_host")
-		if not monitored_host:
-			return []
-		rows = frappe.get_all(
-			"Alert Subscription Monitored Host", filters={"monitored_host": monitored_host}, fields=["parent"]
-		)
-	elif reference_doctype == "Recurring Error":
-		# Matched three ways: the subscription watches All Sites, lists this
-		# site under Log Sites, or watches the Monitored Host that reports
-		# the site (tasks/log_monitor.py resolves and stores that link).
-		site_url, monitored_host = frappe.db.get_value(
-			"Recurring Error", reference_name, ["site_url", "monitored_host"]
-		) or (None, None)
-		parents = set(frappe.get_all("Alert Subscription", filters={"all_log_sites": 1}, pluck="name"))
-		if site_url:
-			parents.update(
-				r.parent
-				for r in frappe.get_all("Alert Subscription Log Site", fields=["parent", "site"])
-				if (r.site or "").strip().lower() == site_url.strip().lower()
-			)
-		if monitored_host:
-			parents.update(
-				frappe.get_all(
-					"Alert Subscription Monitored Host", filters={"monitored_host": monitored_host}, pluck="parent"
-				)
-			)
-		rows = [frappe._dict(parent=p) for p in parents]
-	else:
-		return []
-
-	if not rows:
-		return []
-	return frappe.get_all(
-		"Alert Subscription",
-		filters={"name": ["in", {r.parent for r in rows}]},
-		fields=["enable_email", "email", "enable_whatsapp", "whatsapp_number"],
-	)
-
-
-def _merge_contacts(
-	enabled: bool, global_value: str | None, subscription_values, include_global: bool = True
-) -> list[str]:
-	"""Merge a channel's global recipient(s) (Proxmox Monitor Settings) with
-	each matching Alert Subscription's own contact for that channel.
-
-	[] outright if the channel's master "Enable ... Alerts" checkbox is
-	off — that's a fleet-wide kill switch a subscription can't override.
-	``include_global`` is a separate, narrower gate: False excludes just
-	the global recipient list for this particular alert (e.g. a
-	non-Production guest), while subscription values still flow through —
-	this is what lets an individual subscriber override the role-based
-	gate without touching the fleet-wide switch. When both are satisfied,
-	the global field is allowed to be empty (subscriptions alone still get
-	notified), which is what makes subscriptions additive rather than
-	requiring the global list to be populated first. Deduped
-	case/whitespace-insensitively so a subscriber who's also in the global
-	list is never double-notified.
-	"""
-	if not enabled:
+	if not enabled or not include_global:
 		return []
 	seen: set[str] = set()
 	merged: list[str] = []
-	candidates = ([v.strip() for v in (global_value or "").split(",")] if include_global else []) + [
-		(v or "").strip() for v in subscription_values
-	]
-	for value in candidates:
-		if not value:
+	for v in (value or "").split(","):
+		v = v.strip()
+		if not v or v.lower() in seen:
 			continue
-		key = value.lower()
-		if key in seen:
-			continue
-		seen.add(key)
-		merged.append(value)
+		seen.add(v.lower())
+		merged.append(v)
 	return merged
 
 
@@ -405,31 +266,6 @@ def _send_email(recipients: list[str], alert_type: str, message: str, severity: 
 		return False
 
 
-def _send_telegram(chat_id: str, message: str) -> bool:
-	"""Send one message via an installed Telegram integration app, if any, to one chat id.
-
-	We deliberately don't call the Telegram Bot API directly here — the
-	bot token would then have to live inside this app's config, which
-	contradicts the "don't hold notification credentials" requirement.
-	Instead this defers to whatever Telegram app is installed (e.g.
-	``frappe_telegram``), calling its send function with only a chat id
-	and a message body.
-	"""
-	if "frappe_telegram" not in frappe.get_installed_apps():
-		return False
-	try:
-		# leam-tech/frappe_telegram exposes a simple send_message(chat_id, message)
-		# helper. If a different Telegram app is installed instead, this dotted
-		# path is the one thing to adjust — everything else in this module is
-		# app-agnostic.
-		send_message = frappe.get_attr("frappe_telegram.utils.send_message")
-		send_message(chat_id=chat_id, message=message)
-		return True
-	except Exception:
-		frappe.log_error(title="Proxmox Monitor: telegram alert failed", message=frappe.get_traceback())
-		return False
-
-
 def _resolve_whatsapp_template(template_setting: str) -> str | None:
 	"""Resolve the configured template setting to a WhatsApp Templates document name.
 
@@ -489,7 +325,7 @@ def _send_whatsapp(numbers: list[str], template_name: str, message: str) -> bool
 def send_test_alert() -> dict:
 	"""Send a one-off test message through every enabled, fully-configured channel.
 
-	Lets an admin verify SMTP/Telegram/WhatsApp config from the Settings
+	Lets an admin verify SMTP/WhatsApp config from the Settings
 	form without waiting for a real Warning/Critical condition to occur.
 	"""
 	frappe.only_for(("System Manager", "Proxmox Monitor Manager"))
@@ -500,34 +336,9 @@ def send_test_alert() -> dict:
 	if settings.enable_email_alerts and settings.email_recipients:
 		recipients = [r.strip() for r in settings.email_recipients.split(",") if r.strip()]
 		results["Email"] = _send_email(recipients, "Test Alert", message)
-	if settings.enable_telegram_alerts and settings.telegram_chat_id:
-		results["Telegram"] = _send_telegram(settings.telegram_chat_id, message)
 	if settings.enable_whatsapp_alerts and settings.whatsapp_recipients and settings.whatsapp_template:
 		numbers = [n.strip() for n in settings.whatsapp_recipients.split(",") if n.strip()]
 		template_name = _resolve_whatsapp_template(settings.whatsapp_template)
 		results["WhatsApp"] = _send_whatsapp(numbers, template_name, message) if template_name else False
-
-	return results
-
-
-@frappe.whitelist()
-def send_subscription_test_alert(name: str) -> dict:
-	"""Send a one-off test message using exactly one Alert Subscription's
-	own enabled channels/contacts.
-
-	Lets a subscriber verify their own setup without needing access to the
-	global Settings test button (which requires Manager access).
-	"""
-	subscription = frappe.get_doc("Alert Subscription", name)
-	subscription.check_permission("read")
-	settings = frappe.get_cached_doc("Proxmox Monitor Settings")
-	message = "alfaEdge Pulse Test: this is a test alert to verify your subscription is configured correctly."
-	results = {}
-
-	if subscription.enable_email:
-		results["Email"] = _send_email([subscription.email], "Test Alert", message)
-	if subscription.enable_whatsapp:
-		template_name = _resolve_whatsapp_template(settings.whatsapp_template) if settings.whatsapp_template else None
-		results["WhatsApp"] = _send_whatsapp([subscription.whatsapp_number], template_name, message) if template_name else False
 
 	return results

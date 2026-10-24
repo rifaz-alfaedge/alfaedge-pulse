@@ -16,7 +16,7 @@ class ResourceMonitorSettings(Document):
 
 	Deliberately has no alerting/channel section of its own — see Host
 	Monitor Settings' own docstring for why (same reasoning applies here
-	verbatim: dispatch_alert/dispatch_recovery read Email/Telegram/WhatsApp
+	verbatim: dispatch_alert/dispatch_recovery read Email/WhatsApp
 	config from Proxmox Monitor Settings unconditionally).
 	"""
 

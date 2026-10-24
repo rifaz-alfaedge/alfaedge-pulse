@@ -10,6 +10,6 @@ class ProxmoxMonitorSettings(Document):
 	Read by ``alfaedge_pulse.tasks.poller`` (poll interval, critical
 	threshold) and ``alfaedge_pulse.alerts.dispatch`` (which channels are
 	enabled and who to notify). Deliberately holds no third-party API
-	credentials — Email uses Frappe's own Email Account, Telegram/WhatsApp
-	defer entirely to their own dedicated integration apps.
+	credentials — Email uses Frappe's own Email Account, WhatsApp defers
+	entirely to its own dedicated integration app.
 	"""

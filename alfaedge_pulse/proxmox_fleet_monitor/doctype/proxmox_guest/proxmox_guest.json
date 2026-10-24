@@ -29,12 +29,7 @@
   "last_successful_backup",
   "network_section",
   "ip_address",
-  "network_mode",
-  "column_break_network",
-  "public_ip",
-  "access_url",
   "ownership_section",
-  "assigned_engineer",
   "tags"
  ],
  "fields": [
@@ -49,7 +44,7 @@
    "reqd": 1
   },
   {
-   "description": "The PVE node name this guest lives on (e.g. what appears in /nodes/{node}/qemu/{vmid}/...). Populated by the poller; needed to build console (vncproxy/termproxy) API paths without re-discovering it per request.",
+   "description": "The PVE node name this guest lives on (e.g. what appears in /nodes/{node}/qemu/{vmid}/...). Populated by the poller; used to build per-guest API paths without re-discovering it per request.",
    "fieldname": "node",
    "fieldtype": "Data",
    "label": "Proxmox Node",
@@ -90,7 +85,7 @@
   },
   {
    "default": "0",
-   "description": "At or above the Critical Threshold for the configured Confirmation Checks. Tracked for guests on every server role; the global recipient list is only notified for Production, see Alert Subscriptions for the per-instance override.",
+   "description": "At or above the Critical Threshold for the configured Confirmation Checks. Tracked for guests on every server role; the recipient lists are only notified for Production.",
    "fieldname": "is_critical",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -201,38 +196,9 @@
    "read_only": 1
   },
   {
-   "fieldname": "network_mode",
-   "fieldtype": "Select",
-   "label": "Network Mode",
-   "options": "\nDirect Public IP\nInternal Bridge + Reverse Proxy"
-  },
-  {
-   "fieldname": "column_break_network",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Set manually — a directly-attached public IP or NAT/reverse-proxy mapping isn't always inferable from the Proxmox API alone.",
-   "fieldname": "public_ip",
-   "fieldtype": "Data",
-   "label": "Public IP"
-  },
-  {
-   "description": "The Nginx Proxy Manager-fronted hostname you actually browse to, if any. Used by Phase 3 (Uptime Kuma monitoring).",
-   "fieldname": "access_url",
-   "fieldtype": "Data",
-   "label": "Access URL"
-  },
-  {
    "fieldname": "ownership_section",
    "fieldtype": "Section Break",
    "label": "Ownership & Tags"
-  },
-  {
-   "description": "Manually assigned; never overwritten by the sync. Useful on Beta where one engineer may own several instances.",
-   "fieldname": "assigned_engineer",
-   "fieldtype": "Link",
-   "label": "Assigned Engineer",
-   "options": "User"
   },
   {
    "fieldname": "tags",
@@ -244,7 +210,7 @@
  "icon": "fa fa-desktop",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-06 11:16:25.155498",
+ "modified": "2026-10-24 23:16:57.600566",
  "modified_by": "Administrator",
  "module": "Proxmox Fleet Monitor",
  "name": "Proxmox Guest",

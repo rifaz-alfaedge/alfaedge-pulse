@@ -13,7 +13,7 @@ class HostMonitorSettings(Document):
 
 	Deliberately has no alerting/channel section of its own — Host Health
 	alerts flow through the exact same dispatch_alert/dispatch_recovery
-	used everywhere else in this app, which read Email/Telegram/WhatsApp
+	used everywhere else in this app, which read Email/WhatsApp
 	config from Proxmox Monitor Settings unconditionally (confirmed by
 	reading dispatch.py directly: every settings lookup there is hardcoded
 	to that one doctype, not parameterized). A separate copy of those

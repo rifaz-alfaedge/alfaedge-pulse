@@ -13,3 +13,4 @@ alfaedge_pulse.patches.add_failed_job_log_failure_signature_index
 alfaedge_pulse.patches.add_resource_metric_log_indexes
 alfaedge_pulse.patches.add_resource_disk_sample_indexes
 alfaedge_pulse.patches.set_default_backup_overdue_hours
+alfaedge_pulse.patches.remove_unused_features

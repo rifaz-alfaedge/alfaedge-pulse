@@ -16,5 +16,5 @@ class ProxmoxAlertLog(Document):
 
 	Always written regardless of whether any notification channel is
 	enabled/configured, so there is a dashboard-visible history of red
-	flags even before Email/Telegram/WhatsApp are set up.
+	flags even before Email/WhatsApp are set up.
 	"""

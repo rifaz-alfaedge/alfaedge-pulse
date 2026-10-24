@@ -189,10 +189,10 @@ def load_guests() -> list[dict]:
 	static (config) and live interface IPs. A host whose API fails just
 	falls back to the stored IPs."""
 	guests = frappe.get_all(
-		"Proxmox Guest", fields=["name", "server", "node", "vmid", "guest_type", "status", "guest_name", "ip_address", "public_ip"]
+		"Proxmox Guest", fields=["name", "server", "node", "vmid", "guest_type", "status", "guest_name", "ip_address"]
 	)
 	for g in guests:
-		g.ips = {ip.strip() for ip in (g.ip_address, g.public_ip) if ip and ip.strip()}
+		g.ips = {g.ip_address.strip()} if g.ip_address and g.ip_address.strip() else set()
 
 	from alfaedge_pulse.proxmox_client.base import ProxmoxAPIError
 	from alfaedge_pulse.proxmox_client.pve import PVEClient
@@ -276,7 +276,8 @@ def _wildcard_records(records: dict[str, list[dict]], name: str) -> list[dict] |
 
 
 def _guest_ips(g) -> set[str]:
-	return g.get("ips") or {ip.strip() for ip in (g.get("ip_address"), g.get("public_ip")) if ip and ip.strip()}
+	ip = (g.get("ip_address") or "").strip()
+	return g.get("ips") or ({ip} if ip else set())
 
 
 def _who(target: str | None, npm_ips: dict[str, set[str]]) -> str:

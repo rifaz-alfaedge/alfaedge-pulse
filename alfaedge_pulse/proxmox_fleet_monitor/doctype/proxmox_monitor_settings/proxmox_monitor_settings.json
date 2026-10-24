@@ -20,9 +20,6 @@
   "email_section",
   "enable_email_alerts",
   "email_recipients",
-  "telegram_section",
-  "enable_telegram_alerts",
-  "telegram_chat_id",
   "whatsapp_section",
   "enable_whatsapp_alerts",
   "whatsapp_recipients",
@@ -130,24 +127,6 @@
    "label": "Email Recipients"
   },
   {
-   "fieldname": "telegram_section",
-   "fieldtype": "Section Break",
-   "label": "Alerting — Telegram"
-  },
-  {
-   "default": "0",
-   "description": "Requires a Telegram integration app (e.g. frappe_telegram) installed and configured with its own bot token — this app never stores the bot token.",
-   "fieldname": "enable_telegram_alerts",
-   "fieldtype": "Check",
-   "label": "Enable Telegram Alerts"
-  },
-  {
-   "description": "The chat/group ID the configured Telegram bot should send alerts to.",
-   "fieldname": "telegram_chat_id",
-   "fieldtype": "Data",
-   "label": "Telegram Chat ID"
-  },
-  {
    "fieldname": "whatsapp_section",
    "fieldtype": "Section Break",
    "label": "Alerting — WhatsApp"
@@ -172,7 +151,7 @@
    "label": "WhatsApp Template Name"
   },
   {
-   "description": "A separate Meta-approved UTILITY template for \"back to normal\" recovery notifications (Critical Resource and Server Offline only) — kept distinct from the alert template above so a resolved-condition message doesn't reuse the alert's framing. If unset, WhatsApp recovery notifications are skipped (Email/Telegram recovery still send).",
+   "description": "A separate Meta-approved UTILITY template for \"back to normal\" recovery notifications (Critical Resource and Server Offline only) — kept distinct from the alert template above so a resolved-condition message doesn't reuse the alert's framing. If unset, WhatsApp recovery notifications are skipped (Email recovery still sends).",
    "fieldname": "whatsapp_recovery_template",
    "fieldtype": "Data",
    "label": "WhatsApp Recovery Template Name"
@@ -188,7 +167,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-22 14:00:00.000000",
+ "modified": "2026-10-24 23:16:57.576756",
  "modified_by": "Administrator",
  "module": "Proxmox Fleet Monitor",
  "name": "Proxmox Monitor Settings",

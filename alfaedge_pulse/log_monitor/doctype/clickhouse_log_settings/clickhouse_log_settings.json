@@ -255,9 +255,9 @@
   {
    "fieldname": "notify_global_recipients",
    "fieldtype": "Check",
-   "label": "Also Notify Global Recipients",
+   "label": "Notify Global Recipients",
    "default": "0",
-   "description": "Off: recurring errors go only to engineers who subscribed to the site (Alert Subscription → Log Sites). On: also to the global Email/WhatsApp recipients in Proxmox Monitor Settings."
+   "description": "Off: recurring errors are only recorded and shown in the dashboard. On: also sent to the global Email/WhatsApp recipients in Proxmox Monitor Settings."
   },
   {
    "fieldname": "status_section",
@@ -285,7 +285,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-16 21:30:00.000000",
+ "modified": "2026-10-24 23:19:39.237604",
  "modified_by": "Administrator",
  "module": "Log Monitor",
  "name": "ClickHouse Log Settings",

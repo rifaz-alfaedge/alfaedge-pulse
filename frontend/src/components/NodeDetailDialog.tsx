@@ -228,9 +228,6 @@ function HostDetail({ server }: { server: ProxmoxServer }) {
 
 function GuestDetail({ guest }: { guest: ProxmoxGuest }) {
   const fields: [string, ReactNode][] = [
-    ['Network Mode', guest.network_mode],
-    ['Access URL', guest.access_url],
-    ['Assigned Engineer', guest.assigned_engineer],
     ['Last Synced', guest.last_synced ? timeAgo(guest.last_synced) : null],
   ]
   const shown = fields.filter(([, v]) => v)

@@ -60,21 +60,6 @@ def get_host_role(monitored_host: str) -> str | None:
 	return frappe.db.get_value("Proxmox Server", server, "role")
 
 
-def get_host_client(monitored_host: str) -> str | None:
-	"""Resolves a Monitored Host's owning Client live, mirroring
-	get_host_role() above — Client lives only on Proxmox Server, never
-	cached on the guest or here. Not currently used to gate any alerting
-	decision (that stays keyed on role); this exists for tenant-scoped
-	reporting."""
-	proxmox_guest = frappe.db.get_value("Monitored Host", monitored_host, "proxmox_guest")
-	if not proxmox_guest:
-		return None
-	server = frappe.db.get_value("Proxmox Guest", proxmox_guest, "server")
-	if not server:
-		return None
-	return frappe.db.get_value("Proxmox Server", server, "client")
-
-
 @frappe.whitelist()
 def regenerate_agent_key(monitored_host: str) -> dict:
 	"""Invalidates the previous key/secret immediately. Returned once, for
