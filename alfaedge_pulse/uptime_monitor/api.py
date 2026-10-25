@@ -13,12 +13,18 @@ same three-role pattern as ``Uptime Site``/``Uptime Check Log`` itself.
 Kuma instances exist precisely to monitor the same sites from different
 locations (redundancy against one location's own network issues), so
 "add a site" / edit / pause / resume / delete all fan out to every
-``Uptime Site`` sharing that name across every enabled instance, and a
+``Uptime Site`` sharing that name across every instance, and a
 newly added (or newly reachable) instance catches up to whatever the
 fleet already has via ``sync_missing_sites_to_instance`` on the poller's
 schedule (see ``tasks.uptime_kuma_poller``). Each instance still keeps
 its own independent ``current_status``/``is_critical``/check history —
 only the site *definition* (name/type/url/interval/active) is shared.
+
+**A disabled instance is never contacted.** Edit/pause/resume/delete on
+one of its sites change only Pulse's own ``Uptime Site`` record and say so
+in the response's ``notes`` — so a disabled instance is a safe way to keep
+Pulse from writing to a Kuma it shouldn't touch (e.g. production's, on a
+dev copy of this site).
 """
 
 from __future__ import annotations
@@ -312,6 +318,14 @@ def _sibling_names(site_name: str) -> list[str]:
 	return frappe.get_all("Uptime Site", filters={"site_name": site_name}, pluck="name")
 
 
+def _disabled_instances() -> set[str]:
+	return set(frappe.get_all("Uptime Kuma Instance", filters={"enabled": 0}, pluck="name"))
+
+
+def _local_only_note(instance: str) -> str:
+	return f"{instance} is disabled — changed in Pulse only, not on Uptime Kuma"
+
+
 def _log_sibling_failure(action: str, sibling_name: str) -> None:
 	"""A per-sibling failure inside a fan-out is reported back in the
 	response's ``errors`` list for the UI, but that toast can vanish
@@ -345,8 +359,10 @@ def edit_site(
 		"is_active": cint(is_active) if is_active is not None else None,
 	}
 
+	disabled = _disabled_instances()
 	updated = []
 	errors = []
+	notes = []
 	for sibling_name in _sibling_names(original.site_name):
 		try:
 			site = frappe.get_doc("Uptime Site", sibling_name)
@@ -354,11 +370,14 @@ def edit_site(
 				if value is not None:
 					site.set(field, value)
 
-			client = _get_client(site.instance)
-			try:
-				client.edit_monitor(site.kuma_monitor_id, site)
-			finally:
-				client.disconnect()
+			if site.instance in disabled:
+				notes.append(_local_only_note(site.instance))
+			else:
+				client = _get_client(site.instance)
+				try:
+					client.edit_monitor(site.kuma_monitor_id, site)
+				finally:
+					client.disconnect()
 
 			site.save(ignore_permissions=True)
 			updated.append(site.name)
@@ -367,7 +386,7 @@ def edit_site(
 			errors.append(f"{sibling_name}: {e}")
 
 	frappe.db.commit()
-	return {"updated": updated, "errors": errors}
+	return {"updated": updated, "errors": errors, "notes": notes}
 
 
 @frappe.whitelist()
@@ -376,23 +395,35 @@ def delete_site(name: str) -> dict:
 	instance), both on Kuma and locally — see the module docstring."""
 	frappe.only_for(WRITE_ROLES)
 	site_name = frappe.db.get_value("Uptime Site", name, "site_name")
+	disabled = _disabled_instances()
 	deleted = []
 	errors = []
+	notes = []
 	for sibling_name in _sibling_names(site_name):
+		frappe.db.savepoint("uptime_site_delete")
 		try:
 			sibling = frappe.get_doc("Uptime Site", sibling_name)
-			client = _get_client(sibling.instance)
-			try:
-				client.delete_monitor(sibling.kuma_monitor_id)
-			finally:
-				client.disconnect()
-			frappe.delete_doc("Uptime Site", sibling_name, ignore_permissions=True)
+			# The site's check history goes with it. force skips the link
+			# check so its Proxmox Alert Log rows stay as history.
+			frappe.db.delete("Uptime Check Log", {"site": sibling_name})
+			frappe.delete_doc("Uptime Site", sibling_name, ignore_permissions=True, force=True)
+			# Kuma last: if it fails, the local delete is rolled back below,
+			# so Kuma and Pulse never end up out of step.
+			if sibling.instance in disabled:
+				notes.append(_local_only_note(sibling.instance))
+			else:
+				client = _get_client(sibling.instance)
+				try:
+					client.delete_monitor(sibling.kuma_monitor_id)
+				finally:
+					client.disconnect()
 			deleted.append(sibling_name)
 		except Exception as e:
+			frappe.db.rollback(save_point="uptime_site_delete")
 			_log_sibling_failure("delete", sibling_name)
 			errors.append(f"{sibling_name}: {e}")
 	frappe.db.commit()
-	return {"deleted": deleted, "errors": errors}
+	return {"deleted": deleted, "errors": errors, "notes": notes}
 
 
 @frappe.whitelist()
@@ -401,23 +432,28 @@ def pause_site(name: str) -> dict:
 	instance) — see the module docstring."""
 	frappe.only_for(WRITE_ROLES)
 	site_name = frappe.db.get_value("Uptime Site", name, "site_name")
+	disabled = _disabled_instances()
 	paused = []
 	errors = []
+	notes = []
 	for sibling_name in _sibling_names(site_name):
 		try:
 			sibling = frappe.get_doc("Uptime Site", sibling_name)
-			client = _get_client(sibling.instance)
-			try:
-				client.pause_monitor(sibling.kuma_monitor_id)
-			finally:
-				client.disconnect()
+			if sibling.instance in disabled:
+				notes.append(_local_only_note(sibling.instance))
+			else:
+				client = _get_client(sibling.instance)
+				try:
+					client.pause_monitor(sibling.kuma_monitor_id)
+				finally:
+					client.disconnect()
 			frappe.db.set_value("Uptime Site", sibling_name, "is_active", 0)
 			paused.append(sibling_name)
 		except Exception as e:
 			_log_sibling_failure("pause", sibling_name)
 			errors.append(f"{sibling_name}: {e}")
 	frappe.db.commit()
-	return {"paused": paused, "errors": errors}
+	return {"paused": paused, "errors": errors, "notes": notes}
 
 
 @frappe.whitelist()
@@ -426,23 +462,28 @@ def resume_site(name: str) -> dict:
 	instance) — see the module docstring."""
 	frappe.only_for(WRITE_ROLES)
 	site_name = frappe.db.get_value("Uptime Site", name, "site_name")
+	disabled = _disabled_instances()
 	resumed = []
 	errors = []
+	notes = []
 	for sibling_name in _sibling_names(site_name):
 		try:
 			sibling = frappe.get_doc("Uptime Site", sibling_name)
-			client = _get_client(sibling.instance)
-			try:
-				client.resume_monitor(sibling.kuma_monitor_id)
-			finally:
-				client.disconnect()
+			if sibling.instance in disabled:
+				notes.append(_local_only_note(sibling.instance))
+			else:
+				client = _get_client(sibling.instance)
+				try:
+					client.resume_monitor(sibling.kuma_monitor_id)
+				finally:
+					client.disconnect()
 			frappe.db.set_value("Uptime Site", sibling_name, "is_active", 1)
 			resumed.append(sibling_name)
 		except Exception as e:
 			_log_sibling_failure("resume", sibling_name)
 			errors.append(f"{sibling_name}: {e}")
 	frappe.db.commit()
-	return {"resumed": resumed, "errors": errors}
+	return {"resumed": resumed, "errors": errors, "notes": notes}
 
 
 @frappe.whitelist()
@@ -528,9 +569,13 @@ def sync_check_interval_to_all_sites() -> dict:
 		"Uptime Site", filters={"check_interval_seconds": ["!=", target]}, fields=["name", "instance", "site_name"]
 	)
 
+	# A disabled instance is never contacted (see the module docstring); its
+	# sites stay out of sync and catch up once it's enabled again.
+	disabled = _disabled_instances()
 	by_instance: dict[str, list] = {}
 	for row in out_of_sync:
-		by_instance.setdefault(row.instance, []).append(row)
+		if row.instance not in disabled:
+			by_instance.setdefault(row.instance, []).append(row)
 
 	updated = []
 	errors = []

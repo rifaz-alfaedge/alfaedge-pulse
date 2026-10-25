@@ -30,6 +30,20 @@ passwords and the Telegram settings.
   recurring errors are sent. When it's off (the default, and production's
   current setting), they're recorded and shown in the Logs tab only.
 
+### Fixed
+- **A disabled Uptime Kuma instance is no longer contacted.** Edit, Pause,
+  Resume and Delete used to call every instance, even disabled ones.
+  Now, on a disabled instance they change only Pulse's own Uptime Site,
+  and the card says so. The check-interval sync skips disabled instances
+  too. Their sites catch up when the instance is re-enabled. Disabled
+  instances are marked on each site card.
+- **Deleting an Uptime site works.** It used to fail on any site that had
+  check history, and it did so only after the monitor had already been
+  deleted on Kuma, leaving Pulse showing a site that no longer existed.
+  Now the site's check history is deleted with it, its alert history is
+  kept, and Kuma is called last. If Kuma fails, nothing is deleted in
+  Pulse.
+
 ## [4.8.0] - 2026-10-23
 
 ### Added

@@ -42,6 +42,7 @@ export function UptimePanel() {
   const allSites = sites ?? []
   const siteGroups = groupSites(allSites)
   const instanceLabel = (name: string) => allInstances.find((i) => i.name === name)?.instance_name ?? name
+  const isDisabled = (name: string) => allInstances.some((i) => i.name === name && !i.enabled)
   const pollIntervalSeconds = monitorSettings?.poll_interval_seconds || 60
   // What a *new* site's own check_interval_seconds should default to —
   // Kuma's own heartbeat cadence, not how often we happen to poll for a
@@ -101,6 +102,7 @@ export function UptimePanel() {
               key={group.siteName}
               group={group}
               instanceLabel={instanceLabel}
+              isDisabled={isDisabled}
               onOpenHistory={() => setHistoryGroup(group)}
               onChanged={refresh}
             />
@@ -150,21 +152,26 @@ function InstanceChip({ instance, pollIntervalSeconds }: { instance: UptimeKumaI
   )
 }
 
+type SiteActionResult = { errors: string[]; notes?: string[] }
+
 function SiteGroupCard({
   group,
   instanceLabel,
+  isDisabled,
   onOpenHistory,
   onChanged,
 }: {
   group: SiteGroup
   instanceLabel: (instance: string) => string
+  isDisabled: (instance: string) => boolean
   onOpenHistory: () => void
   onChanged: () => void
 }) {
-  const { call: pauseSite, loading: pausing } = useFrappePostCall<{ errors: string[] }>('alfaedge_pulse.uptime_monitor.api.pause_site')
-  const { call: resumeSite, loading: resuming } = useFrappePostCall<{ errors: string[] }>('alfaedge_pulse.uptime_monitor.api.resume_site')
-  const { call: deleteSite, loading: deleting } = useFrappePostCall<{ errors: string[] }>('alfaedge_pulse.uptime_monitor.api.delete_site')
+  const { call: pauseSite, loading: pausing } = useFrappePostCall<SiteActionResult>('alfaedge_pulse.uptime_monitor.api.pause_site')
+  const { call: resumeSite, loading: resuming } = useFrappePostCall<SiteActionResult>('alfaedge_pulse.uptime_monitor.api.resume_site')
+  const { call: deleteSite, loading: deleting } = useFrappePostCall<SiteActionResult>('alfaedge_pulse.uptime_monitor.api.delete_site')
   const [error, setError] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
   const busy = pausing || resuming || deleting
 
   const anyActive = group.sites.some((s) => s.is_active)
@@ -174,12 +181,17 @@ function SiteGroupCard({
   // site_name (see uptime_monitor/api.py) — any one docname in the group
   // is enough to identify it, so the first is used as a representative.
   const primaryName = group.sites[0].name
+  // A disabled instance is never contacted — actions on it change only
+  // Pulse's own record (see uptime_monitor/api.py's module docstring).
+  const disabledLabels = [...new Set(group.sites.filter((s) => isDisabled(s.instance)).map((s) => instanceLabel(s.instance)))]
 
-  const run = async (fn: () => Promise<{ errors: string[] }>) => {
+  const run = async (fn: () => Promise<SiteActionResult>) => {
     setError(null)
+    setNote(null)
     try {
       const res = await fn()
       if (res.errors.length > 0) setError(`Some instances failed: ${res.errors.join('; ')}`)
+      if (res.notes?.length) setNote([...new Set(res.notes)].join('; '))
       onChanged()
     } catch (e) {
       setError(getErrorMessage(e))
@@ -204,7 +216,10 @@ function SiteGroupCard({
       <div className="mb-3 flex flex-col gap-1.5 border-y border-border-hairline py-2.5">
         {group.sites.map((s) => (
           <div key={s.name} className="flex items-center justify-between gap-2 text-xs">
-            <span className="truncate text-ink-secondary">{instanceLabel(s.instance)}</span>
+            <span className="truncate text-ink-secondary">
+              {instanceLabel(s.instance)}
+              {isDisabled(s.instance) && <span className="text-ink-muted"> (disabled)</span>}
+            </span>
             <div className="flex items-center gap-2 text-ink-muted">
               <span>{s.is_active ? timeAgo(s.last_checked) : 'Paused'}</span>
               <StatusBadge status={s.current_status} />
@@ -214,6 +229,7 @@ function SiteGroupCard({
       </div>
 
       {error && <p className="mb-2 text-xs text-status-critical">{error}</p>}
+      {note && <p className="mb-2 text-xs text-ink-muted">{note}</p>}
 
       <div className="flex flex-wrap gap-2 text-xs">
         {anyActive ? (
@@ -229,7 +245,10 @@ function SiteGroupCard({
           disabled={busy}
           tone="critical"
           onClick={() => {
-            if (confirm(`Delete "${group.siteName}"? This also deletes it from Uptime Kuma on every connected instance.`)) {
+            const message = disabledLabels.length
+              ? `Delete "${group.siteName}"? It's also deleted from Uptime Kuma on enabled instances. On disabled ones (${disabledLabels.join(', ')}) it's removed from Pulse only.`
+              : `Delete "${group.siteName}"? This also deletes it from Uptime Kuma on every connected instance.`
+            if (confirm(message)) {
               run(() => deleteSite({ name: primaryName }))
             }
           }}
