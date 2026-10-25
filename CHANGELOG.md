@@ -43,6 +43,10 @@ passwords and the Telegram settings.
   Now the site's check history is deleted with it, its alert history is
   kept, and Kuma is called last. If Kuma fails, nothing is deleted in
   Pulse.
+- **No false "Cannot read properties of undefined" error on the Uptime
+  tab.** Pause, Resume and Delete worked but then showed this error and
+  didn't refresh the card, and the Add Site and Import dialogs couldn't
+  show their results. They now read the response correctly.
 
 ## [4.8.0] - 2026-10-23
 

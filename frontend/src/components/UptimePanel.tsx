@@ -167,9 +167,9 @@ function SiteGroupCard({
   onOpenHistory: () => void
   onChanged: () => void
 }) {
-  const { call: pauseSite, loading: pausing } = useFrappePostCall<SiteActionResult>('alfaedge_pulse.uptime_monitor.api.pause_site')
-  const { call: resumeSite, loading: resuming } = useFrappePostCall<SiteActionResult>('alfaedge_pulse.uptime_monitor.api.resume_site')
-  const { call: deleteSite, loading: deleting } = useFrappePostCall<SiteActionResult>('alfaedge_pulse.uptime_monitor.api.delete_site')
+  const { call: pauseSite, loading: pausing } = useFrappePostCall<{ message: SiteActionResult }>('alfaedge_pulse.uptime_monitor.api.pause_site')
+  const { call: resumeSite, loading: resuming } = useFrappePostCall<{ message: SiteActionResult }>('alfaedge_pulse.uptime_monitor.api.resume_site')
+  const { call: deleteSite, loading: deleting } = useFrappePostCall<{ message: SiteActionResult }>('alfaedge_pulse.uptime_monitor.api.delete_site')
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const busy = pausing || resuming || deleting
@@ -185,11 +185,13 @@ function SiteGroupCard({
   // Pulse's own record (see uptime_monitor/api.py's module docstring).
   const disabledLabels = [...new Set(group.sites.filter((s) => isDisabled(s.instance)).map((s) => instanceLabel(s.instance)))]
 
-  const run = async (fn: () => Promise<SiteActionResult>) => {
+  // call() resolves to Frappe's { message } envelope, not the method's
+  // return value itself.
+  const run = async (fn: () => Promise<{ message: SiteActionResult }>) => {
     setError(null)
     setNote(null)
     try {
-      const res = await fn()
+      const res = (await fn()).message
       if (res.errors.length > 0) setError(`Some instances failed: ${res.errors.join('; ')}`)
       if (res.notes?.length) setNote([...new Set(res.notes)].join('; '))
       onChanged()
@@ -296,7 +298,7 @@ function AddSiteModal({
   defaultCheckIntervalSeconds: number
   onClose: () => void
 }) {
-  const { call: addSite, loading } = useFrappePostCall<{ created: string[]; errors: string[] }>(
+  const { call: addSite, loading } = useFrappePostCall<{ message: { created: string[]; errors: string[] } }>(
     'alfaedge_pulse.uptime_monitor.api.add_site',
   )
   const [siteName, setSiteName] = useState('')
@@ -319,7 +321,7 @@ function AddSiteModal({
         port: monitorType === 'TCP' ? Number(port) : undefined,
         check_interval_seconds: Number(checkInterval) || 60,
       })
-      setResult(res)
+      setResult(res.message)
     } catch (e) {
       setError(getErrorMessage(e))
     }
@@ -420,7 +422,7 @@ function ImportMonitorsModal({
   instances: UptimeKumaInstance[]
   onClose: () => void
 }) {
-  const { call: importMonitors, loading } = useFrappePostCall<{ created: string[]; skipped: string[] }>(
+  const { call: importMonitors, loading } = useFrappePostCall<{ message: { created: string[]; skipped: string[] } }>(
     'alfaedge_pulse.uptime_monitor.api.import_monitors',
   )
   const [instance, setInstance] = useState(instances[0]?.name ?? '')
@@ -455,7 +457,7 @@ function ImportMonitorsModal({
     setError(null)
     try {
       const res = await importMonitors({ instance, kuma_monitor_ids: Array.from(selected) })
-      setResult(res)
+      setResult(res.message)
       setSelected(new Set())
       mutateMonitors()
     } catch (e) {
