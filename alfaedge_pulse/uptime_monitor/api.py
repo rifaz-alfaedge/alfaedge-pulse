@@ -381,6 +381,11 @@ def edit_site(
 
 			site.save(ignore_permissions=True)
 			updated.append(site.name)
+			if site_name and site_name != original.site_name:
+				# Windows are keyed by site_name, so they follow a rename.
+				frappe.db.set_value(
+					"Uptime Maintenance Window", {"site_name": original.site_name}, "site_name", site_name
+				)
 		except Exception as e:
 			_log_sibling_failure("edit", sibling_name)
 			errors.append(f"{sibling_name}: {e}")
@@ -422,6 +427,8 @@ def delete_site(name: str) -> dict:
 			frappe.db.rollback(save_point="uptime_site_delete")
 			_log_sibling_failure("delete", sibling_name)
 			errors.append(f"{sibling_name}: {e}")
+	if not frappe.db.exists("Uptime Site", {"site_name": site_name}):
+		frappe.db.delete("Uptime Maintenance Window", {"site_name": site_name})
 	frappe.db.commit()
 	return {"deleted": deleted, "errors": errors, "notes": notes}
 
@@ -490,7 +497,8 @@ def resume_site(name: str) -> dict:
 def get_uptime_summary(site: str | None = None, days: int = 7) -> dict:
 	frappe.only_for(READ_ROLES)
 	days = cint(days) or 7
-	conditions = "checked_at >= %(start)s"
+	# Checks in a scheduled downtime window don't count (see maintenance.py).
+	conditions = "checked_at >= %(start)s and in_maintenance = 0"
 	values: dict = {"start": add_to_date(now_datetime(), days=-days)}
 	if site:
 		conditions += " and site = %(site)s"
@@ -528,7 +536,7 @@ def get_uptime_history(site: str, days: int = 7) -> list[dict]:
 			coalesce(sum(is_up), 0) as up_checks,
 			coalesce(avg(response_time_ms), 0) as avg_response_time
 		from `tabUptime Check Log`
-		where site = %(site)s and checked_at >= %(start)s
+		where site = %(site)s and checked_at >= %(start)s and in_maintenance = 0
 		group by bucket
 		order by bucket asc
 		""",
@@ -624,3 +632,254 @@ def sync_check_interval_now() -> dict:
 		deduplicate=True,
 	)
 	return {"ok": True, "message": frappe._("Sync started in the background — refresh in a moment to see results.")}
+
+
+# ---------------------------------------------------------------------------
+# Scheduled downtime windows — see uptime_monitor/maintenance.py
+# ---------------------------------------------------------------------------
+
+
+def _window_row(w, now) -> dict:
+	from alfaedge_pulse.uptime_monitor import maintenance
+
+	row = {k: w.get(k) for k in maintenance.WINDOW_FIELDS}
+	for key in ("start_time", "end_time", "start_datetime", "end_datetime"):
+		if row[key] is not None:
+			row[key] = str(row[key])
+	row["label"] = maintenance.describe(w)
+	row["active"] = bool(cint(w.enabled)) and maintenance.active_window([w], now) is not None
+	return row
+
+
+@frappe.whitelist()
+def get_maintenance_windows(site_name: str) -> list[dict]:
+	frappe.only_for(READ_ROLES)
+	from alfaedge_pulse.uptime_monitor import maintenance
+
+	now = now_datetime()
+	rows = frappe.get_all(
+		"Uptime Maintenance Window", filters={"site_name": site_name}, fields=maintenance.WINDOW_FIELDS, order_by="creation asc"
+	)
+	return [_window_row(w, now) for w in rows]
+
+
+@frappe.whitelist(methods=["POST"])
+def save_maintenance_window(values) -> dict:
+	"""Create or update one window. ``values`` is the doc's fields, with
+	``name`` set to update an existing one."""
+	frappe.only_for(WRITE_ROLES)
+	from alfaedge_pulse.uptime_monitor import maintenance
+
+	values = frappe.parse_json(values) or {}
+	allowed = set(maintenance.WINDOW_FIELDS) - {"name"}
+	data = {k: v for k, v in values.items() if k in allowed}
+	if values.get("name"):
+		doc = frappe.get_doc("Uptime Maintenance Window", values["name"])
+		doc.update(data)
+		doc.save()
+	else:
+		doc = frappe.get_doc({"doctype": "Uptime Maintenance Window", **data}).insert()
+	frappe.db.commit()
+	return _window_row(doc, now_datetime())
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_maintenance_window(name: str) -> dict:
+	frappe.only_for(WRITE_ROLES)
+	frappe.delete_doc("Uptime Maintenance Window", name)
+	frappe.db.commit()
+	return {"deleted": name}
+
+
+# ---------------------------------------------------------------------------
+# Uptime tab overview — one row per site_name
+# ---------------------------------------------------------------------------
+
+#: Availability strip resolution — the range is split into this many cells.
+STRIP_BUCKETS = 28
+
+
+def _group_status(siblings: list, in_window: bool) -> str:
+	if in_window:
+		return "Maintenance"
+	active = [s for s in siblings if cint(s.is_active)]
+	if not active:
+		return "Paused"
+	if any(cint(s.is_critical) for s in siblings):
+		return "Down"
+	down = [s for s in active if s.current_status == "Down"]
+	if not down:
+		return "Up"
+	return "Down" if len(down) == len(active) else "Partial"
+
+
+@frappe.whitelist()
+def get_site_overview(days: int = 7) -> dict:
+	"""Everything the Uptime tab shows, in one call: per site (grouped by
+	site_name across instances) its status, per-instance readings, uptime %
+	and failed checks (scheduled downtime excluded), an availability strip,
+	and its maintenance windows; plus each Kuma instance's health and the
+	range's Site Down incidents."""
+	frappe.only_for(READ_ROLES)
+	from alfaedge_pulse.uptime_monitor import maintenance
+
+	days = cint(days) or 7
+	now = now_datetime()
+	start = add_to_date(now, days=-days)
+	bucket_seconds = max(1, int((now - start).total_seconds() // STRIP_BUCKETS))
+
+	sites = frappe.get_all(
+		"Uptime Site",
+		fields=["name", "site_name", "instance", "monitor_type", "url", "hostname", "port",
+			"is_active", "current_status", "is_critical", "last_checked", "check_interval_seconds"],
+		order_by="site_name asc, instance asc",
+	)
+	stats = {
+		r.site: r
+		for r in frappe.db.sql(
+			"""
+			select site,
+				sum(in_maintenance = 0) as checks,
+				sum(in_maintenance = 0 and is_up = 1) as up_checks,
+				avg(case when in_maintenance = 0 and is_up = 1 and response_time_ms >= 0 then response_time_ms end) as avg_ms
+			from `tabUptime Check Log`
+			where checked_at >= %(start)s
+			group by site
+			""",
+			{"start": start},
+			as_dict=True,
+		)
+	}
+	cells: dict[str, dict[int, dict]] = {}
+	for r in frappe.db.sql(
+		"""
+		select site, floor(timestampdiff(second, %(start)s, checked_at) / %(size)s) as b,
+			sum(in_maintenance = 0 and is_up = 1) as up, sum(in_maintenance = 0 and is_up = 0) as down,
+			sum(in_maintenance) as maint
+		from `tabUptime Check Log`
+		where checked_at >= %(start)s
+		group by site, b
+		""",
+		{"start": start, "size": bucket_seconds},
+		as_dict=True,
+	):
+		cells.setdefault(r.site, {})[min(cint(r.b), STRIP_BUCKETS - 1)] = r
+
+	windows = maintenance.windows_by_site()
+	instances = {
+		i.name: i
+		for i in frappe.get_all(
+			"Uptime Kuma Instance", fields=["name", "instance_name", "enabled", "last_synced", "last_error"]
+		)
+	}
+	latest_check: dict[str, object] = {}
+	for s in sites:
+		if s.last_checked and (s.instance not in latest_check or s.last_checked > latest_check[s.instance]):
+			latest_check[s.instance] = s.last_checked
+	poll_seconds = cint(frappe.get_cached_doc("Uptime Monitor Settings").poll_interval_seconds) or 60
+	stale_after = max(poll_seconds * 5, 600)
+
+	def stale(instance: str) -> bool:
+		last = latest_check.get(instance)
+		return not last or (now - frappe.utils.get_datetime(last)).total_seconds() > stale_after
+
+	groups: dict[str, list] = {}
+	for s in sites:
+		groups.setdefault(s.site_name, []).append(s)
+
+	out = []
+	for site_name, siblings in groups.items():
+		site_windows = windows.get(site_name, [])
+		in_window = maintenance.active_window(site_windows, now) is not None
+		first = siblings[0]
+		checks = sum(cint(stats[s.name].checks) for s in siblings if s.name in stats)
+		up_checks = sum(cint(stats[s.name].up_checks) for s in siblings if s.name in stats)
+
+		strip = []
+		window_spans = maintenance.intervals(site_windows, start, now)
+		for b in range(STRIP_BUCKETS):
+			ups = sum(cint(cells.get(s.name, {}).get(b, {}).get("up")) for s in siblings)
+			downs = sum(cint(cells.get(s.name, {}).get(b, {}).get("down")) for s in siblings)
+			maint = sum(cint(cells.get(s.name, {}).get(b, {}).get("maint")) for s in siblings)
+			b_start = add_to_date(start, seconds=b * bucket_seconds)
+			b_end = add_to_date(b_start, seconds=bucket_seconds)
+			if ups or downs:
+				state = "down" if downs > ups else "degraded" if downs else "up"
+			elif maint or any(ws < b_end and we > b_start for ws, we in window_spans):
+				state = "maintenance"
+			else:
+				state = "none"
+			strip.append(state)
+
+		nxt = maintenance.next_window(site_windows, now)
+		out.append(
+			{
+				"site_name": site_name,
+				"name": first.name,
+				"monitor_type": first.monitor_type,
+				"target": first.url or (f"{first.hostname}:{first.port}" if first.port else first.hostname),
+				"status": _group_status(siblings, in_window),
+				"is_active": any(cint(s.is_active) for s in siblings),
+				"uptime_percent": flt(up_checks / checks * 100, 2) if checks else None,
+				"checks": checks,
+				"failed_checks": checks - up_checks,
+				"avg_response_ms": flt(
+					sum(flt(stats[s.name].avg_ms) * cint(stats[s.name].up_checks) for s in siblings if s.name in stats and stats[s.name].avg_ms is not None)
+					/ up_checks,
+					1,
+				)
+				if up_checks
+				else None,
+				"instances": [
+					{
+						"name": s.name,
+						"instance": s.instance,
+						"instance_name": instances[s.instance].instance_name if s.instance in instances else s.instance,
+						"status": s.current_status,
+						"is_active": cint(s.is_active),
+						"last_checked": s.last_checked,
+						"avg_response_ms": flt(stats[s.name].avg_ms, 1) if s.name in stats and stats[s.name].avg_ms is not None else None,
+						"uptime_percent": flt(cint(stats[s.name].up_checks) / cint(stats[s.name].checks) * 100, 2)
+						if s.name in stats and cint(stats[s.name].checks)
+						else None,
+						"stale": stale(s.instance),
+					}
+					for s in siblings
+				],
+				"strip": strip,
+				"in_maintenance": in_window,
+				"windows": [_window_row(w, now) for w in site_windows],
+				"next_window": {"start": nxt[0], "end": nxt[1]} if nxt else None,
+			}
+		)
+
+	site_by_doc = {s.name: s.site_name for s in sites}
+	incidents = [
+		dict(r, site_name=site_by_doc.get(r.reference_name, r.reference_name))
+		for r in frappe.get_all(
+			"Proxmox Alert Log",
+			filters={"reference_doctype": "Uptime Site", "alert_type": "Site Down", "sent_at": [">=", start]},
+			fields=["name", "reference_name", "message", "sent_at", "resolved", "channels_sent"],
+			order_by="sent_at desc",
+			limit_page_length=200,
+		)
+	]
+
+	return {
+		"sites": out,
+		"instances": [
+			{
+				"name": i.name,
+				"instance_name": i.instance_name,
+				"enabled": cint(i.enabled),
+				"last_synced": i.last_synced,
+				"last_error": i.last_error,
+				"last_check": latest_check.get(i.name),
+				"stale": stale(i.name),
+				"site_count": sum(1 for s in sites if s.instance == i.name),
+			}
+			for i in instances.values()
+		],
+		"incidents": incidents,
+		"range": {"start": start, "end": now, "bucket_seconds": bucket_seconds},
+	}

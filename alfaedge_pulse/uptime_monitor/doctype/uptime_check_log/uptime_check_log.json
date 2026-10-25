@@ -12,7 +12,8 @@
   "column_break_check",
   "is_up",
   "raw_status",
-  "response_time_ms"
+  "response_time_ms",
+  "in_maintenance"
  ],
  "fields": [
   {
@@ -58,12 +59,20 @@
    "fieldtype": "Float",
    "label": "Response Time (ms)",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Taken during a scheduled downtime window: kept, but not counted towards uptime, response time or alerts.",
+   "fieldname": "in_maintenance",
+   "fieldtype": "Check",
+   "label": "In Maintenance",
+   "read_only": 1
   }
  ],
  "icon": "fa fa-history",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-10 00:00:00.000000",
+ "modified": "2026-10-25 14:25:18.665763",
  "modified_by": "Administrator",
  "module": "Uptime Monitor",
  "name": "Uptime Check Log",

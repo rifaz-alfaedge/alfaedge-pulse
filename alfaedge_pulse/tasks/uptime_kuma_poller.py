@@ -27,6 +27,14 @@ Design notes:
   ``uptime_kuma_client/socketio_client.py``'s module docstring for the
   full reasoning (that client is reserved for admin-initiated monitor
   management only).
+- **Scheduled downtime windows (Pulse's own ``Uptime Maintenance
+  Window``, see ``uptime_monitor.maintenance``) are excluded too, but kept.**
+  Checks inside one are still logged, flagged ``in_maintenance``, so the
+  dashboard can show them; they never vote towards Down, and a site in a
+  window is skipped by the alert check. After a window ends, only checks
+  taken since its end count, so a site still down alerts as usual once a
+  full alert window of fresh checks agrees — never on stale pre-window
+  checks.
 - **Pending/Maintenance readings are excluded from the down-ratio
   calculation entirely** — no ``Uptime Check Log`` row is even written
   for them, so "more than half of the last N checks" only ever considers
@@ -81,6 +89,7 @@ from frappe.utils.password import get_decrypted_password
 from alfaedge_pulse.tasks.poller import _handle_transition
 from alfaedge_pulse.uptime_kuma_client.base import UptimeKumaAPIError
 from alfaedge_pulse.uptime_kuma_client.metrics_client import fetch_metrics
+from alfaedge_pulse.uptime_monitor import maintenance
 from alfaedge_pulse.uptime_monitor.api import auto_import_new_monitors, sync_missing_sites_to_instance
 
 DEFAULT_POLL_INTERVAL_SECONDS = 60
@@ -262,15 +271,18 @@ def _poll_instance(instance_name: str, interval_seconds: int) -> None:
 	frappe.db.set_value("Uptime Kuma Instance", instance_name, {"last_synced": now_datetime(), "last_error": ""})
 
 	sites = frappe.get_all("Uptime Site", filters={"instance": instance_name}, fields=["name", "site_name"])
+	windows = maintenance.windows_by_site()
+	now = now_datetime()
 	for site in sites:
 		try:
-			_record_site_check(site, metrics)
+			in_window = maintenance.active_window(windows.get(site.site_name, []), now) is not None
+			_record_site_check(site, metrics, in_window)
 		except Exception:
 			frappe.log_error(title=f"Uptime Monitor: failed to process site {site.site_name}", message=frappe.get_traceback())
 	frappe.db.commit()
 
 
-def _record_site_check(site, metrics: dict) -> None:
+def _record_site_check(site, metrics: dict, in_maintenance: bool = False) -> None:
 	"""Records this instance's own reading only — no criticality/alerting
 	decision here anymore, since that's now a fleet-wide vote taken once
 	every instance has reported in (see ``_reconcile_site_criticality``)."""
@@ -294,24 +306,31 @@ def _record_site_check(site, metrics: dict) -> None:
 				"is_up": 1 if status == STATUS_UP else 0,
 				"raw_status": str(status),
 				"response_time_ms": reading.get("response_time_ms"),
+				"in_maintenance": 1 if in_maintenance else 0,
 			}
 		).insert(ignore_permissions=True)
 	# Pending/Maintenance: no log row — same "doesn't count" treatment it's
 	# always had, now also meaning it won't cast a vote in the fleet-wide
 	# reconciliation below (see _instance_verdict).
 
+	if in_maintenance:
+		current_status = "Maintenance"
 	frappe.db.set_value("Uptime Site", site.name, {"current_status": current_status, "last_checked": now})
 
 
-def _instance_verdict(site_doc_name: str, window: int) -> bool | None:
+def _instance_verdict(site_doc_name: str, window: int, since=None) -> bool | None:
 	"""One instance's own opinion on one site: more than half of its last
 	``window`` counted (Up/Down only) checks report Down. ``None`` — not
 	"up" — when there isn't a full window of samples yet, so a brand-new
 	instance/site pairing doesn't cast a premature vote either way in the
-	fleet-wide count below."""
+	fleet-wide count below. Checks in a scheduled downtime window, or from
+	before the last one ended (``since``), don't count."""
+	filters = {"site": site_doc_name, "in_maintenance": 0}
+	if since:
+		filters["checked_at"] = [">", since]
 	rows = frappe.get_all(
 		"Uptime Check Log",
-		filters={"site": site_doc_name},
+		filters=filters,
 		fields=["is_up"],
 		order_by="checked_at desc",
 		limit_page_length=window,
@@ -340,14 +359,22 @@ def _reconcile_site_criticality(window: int) -> None:
 	groups: dict[str, list] = {}
 	for site in all_sites:
 		groups.setdefault(site.site_name, []).append(site)
+	windows = maintenance.windows_by_site()
+	now = now_datetime()
 
 	for site_name, siblings in groups.items():
+		site_windows = windows.get(site_name, [])
+		if maintenance.active_window(site_windows, now):
+			# Planned downtime: no state change, no alert. An incident already
+			# open stays open and recovers normally once the site is back.
+			continue
+		since = maintenance.last_window_end(site_windows, now)
 		down_votes = 0
 		total_votes = 0
 		for sibling in siblings:
 			if not cint(sibling.is_active):
 				continue
-			verdict = _instance_verdict(sibling.name, window)
+			verdict = _instance_verdict(sibling.name, window, since)
 			if verdict is None:
 				continue
 			total_votes += 1

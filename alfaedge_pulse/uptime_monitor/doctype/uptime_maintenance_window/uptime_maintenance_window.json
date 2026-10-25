@@ -1,0 +1,218 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-25 14:25:18.665763",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": [
+  "site_name",
+  "enabled",
+  "window_type",
+  "column_break_type",
+  "note",
+  "time_section",
+  "all_day",
+  "start_time",
+  "end_time",
+  "days_section",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "column_break_days",
+  "friday",
+  "saturday",
+  "sunday",
+  "range_section",
+  "start_datetime",
+  "column_break_range",
+  "end_datetime"
+ ],
+ "fields": [
+  {
+   "fieldname": "site_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Site",
+   "reqd": 1,
+   "search_index": 1,
+   "description": "The Uptime Site's name. Applies to that site on every Uptime Kuma instance."
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "window_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Repeats",
+   "options": "Daily\nWeekly\nOne-time",
+   "reqd": 1,
+   "default": "Daily"
+  },
+  {
+   "fieldname": "column_break_type",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Data",
+   "label": "Note"
+  },
+  {
+   "fieldname": "time_section",
+   "fieldtype": "Section Break",
+   "label": "Time",
+   "depends_on": "eval:doc.window_type!='One-time'"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.window_type=='Weekly'",
+   "fieldname": "all_day",
+   "fieldtype": "Check",
+   "label": "All day"
+  },
+  {
+   "depends_on": "eval:doc.window_type=='Daily' || (doc.window_type=='Weekly' && !doc.all_day)",
+   "fieldname": "start_time",
+   "fieldtype": "Time",
+   "label": "Start Time",
+   "description": "Site timezone. An end time at or before the start time runs past midnight (e.g. 21:00 to 07:00)."
+  },
+  {
+   "depends_on": "eval:doc.window_type=='Daily' || (doc.window_type=='Weekly' && !doc.all_day)",
+   "fieldname": "end_time",
+   "fieldtype": "Time",
+   "label": "End Time"
+  },
+  {
+   "fieldname": "days_section",
+   "fieldtype": "Section Break",
+   "label": "Days",
+   "depends_on": "eval:doc.window_type=='Weekly'",
+   "description": "A window running past midnight belongs to the day it starts."
+  },
+  {
+   "default": "0",
+   "fieldname": "monday",
+   "fieldtype": "Check",
+   "label": "Monday"
+  },
+  {
+   "default": "0",
+   "fieldname": "tuesday",
+   "fieldtype": "Check",
+   "label": "Tuesday"
+  },
+  {
+   "default": "0",
+   "fieldname": "wednesday",
+   "fieldtype": "Check",
+   "label": "Wednesday"
+  },
+  {
+   "default": "0",
+   "fieldname": "thursday",
+   "fieldtype": "Check",
+   "label": "Thursday"
+  },
+  {
+   "fieldname": "column_break_days",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "friday",
+   "fieldtype": "Check",
+   "label": "Friday"
+  },
+  {
+   "default": "0",
+   "fieldname": "saturday",
+   "fieldtype": "Check",
+   "label": "Saturday"
+  },
+  {
+   "default": "0",
+   "fieldname": "sunday",
+   "fieldtype": "Check",
+   "label": "Sunday"
+  },
+  {
+   "fieldname": "range_section",
+   "fieldtype": "Section Break",
+   "label": "Date range",
+   "depends_on": "eval:doc.window_type=='One-time'"
+  },
+  {
+   "fieldname": "start_datetime",
+   "fieldtype": "Datetime",
+   "label": "Start"
+  },
+  {
+   "fieldname": "column_break_range",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "end_datetime",
+   "fieldtype": "Datetime",
+   "label": "End"
+  }
+ ],
+ "icon": "fa fa-wrench",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-25 14:25:18.665763",
+ "modified_by": "Administrator",
+ "module": "Uptime Monitor",
+ "name": "Uptime Maintenance Window",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "write": 1,
+   "role": "System Manager"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "write": 1,
+   "role": "Proxmox Monitor Manager"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "site_name",
+ "track_changes": 1
+}
