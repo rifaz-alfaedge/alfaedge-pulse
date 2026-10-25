@@ -2,6 +2,9 @@ import { useMemo } from 'react'
 import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-react-sdk'
 import type {
   BifrostSettings,
+  HostOverview,
+  HostTrendPoint,
+  UptimeOverview,
   FailedJobGroup,
   FrappeActiveJob,
   FrappeFailedJobLog,
@@ -757,4 +760,38 @@ export function useInstanceSites(kind: 'guest' | 'server', name: string) {
 export function onEnabledServers<T extends { server: string }>(guests: T[], servers: { name: string }[]): T[] {
   const enabled = new Set(servers.map((s) => s.name))
   return guests.filter((g) => enabled.has(g.server))
+}
+
+/** Host Health tab: one row per host with everything the table and side
+ * panel show (host_health/api.py::get_host_overview). */
+export function useHostOverview() {
+  const result = useFrappeGetCall<{ message: HostOverview }>(
+    'alfaedge_pulse.host_health.api.get_host_overview',
+    undefined,
+    undefined,
+    { refreshInterval: UI_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+/** Hourly fleet load and new failed jobs for the Host Health chart. */
+export function useHostHealthTrend(hours: number) {
+  const result = useFrappeGetCall<{ message: HostTrendPoint[] }>(
+    'alfaedge_pulse.host_health.api.get_host_health_trend',
+    { hours },
+    ['host-health-trend', hours],
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+/** Uptime tab: one row per site_name (uptime_monitor/api.py::get_site_overview). */
+export function useUptimeOverview(days: number) {
+  const result = useFrappeGetCall<{ message: UptimeOverview }>(
+    'alfaedge_pulse.uptime_monitor.api.get_site_overview',
+    { days },
+    ['uptime-site-overview', days],
+    { refreshInterval: UI_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
 }

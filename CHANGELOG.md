@@ -24,7 +24,41 @@ Unused features are gone. None of them had any data on production.
 A patch drops the removed tables and columns, the stored console
 passwords and the Telegram settings.
 
+### Added
+- **Scheduled downtime for Uptime sites.** Give a site any mix of
+  **daily**, **weekly** (chosen days, all day or a time range) and
+  **one-time** windows, e.g. LuLu FinServ off nightly 21:00–07:00 and all
+  of Sunday. Inside a window, checks are kept but don't count towards
+  uptime, response time or alerts, the site shows **Maintenance**, and no
+  Site Down alert is sent. When it ends, only fresh checks count, so a
+  site still down alerts after the usual alert window. Managed from the
+  site's side panel; stored in the new **Uptime Maintenance Window**
+  doctype. Kuma is never touched.
+
 ### Changed
+- **Host Health tab redesigned** in the same layout as Logs:
+  - filters (role, status, Proxmox server, search) and six stat tiles;
+  - a fleet load and new-failed-jobs chart beside a ranked **Needs
+    attention** list;
+  - Hosts, Services, Failed jobs and Disks & forecast views, each a
+    sortable table;
+  - a side panel for the selected host, with the existing full details
+    (bench history, active jobs, failed-job root causes, log download)
+    one click away.
+
+  It's served by one new `get_host_overview` call instead of seven list
+  queries.
+- **Uptime tab redesigned** the same way:
+  - filters (range, status, type, instance, search) and six stat tiles;
+  - one table row per site, with each instance's status, uptime %,
+    average response and an availability strip;
+  - Incidents and Instances views;
+  - a right-hand column with the selected site, **Needs attention** (down,
+    down on one instance only, stale or failing instances, duplicate
+    monitors, low uptime) and each Uptime Kuma instance's health.
+
+  Sites can now be edited from the dashboard. Uptime is served by one new
+  `get_site_overview` call.
 - **Recurring-error alerts:** *Also Notify Global Recipients* in ClickHouse
   Log Settings is now **Notify Global Recipients**. It's the only way
   recurring errors are sent. When it's off (the default, and production's

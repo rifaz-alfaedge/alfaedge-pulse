@@ -865,7 +865,9 @@ def get_site_overview(days: int = 7) -> dict:
 		)
 	]
 
+	user = frappe.session.user
 	return {
+		"can_edit": user == "Administrator" or bool(set(frappe.get_roles(user)) & set(WRITE_ROLES)),
 		"sites": out,
 		"instances": [
 			{

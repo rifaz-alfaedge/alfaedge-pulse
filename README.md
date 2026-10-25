@@ -366,8 +366,9 @@ network issues — so this app treats "the sites" as one shared list across
 every enabled instance, not a separate list per instance:
 
 - **Add Site** creates that monitor on every enabled instance at once.
-- **Pause / Resume / Delete** on any one card applies to every instance's
-  copy of that site.
+- **Edit / Pause / Resume / Delete** from a site's side panel apply to
+  every instance's copy of that site. A disabled instance is never
+  contacted: on it, only Pulse's own record changes.
 - **A newly connected instance (or one you're specifically adding to
   watch existing sites from a new location) catches up automatically** —
   any site the fleet already has gets created there too, and any monitor
@@ -432,6 +433,25 @@ other alert types get — both fire once per site, not once per instance.
 Critical (and merely-Down-somewhere) sites also surface in a persistent
 summary shown above every tab, the same way Proxmox's own Critical/
 Warning summary already does — not just on the Uptime tab itself.
+
+**Scheduled downtime.** A site that's switched off on purpose (say,
+nightly 21:00–07:00 and all of Sunday) gets one or more **scheduled
+downtime windows**, from the site's side panel on the Uptime tab
+(Proxmox Monitor Manager). Each window is **Daily**, **Weekly** (chosen
+days, all day or a time range) or **One-time** (a date-time range), in
+the site's timezone; an end at or before the start runs past midnight.
+During a window:
+
+- checks are still recorded, but flagged as maintenance and left out of
+  uptime %, average response and the alert check;
+- the site shows **Maintenance** (blue on the availability strip);
+- no Site Down alert or recovery is sent. An incident that was already
+  open stays open and recovers normally afterwards.
+
+When a window ends, only checks taken since then count, so a site still
+down alerts after the usual *Alert Window Checks* — never on checks from
+before the shutdown. Windows live in Pulse only (Desk: **Uptime
+Maintenance Window**) and never touch Kuma.
 
 ## Site discovery (NPM + Cloudflare)
 

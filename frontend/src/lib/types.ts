@@ -615,3 +615,162 @@ export interface SiteSources {
   npms: NPMInstanceInfo[]
   problems: InstanceSite[]
 }
+
+/* -------------------------------------------------------------------------
+ * Host Health tab — host_health/api.py::get_host_overview / get_host_health_trend
+ * ----------------------------------------------------------------------- */
+
+export interface HostOverviewService {
+  service_name: string
+  current_state: string
+  is_down: 0 | 1
+  last_state_change?: string
+  last_checked?: string
+}
+
+export interface HostOverviewMount {
+  name: string
+  mount_point: string
+  used_gb?: number
+  total_gb?: number
+  usage_percent?: number
+  forecast: { days_remaining: number | null; growth_bytes_per_day: number | null; trend: string }
+}
+
+export interface HostOverviewRow {
+  name: string
+  hostname: string
+  role?: string | null
+  server?: string | null
+  is_online: 0 | 1
+  last_seen?: string
+  scheduler_last_run?: string
+  scheduler_overdue: 0 | 1
+  flags: { worker: number; failed_jobs: number; long_running: number; load: number; swap: number }
+  services: HostOverviewService[]
+  services_down: number
+  workers?: {
+    bench_name: string
+    registered_workers: number
+    live_worker_count: number
+    orphan_worker_count: number
+    queue_depths?: string
+    active_job_count: number
+    long_running_job_count: number
+    timestamp: string
+  } | null
+  open_failed_jobs: number
+  metrics?: {
+    cpu_core_count?: number
+    load_avg_1min?: number
+    load_normalized_percent?: number
+    swap_usage_percent?: number
+    collected_at: string
+  } | null
+  mounts: HostOverviewMount[]
+  sites: { name: string; site_name: string; site_url?: string }[]
+}
+
+export interface HostOverview {
+  hosts: HostOverviewRow[]
+  thresholds: {
+    load_warning: number
+    load_critical: number
+    swap_warning: number
+    swap_critical: number
+    disk_warning: number
+    disk_critical: number
+    failed_job_warning: number
+    failed_job_critical: number
+  }
+}
+
+export interface HostTrendPoint {
+  bucket: string
+  avg_load_percent: number | null
+  new_failed_jobs: number
+}
+
+/* -------------------------------------------------------------------------
+ * Uptime tab — uptime_monitor/api.py::get_site_overview, maintenance windows
+ * ----------------------------------------------------------------------- */
+
+export type MaintenanceWindowType = 'Daily' | 'Weekly' | 'One-time'
+
+export interface MaintenanceWindow {
+  name?: string
+  site_name: string
+  enabled: 0 | 1
+  window_type: MaintenanceWindowType
+  all_day: 0 | 1
+  start_time?: string | null
+  end_time?: string | null
+  start_datetime?: string | null
+  end_datetime?: string | null
+  note?: string | null
+  monday: 0 | 1
+  tuesday: 0 | 1
+  wednesday: 0 | 1
+  thursday: 0 | 1
+  friday: 0 | 1
+  saturday: 0 | 1
+  sunday: 0 | 1
+  label?: string
+  active?: boolean
+}
+
+export type UptimeOverviewStatus = 'Up' | 'Down' | 'Partial' | 'Maintenance' | 'Paused'
+export type StripCell = 'up' | 'down' | 'degraded' | 'maintenance' | 'none'
+
+export interface UptimeOverviewRow {
+  site_name: string
+  name: string
+  monitor_type: string
+  target?: string
+  status: UptimeOverviewStatus
+  is_active: boolean
+  uptime_percent: number | null
+  checks: number
+  failed_checks: number
+  avg_response_ms: number | null
+  instances: {
+    name: string
+    instance: string
+    instance_name: string
+    status: string
+    is_active: 0 | 1
+    last_checked?: string
+    avg_response_ms: number | null
+    uptime_percent: number | null
+    stale: boolean
+  }[]
+  strip: StripCell[]
+  in_maintenance: boolean
+  windows: MaintenanceWindow[]
+  next_window: { start: string; end: string } | null
+}
+
+export interface UptimeOverview {
+  can_edit: boolean
+  sites: UptimeOverviewRow[]
+  instances: {
+    name: string
+    instance_name: string
+    enabled: 0 | 1
+    last_synced?: string
+    last_error?: string
+    last_check?: string
+    stale: boolean
+    site_count: number
+  }[]
+  incidents: {
+    name: string
+    reference_name: string
+    site_name: string
+    message: string
+    sent_at: string
+    resolved: 0 | 1
+    channels_sent?: string
+  }[]
+  range: { start: string; end: string; bucket_seconds: number }
+}

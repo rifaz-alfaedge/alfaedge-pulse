@@ -342,3 +342,181 @@ def get_guest_load_averages() -> dict:
 		"warning_percent": settings.load_warning_percent,
 		"critical_percent": settings.load_critical_percent,
 	}
+
+
+# ---------------------------------------------------------------------------
+# Host Health tab overview — one row per Monitored Host
+# ---------------------------------------------------------------------------
+
+
+def _latest_per_host(doctype: str, time_field: str, fields: list[str]) -> dict[str, dict]:
+	"""Newest row per monitored_host of a history doctype, in one query."""
+	cols = ", ".join(f"t.`{f}`" for f in fields)
+	rows = frappe.db.sql(
+		f"""
+		SELECT t.monitored_host, {cols}
+		FROM `tab{doctype}` t
+		JOIN (
+			SELECT monitored_host, MAX(`{time_field}`) AS latest
+			FROM `tab{doctype}`
+			WHERE `{time_field}` > %(since)s
+			GROUP BY monitored_host
+		) last ON last.monitored_host = t.monitored_host AND last.latest = t.`{time_field}`
+		""",
+		{"since": add_to_date(now_datetime(), days=-2)},
+		as_dict=True,
+	)
+	return {r.monitored_host: r for r in rows}
+
+
+@frappe.whitelist()
+def get_host_overview() -> dict:
+	"""Everything the Host Health tab's table and detail panel show, in one
+	call: per host its role and server, online state, services, latest
+	worker health, scheduler, open failed jobs, latest load and swap, every
+	mount with its forecast, and its sites. Online and scheduler state are
+	the watchdog's own flags (``tasks/host_health_watchdog.py``), so the
+	table agrees with the alerts."""
+	frappe.has_permission("Monitored Host", "read", throw=True)
+	from alfaedge_pulse.host_health.doctype.monitored_host.monitored_host import get_host_role
+
+	hosts = frappe.get_all(
+		"Monitored Host",
+		filters={"enabled": 1},
+		fields=["name", "hostname", "proxmox_guest", "is_online", "last_seen", "scheduler_last_run",
+			"scheduler_overdue", "worker_health_critical", "failed_job_critical", "long_running_job_critical",
+			"load_average_critical", "swap_critical"],
+		order_by="hostname asc",
+		ignore_permissions=True,
+	)
+	names = [h.name for h in hosts]
+	if not names:
+		return {"hosts": [], "thresholds": {}}
+
+	services: dict[str, list] = {}
+	for s in frappe.get_all(
+		"Service Status Log",
+		filters={"monitored_host": ["in", names]},
+		fields=["monitored_host", "service_name", "current_state", "is_down", "last_state_change", "last_checked"],
+		order_by="service_name asc",
+		ignore_permissions=True,
+	):
+		services.setdefault(s.monitored_host, []).append(s)
+
+	failed = {
+		r.monitored_host: cint(r.n)
+		for r in frappe.db.sql(
+			"""SELECT monitored_host, COUNT(*) AS n FROM `tabFrappe Failed Job Log`
+			WHERE resolved = 0 GROUP BY monitored_host""",
+			as_dict=True,
+		)
+	}
+	workers = _latest_per_host(
+		"Frappe Worker Health Log", "timestamp",
+		["bench_name", "registered_workers", "live_worker_count", "orphan_worker_count", "queue_depths",
+			"active_job_count", "long_running_job_count", "timestamp"],
+	)
+	metrics = _latest_per_host(
+		"Resource Metric Log", "collected_at",
+		["cpu_core_count", "load_avg_1min", "load_avg_5min", "load_avg_15min", "load_normalized_percent",
+			"swap_usage_percent", "swap_used_gb", "swap_total_gb", "collected_at"],
+	)
+	mounts: dict[str, list] = {}
+	for m in get_disk_forecasts():
+		mounts.setdefault(m["monitored_host"], []).append(m)
+	sites: dict[str, list] = {}
+	for s in get_hosted_sites():
+		sites.setdefault(s.parent, []).append(s)
+
+	guests = {
+		g.name: g
+		for g in frappe.get_all(
+			"Proxmox Guest", filters={"name": ["in", [h.proxmox_guest for h in hosts if h.proxmox_guest] or [""]]},
+			fields=["name", "server", "guest_name"], ignore_permissions=True,
+		)
+	}
+
+	out = []
+	for h in hosts:
+		host_mounts = sorted(mounts.get(h.name, []), key=lambda m: -(m.get("usage_percent") or 0))
+		w = workers.get(h.name)
+		r = metrics.get(h.name)
+		out.append(
+			{
+				"name": h.name,
+				"hostname": h.hostname or h.name,
+				"role": get_host_role(h.name),
+				"server": guests[h.proxmox_guest].server if h.proxmox_guest in guests else None,
+				"is_online": cint(h.is_online),
+				"last_seen": h.last_seen,
+				"scheduler_last_run": h.scheduler_last_run,
+				"scheduler_overdue": cint(h.scheduler_overdue),
+				"flags": {
+					"worker": cint(h.worker_health_critical),
+					"failed_jobs": cint(h.failed_job_critical),
+					"long_running": cint(h.long_running_job_critical),
+					"load": cint(h.load_average_critical),
+					"swap": cint(h.swap_critical),
+				},
+				"services": services.get(h.name, []),
+				"services_down": sum(1 for s in services.get(h.name, []) if cint(s.is_down)),
+				"workers": w,
+				"open_failed_jobs": failed.get(h.name, 0),
+				"metrics": r,
+				"mounts": host_mounts,
+				"sites": sites.get(h.name, []),
+			}
+		)
+
+	resource = frappe.get_cached_doc("Resource Monitor Settings")
+	host_settings = frappe.get_cached_doc("Host Monitor Settings")
+	return {
+		"hosts": out,
+		"thresholds": {
+			"load_warning": resource.load_warning_percent,
+			"load_critical": resource.load_critical_percent,
+			"swap_warning": resource.swap_warning_percent,
+			"swap_critical": resource.swap_critical_percent,
+			"disk_warning": resource.disk_warning_percent,
+			"disk_critical": resource.disk_critical_percent,
+			"failed_job_warning": host_settings.failed_job_warning_threshold,
+			"failed_job_critical": host_settings.failed_job_critical_threshold,
+		},
+	}
+
+
+@frappe.whitelist()
+def get_host_health_trend(hours: int = 24) -> list[dict]:
+	"""Hourly fleet trend for the Host Health chart: average normalised load
+	across hosts reporting that hour, and how many failed jobs were first
+	seen in it."""
+	frappe.has_permission("Monitored Host", "read", throw=True)
+	hours = min(max(cint(hours) or 24, 1), 24 * 31)
+	since = add_to_date(now_datetime(), hours=-hours)
+	load = {
+		str(r.bucket): r.avg_load
+		for r in frappe.db.sql(
+			"""SELECT DATE_FORMAT(collected_at, '%%Y-%%m-%%d %%H:00:00') AS bucket, AVG(load_normalized_percent) AS avg_load
+			FROM `tabResource Metric Log` WHERE collected_at >= %(since)s GROUP BY bucket""",
+			{"since": since},
+			as_dict=True,
+		)
+	}
+	failures = {
+		str(r.bucket): cint(r.n)
+		for r in frappe.db.sql(
+			"""SELECT DATE_FORMAT(first_seen, '%%Y-%%m-%%d %%H:00:00') AS bucket, COUNT(*) AS n
+			FROM `tabFrappe Failed Job Log` WHERE first_seen >= %(since)s GROUP BY bucket""",
+			{"since": since},
+			as_dict=True,
+		)
+	}
+	out = []
+	t = since.replace(minute=0, second=0, microsecond=0)
+	end = now_datetime()
+	while t <= end:
+		key = t.strftime("%Y-%m-%d %H:00:00")
+		avg = load.get(key)
+		out.append({"bucket": key, "avg_load_percent": round(float(avg), 1) if avg is not None else None, "new_failed_jobs": failures.get(key, 0)})
+		t = add_to_date(t, hours=1)
+	return out

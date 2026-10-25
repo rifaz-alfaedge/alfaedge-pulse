@@ -21,6 +21,7 @@ import { TrendChart } from './TrendChart'
 import { LogSettingsDialog } from './LogSettingsDialog'
 import { ManageSitesDialog } from './ManageSitesDialog'
 import { useSWRConfig } from 'frappe-react-sdk'
+import { Card, Empty, StatTile } from './ui'
 
 const SUB_TABS = ['All Logs', 'Recurring Errors'] as const
 const LOG_TYPE_OPTIONS = ['Error', 'General']
@@ -537,40 +538,4 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
       <div className={`mt-1 break-words text-ink-primary ${mono ? 'font-mono text-xs' : ''}`}>{value || '—'}</div>
     </div>
   )
-}
-
-function StatTile({ label, value, tone = 'ok' }: { label: string; value?: number; tone?: 'ok' | 'critical' }) {
-  return (
-    <div className="rounded-2xl border border-border-hairline bg-surface-card p-4 shadow-sm">
-      <div className={`text-xl font-semibold tabular-nums ${tone === 'critical' ? 'text-status-critical' : 'text-ink-primary'}`}>
-        {value === undefined ? '—' : value.toLocaleString()}
-      </div>
-      <div className="mt-1 text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</div>
-    </div>
-  )
-}
-
-function Card({
-  title,
-  children,
-  noPadding,
-  className = '',
-}: {
-  title: string
-  children: React.ReactNode
-  noPadding?: boolean
-  className?: string
-}) {
-  return (
-    <div className={`rounded-2xl border border-border-hairline bg-surface-card shadow-sm ${className}`}>
-      <div className="border-b border-border-hairline px-5 py-3">
-        <h3 className="text-sm font-semibold text-ink-primary">{title}</h3>
-      </div>
-      <div className={noPadding ? '' : 'p-5'}>{children}</div>
-    </div>
-  )
-}
-
-function Empty({ text }: { text: string }) {
-  return <p className="py-10 text-center text-sm text-ink-muted">{text}</p>
 }
