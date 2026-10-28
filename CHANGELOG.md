@@ -15,7 +15,10 @@ All notable changes to this project are documented here.
   Logs tab (and on each row of the task board's per-site popup, in the
   updated board HTML) opens Desk's New Task form in a new tab, pre-filled
   with the site and error as Subject, details as Description, and Type
-  "Bugs". You pick Project, Owner and End date and save it.
+  "Bugs". The Project is filled in too when exactly one open project
+  matches the site's name (e.g. supra → Supra - CRM, lulu → Lulu - CRM);
+  sites matching several projects (Al Taza, Anson, Eyewa) or none leave it
+  blank. You pick the rest (Owner, End date) and save it.
 
 ## [5.0.0] - 2026-10-24
 

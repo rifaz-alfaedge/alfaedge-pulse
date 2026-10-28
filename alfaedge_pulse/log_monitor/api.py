@@ -15,6 +15,7 @@ Every endpoint converts ClickHouse/config failures into a plain
 
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
 
 import frappe
@@ -362,13 +363,44 @@ def set_error_ignored(signature: str, ignored: int = 1) -> dict:
 	}
 
 
+#: Host labels that say nothing about which client a site belongs to.
+_GENERIC_HOST_LABELS = {"www", "erp", "crm", "app", "alfacrm", "alfaedge", "org", "in", "com", "net"}
+
+
+def _norm(text: str | None) -> str:
+	return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+
+
+def match_project(site: str | None) -> str | None:
+	"""The one open Project whose name matches a site, or None.
+
+	The site's first meaningful host label (``altaza`` for
+	altaza.alfacrm.org, ``lulu`` for lulu) is compared, ignoring case,
+	spaces and punctuation, with each open project's name: it matches when
+	it appears in the name or equals the client part before " - ". Only an
+	unambiguous result is returned — Al Taza has three projects, so its
+	sites get none, and the person picks one in the form."""
+	labels = [p for p in re.split(r"[.\-]", (site or "").lower()) if p and p not in _GENERIC_HOST_LABELS]
+	key = _norm(labels[0]) if labels else ""
+	if len(key) < 4:
+		return None
+	hits = [
+		p.name
+		for p in frappe.get_all("Project", filters={"status": "Open"}, fields=["name", "project_name"])
+		if key in _norm(p.project_name) or _norm((p.project_name or "").split(" - ")[0]) == key
+	]
+	return hits[0] if len(hits) == 1 else None
+
+
 @frappe.whitelist()
 def create_task_url(signature: str) -> dict:
 	"""Desk URL that opens a new Task pre-filled from one error — Subject,
-	Description and Type "Bugs" (when that Task Type exists). Frappe copies a
-	new form's URL query parameters into its fields, so the person picks
-	Project, Owner and End date in the form and saves it themselves; nothing
-	is created here. Used by the Logs tab and the office task board."""
+	Description, Type "Bugs" (when that Task Type exists) and the Project
+	when exactly one open project matches the site (``match_project``).
+	Frappe copies a new form's URL query parameters into its fields, so the
+	person fills in the rest (Owner, End date, Project when not matched) and
+	saves it themselves; nothing is created here. Used by the Logs tab and
+	the office task board."""
 	frappe.only_for(VIEW_ROLES)
 	from urllib.parse import urlencode
 
@@ -395,7 +427,10 @@ def create_task_url(signature: str) -> dict:
 	params = {"subject": subject, "description": description}
 	if frappe.db.exists("Task Type", "Bugs"):
 		params["type"] = "Bugs"
-	return {"url": "/app/task/new?" + urlencode(params)}
+	project = match_project(info["site_url"])
+	if project:
+		params["project"] = project
+	return {"url": "/app/task/new?" + urlencode(params), "project": project}
 
 
 # ---------------------------------------------------------------------------
