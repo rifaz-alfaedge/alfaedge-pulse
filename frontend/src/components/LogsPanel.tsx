@@ -176,7 +176,7 @@ export function LogsPanel() {
           {subTab === 'All Logs' && (
             <MultiSelectFilter label="Log Type" options={LOG_TYPE_OPTIONS} selected={logTypes} onChange={setLogTypes} />
           )}
-          <MultiSelectFilter label="Sites" options={siteOptions} selected={sites} onChange={setSites} />
+          <MultiSelectFilter label="Sites" options={siteOptions} selected={sites} onChange={setSites} searchable />
           <SearchInput value={searchInput} onChange={setSearchInput} placeholder="Search log text…" />
           {canIgnore && (
             <label className="flex items-center gap-2 rounded-xl border border-border-hairline bg-surface-card px-3 py-2 text-sm text-ink-secondary">

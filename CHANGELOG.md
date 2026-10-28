@@ -14,6 +14,8 @@ All notable changes to this project are documented here.
     seen, type, site, message, then occurrences, first seen, alert,
     Resolve). Clicking one opens its latest occurrence instead of
     changing the filters.
+  - The **Sites** filter has a search box: type part of a site to narrow
+    the list; Select all / Clear act on the matches.
 
 ### Added
 - **Ignore an error.** Managers (System Manager, Proxmox Monitor Manager)

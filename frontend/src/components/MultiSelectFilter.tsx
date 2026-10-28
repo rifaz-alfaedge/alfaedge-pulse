@@ -12,29 +12,47 @@ const triggerClass =
  * that's the only other checkbox-list in this app. Empty `selected` always
  * means "no filter" (everything shown), matching how the single-selects
  * this replaces used `''` for "All" — never "select nothing to show
- * nothing." */
+ * nothing."
+ *
+ * ``searchable`` adds a type-to-filter box above the list (for long lists
+ * such as the Error Logs tab's Sites); Select all / Clear then act on the
+ * matching options only. */
 export function MultiSelectFilter({
   label,
   options,
   selected,
   onChange,
+  searchable = false,
 }: {
   label: string
   options: string[]
   selected: string[]
   onChange: (next: string[]) => void
+  searchable?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const rootRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!open) return
     const onClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close()
     }
     document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [open])
+
+  const close = () => {
+    setOpen(false)
+    setQuery('')
+  }
+
+  const needle = query.trim().toLowerCase()
+  const shown = needle ? options.filter((o) => o.toLowerCase().includes(needle)) : options
+  const allShownSelected = shown.length > 0 && shown.every((o) => selected.includes(o))
+  const toggleShown = () =>
+    onChange(allShownSelected ? selected.filter((v) => !shown.includes(v)) : [...new Set([...selected, ...shown])])
 
   const toggle = (option: string) => {
     onChange(selected.includes(option) ? selected.filter((v) => v !== option) : [...selected, option])
@@ -47,7 +65,7 @@ export function MultiSelectFilter({
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? close() : setOpen(true))}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`${triggerClass} flex items-center gap-2 hover:border-accent`}
@@ -57,22 +75,44 @@ export function MultiSelectFilter({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-border-hairline bg-surface-card shadow-lg">
+        <div
+          className={`absolute left-0 top-full z-20 mt-1 rounded-lg border border-border-hairline bg-surface-card shadow-lg ${
+            searchable ? 'w-72' : 'w-56'
+          }`}
+        >
+          {searchable && (
+            <div className="border-b border-border-hairline p-2">
+              <input
+                type="search"
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Escape' && close()}
+                placeholder={`Search ${label.toLowerCase()}…`}
+                aria-label={`Search ${label}`}
+                className="w-full rounded-md border border-border-hairline bg-surface-page px-2.5 py-1.5 text-sm text-ink-primary outline-none focus:border-accent"
+              />
+            </div>
+          )}
           <div className="flex items-center justify-between border-b border-border-hairline px-3 py-2 text-xs text-ink-muted">
-            <span>{label}</span>
+            <span>
+              {label}
+              {needle ? ` · ${shown.length} of ${options.length}` : ''}
+            </span>
             <button
               type="button"
-              onClick={() => onChange(selected.length === options.length ? [] : [...options])}
-              className="font-medium text-accent hover:underline"
+              onClick={toggleShown}
+              disabled={shown.length === 0}
+              className="font-medium text-accent hover:underline disabled:opacity-40"
             >
-              {selected.length === options.length ? 'Clear' : 'Select all'}
+              {allShownSelected ? 'Clear' : 'Select all'}
             </button>
           </div>
           <div className="max-h-64 overflow-y-auto">
-            {options.length === 0 ? (
-              <p className="px-3 py-3 text-sm text-ink-muted">No options.</p>
+            {shown.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-ink-muted">{options.length === 0 ? 'No options.' : 'No matches.'}</p>
             ) : (
-              options.map((option) => (
+              shown.map((option) => (
                 <label
                   key={option}
                   className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm hover:bg-ink-primary/5"
