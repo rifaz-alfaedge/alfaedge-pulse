@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [5.1.0] - 2026-10-28
 
 ### Changed
 - **Logs tab renamed "Error Logs", and easier to work through:**
