@@ -649,6 +649,8 @@ export interface LogFilters {
   logTypes: string[]
   search: string
   signature?: string
+  /** Include errors a manager ignored (they're hidden by default). */
+  showIgnored?: boolean
 }
 
 function logFilterParams(f: LogFilters) {
@@ -658,6 +660,7 @@ function logFilterParams(f: LogFilters) {
     site_url: serializeFilterList(f.sites),
     log_type: serializeFilterList(f.logTypes),
     search: f.search || undefined,
+    show_ignored: f.showIgnored ? 1 : undefined,
   }
 }
 
@@ -710,6 +713,7 @@ export function useRecurringErrors(f: LogFilters, minCount: number, enabled: boo
     site_url: serializeFilterList(f.sites),
     search: f.search || undefined,
     min_count: minCount,
+    show_ignored: f.showIgnored ? 1 : undefined,
   }
   const result = useFrappeGetCall<{ message: RecurringErrorRow[] }>(
     'alfaedge_pulse.log_monitor.api.get_recurring_errors',

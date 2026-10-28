@@ -22,6 +22,7 @@ import { LogSettingsDialog } from './LogSettingsDialog'
 import { ManageSitesDialog } from './ManageSitesDialog'
 import { useSWRConfig } from 'frappe-react-sdk'
 import { Card, Empty, StatTile } from './ui'
+import { CreateTaskButton, IgnoreCheckbox } from './ErrorActions'
 
 const SUB_TABS = ['All Logs', 'Recurring Errors'] as const
 const LOG_TYPE_OPTIONS = ['Error', 'General']
@@ -53,9 +54,10 @@ export function LogsPanel() {
   const [sites, setSites] = useState<string[]>([])
   const [logTypes, setLogTypes] = useState<string[]>([])
   const [searchInput, setSearchInput] = useState('')
+  const [showIgnored, setShowIgnored] = useState(false)
   const [signature, setSignature] = useState<{ id: string; title: string } | null>(null)
   const [page, setPage] = useState(1)
-  const [selectedLog, setSelectedLog] = useState<Pick<LogRow, 'log_id' | 'ts'> | null>(null)
+  const [selectedLog, setSelectedLog] = useState<Pick<LogRow, 'log_id' | 'ts' | 'ignored'> | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sitesOpen, setSitesOpen] = useState(false)
   const { mutate: globalMutate } = useSWRConfig()
@@ -66,8 +68,8 @@ export function LogsPanel() {
     [preset, customStart, customEnd],
   )
   const filters: LogFilters = useMemo(
-    () => ({ startDate, endDate, sites, logTypes, search, signature: signature?.id }),
-    [startDate, endDate, sites, logTypes, search, signature],
+    () => ({ startDate, endDate, sites, logTypes, search, signature: signature?.id, showIgnored }),
+    [startDate, endDate, sites, logTypes, search, signature, showIgnored],
   )
   // Any filter change sends the table back to page 1.
   useEffect(() => setPage(1), [filters])
@@ -75,6 +77,9 @@ export function LogsPanel() {
   const { data: settings, mutate: refreshSettings } = useLogSettings()
   const ready = !!settings?.configured
   const canEdit = !!settings?.can_edit
+  const canIgnore = !!settings?.can_ignore
+  // Ignoring changes every count and list on the tab, so refetch them all.
+  const refreshAll = () => globalMutate(() => true)
   const { data: options } = useLogFilterOptions(ready)
   const { data: summary, error: summaryError } = useLogSummary(filters, ready)
   const { data: logs, error: logsError, isLoading: logsLoading } = useLogs(filters, page, PAGE_LENGTH, ready && subTab === 'All Logs')
@@ -158,6 +163,12 @@ export function LogsPanel() {
           )}
           <MultiSelectFilter label="Sites" options={siteOptions} selected={sites} onChange={setSites} />
           <SearchInput value={searchInput} onChange={setSearchInput} placeholder="Search log text…" />
+          {canIgnore && (
+            <label className="flex items-center gap-2 rounded-xl border border-border-hairline bg-surface-card px-3 py-2 text-sm text-ink-secondary">
+              <input type="checkbox" checked={showIgnored} onChange={(e) => setShowIgnored(e.target.checked)} />
+              Show ignored
+            </label>
+          )}
         </div>
       </div>
 
@@ -214,7 +225,13 @@ export function LogsPanel() {
             </div>
           )}
           <Card title={logs ? `${logs.total.toLocaleString()} log${logs.total === 1 ? '' : 's'}` : 'Logs'} noPadding>
-            <LogTable rows={logs?.rows ?? []} loading={logsLoading && !logs} onOpen={setSelectedLog} />
+            <LogTable
+              rows={logs?.rows ?? []}
+              loading={logsLoading && !logs}
+              onOpen={setSelectedLog}
+              canIgnore={canIgnore}
+              onIgnoredChanged={refreshAll}
+            />
             {logs && logs.total > PAGE_LENGTH && (
               <Pager page={page} pageLength={PAGE_LENGTH} total={logs.total} onChange={setPage} />
             )}
@@ -227,11 +244,16 @@ export function LogsPanel() {
             loading={recurringLoading && !recurring}
             onOpen={openSignature}
             onResolved={() => refreshRecurring()}
+            canIgnore={canIgnore}
+            showIgnored={showIgnored}
+            onIgnoredChanged={refreshAll}
           />
         </Card>
       )}
 
-      {selectedLog && <LogDetailDialog log={selectedLog} onClose={() => setSelectedLog(null)} />}
+      {selectedLog && (
+        <LogDetailDialog log={selectedLog} canIgnore={canIgnore} onIgnoredChanged={refreshAll} onClose={() => setSelectedLog(null)} />
+      )}
       {canEdit && sitesOpen && (
         <ManageSitesDialog
           canEdit
@@ -272,10 +294,14 @@ function LogTable({
   rows,
   loading,
   onOpen,
+  canIgnore,
+  onIgnoredChanged,
 }: {
   rows: LogRow[]
   loading: boolean
   onOpen: (row: LogRow) => void
+  canIgnore: boolean
+  onIgnoredChanged: () => void
 }) {
   if (loading) return <Empty text="Loading…" />
   if (rows.length === 0) return <Empty text="No logs match these filters." />
@@ -288,6 +314,9 @@ function LogTable({
             <th className="px-3 py-3 font-medium">Type</th>
             <th className="px-3 py-3 font-medium">Site</th>
             <th className="px-5 py-3 font-medium">Message</th>
+            <th className="px-5 py-3">
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -295,7 +324,7 @@ function LogTable({
             <tr
               key={`${row.log_id}-${row.ts}`}
               onClick={() => onOpen(row)}
-              className="cursor-pointer border-b border-border-hairline last:border-0 hover:bg-surface-page"
+              className={`cursor-pointer border-b border-border-hairline last:border-0 hover:bg-surface-page ${row.ignored ? 'opacity-60' : ''}`}
             >
               <td className="whitespace-nowrap px-5 py-3 align-top text-ink-secondary" title={row.ts}>
                 {row.ts}
@@ -314,6 +343,14 @@ function LogTable({
                   <div className="mt-0.5 line-clamp-2 font-mono text-xs text-ink-muted">{row.preview}</div>
                 )}
               </td>
+              <td className="whitespace-nowrap px-5 py-3 text-right align-top">
+                {row.log_type === 'Error' && (
+                  <span className="inline-flex items-start gap-3">
+                    <IgnoreCheckbox signature={row.signature} ignored={!!row.ignored} canIgnore={canIgnore} onChanged={onIgnoredChanged} />
+                    <CreateTaskButton signature={row.signature} compact />
+                  </span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -327,18 +364,26 @@ function RecurringTable({
   loading,
   onOpen,
   onResolved,
+  canIgnore,
+  showIgnored,
+  onIgnoredChanged,
 }: {
   rows: RecurringErrorRow[]
   loading: boolean
   onOpen: (row: RecurringErrorRow) => void
   onResolved: () => void
+  canIgnore: boolean
+  showIgnored: boolean
+  onIgnoredChanged: () => void
 }) {
   const { call: resolve } = useFrappePostCall('alfaedge_pulse.log_monitor.api.resolve_error')
   // Hidden optimistically the moment Resolve is clicked, rather than
   // waiting for the refetch.
   const [resolving, setResolving] = useState<Set<string>>(new Set())
   const [resolveError, setResolveError] = useState<string | null>(null)
-  const visible = rows.filter((r) => !resolving.has(r.signature))
+  // Ignored rows also vanish at once (unless Show ignored is on).
+  const [ignoring, setIgnoring] = useState<Set<string>>(new Set())
+  const visible = rows.filter((r) => !resolving.has(r.signature) && (showIgnored || !ignoring.has(r.signature)))
 
   const onResolve = async (row: RecurringErrorRow) => {
     setResolveError(null)
@@ -372,7 +417,10 @@ function RecurringTable({
             <th className="px-3 py-3 font-medium">First seen</th>
             <th className="px-3 py-3 font-medium">Last seen</th>
             <th className="px-3 py-3 font-medium">Alert</th>
-            <th className="px-5 py-3" />
+            <th className="px-3 py-3 font-medium">Ignore</th>
+            <th className="px-5 py-3">
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -380,7 +428,7 @@ function RecurringTable({
             <tr
               key={row.signature}
               onClick={() => onOpen(row)}
-              className="cursor-pointer border-b border-border-hairline last:border-0 hover:bg-surface-page"
+              className={`cursor-pointer border-b border-border-hairline last:border-0 hover:bg-surface-page ${row.ignored ? 'opacity-60' : ''}`}
             >
               <td className="px-5 py-3 align-top">
                 <div className="line-clamp-2 font-mono text-xs text-ink-primary" title={row.title}>
@@ -416,18 +464,42 @@ function RecurringTable({
                   <span className="text-xs text-ink-muted">—</span>
                 )}
               </td>
-              <td className="px-5 py-3 text-right align-top">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onResolve(row)
+              <td className="px-3 py-3 align-top">
+                <IgnoreCheckbox
+                  signature={row.signature}
+                  ignored={row.ignored}
+                  canIgnore={canIgnore}
+                  onChanged={(next) => {
+                    setIgnoring((s) => {
+                      const copy = new Set(s)
+                      if (next) copy.add(row.signature)
+                      else copy.delete(row.signature)
+                      return copy
+                    })
+                    onIgnoredChanged()
                   }}
-                  className="rounded-lg border border-border-hairline px-3 py-1 text-xs font-medium text-ink-primary hover:border-status-good hover:text-status-good"
-                  title="Hide this error until it happens again"
-                >
-                  Resolve
-                </button>
+                />
+                {row.ignored && row.ignored_by && (
+                  <div className="mt-0.5 text-[11px] text-ink-muted" title={row.ignored_at ?? ''}>
+                    by {row.ignored_by}
+                  </div>
+                )}
+              </td>
+              <td className="whitespace-nowrap px-5 py-3 text-right align-top">
+                <span className="inline-flex items-start gap-2">
+                  <CreateTaskButton signature={row.signature} />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onResolve(row)
+                    }}
+                    className="rounded-lg border border-border-hairline px-3 py-1 text-xs font-medium text-ink-primary hover:border-status-good hover:text-status-good"
+                    title="Hide this error until it happens again"
+                  >
+                    Resolve
+                  </button>
+                </span>
               </td>
             </tr>
           ))}
@@ -470,7 +542,18 @@ function Pager({
   )
 }
 
-function LogDetailDialog({ log, onClose }: { log: Pick<LogRow, 'log_id' | 'ts'>; onClose: () => void }) {
+function LogDetailDialog({
+  log,
+  canIgnore,
+  onIgnoredChanged,
+  onClose,
+}: {
+  log: Pick<LogRow, 'log_id' | 'ts'> & { ignored?: boolean }
+  canIgnore: boolean
+  onIgnoredChanged: () => void
+  onClose: () => void
+}) {
+  const [ignored, setIgnored] = useState(!!log.ignored)
   const { call } = useFrappePostCall<{ message: LogDetail }>('alfaedge_pulse.log_monitor.api.get_log_detail')
   const [detail, setDetail] = useState<LogDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -513,6 +596,20 @@ function LogDetailDialog({ log, onClose }: { log: Pick<LogRow, 'log_id' | 'ts'>;
               </div>
             </div>
             <Field label="Message" value={detail.title} mono />
+            {detail.log_type === 'Error' && (
+              <div className="flex flex-wrap items-center gap-4">
+                <CreateTaskButton signature={detail.signature} />
+                <IgnoreCheckbox
+                  signature={detail.signature}
+                  ignored={ignored}
+                  canIgnore={canIgnore}
+                  onChanged={(next) => {
+                    setIgnored(next)
+                    onIgnoredChanged()
+                  }}
+                />
+              </div>
+            )}
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wide text-ink-muted">Full content</span>

@@ -454,6 +454,8 @@ export interface LogRow {
   signature: string
   preview: string
   truncated: boolean
+  /** Only present (and true) when listed with Show ignored. */
+  ignored?: boolean
 }
 
 export interface LogPage {
@@ -484,6 +486,10 @@ export interface RecurringErrorRow {
   resolved_by: string | null
   /** Resolved before, and has happened again since (counts are post-resolution). */
   reopened: boolean
+  /** Ignored by a manager: hidden everywhere unless Show ignored is on. */
+  ignored: boolean
+  ignored_at: string | null
+  ignored_by: string | null
 }
 
 /** What every Logs-tab viewer gets from get_log_settings. */
@@ -492,6 +498,8 @@ export interface LogSettingsPublic {
   configured: boolean
   last_checked: string | null
   can_edit: boolean
+  /** System Manager / Proxmox Monitor Manager: may ignore errors. */
+  can_ignore: boolean
 }
 
 /** The full settings — only returned to Proxmox Monitor Manager. */

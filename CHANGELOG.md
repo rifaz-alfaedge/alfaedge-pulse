@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+- **Ignore an error.** Managers (System Manager, Proxmox Monitor Manager)
+  can tick **Ignore** on an error in the Logs tab — in All Logs, Recurring
+  Errors or the log dialog. An ignored error disappears from every error
+  list and count, including the office task board, and never alerts; any
+  open alert for it closes quietly. **Show ignored** lists them again so
+  they can be un-ticked. Stored on the error's Recurring Error.
+- **Create Task from an error.** A **Create task** button on errors in the
+  Logs tab (and on each row of the task board's per-site popup, in the
+  updated board HTML) opens Desk's New Task form in a new tab, pre-filled
+  with the site and error as Subject, details as Description, and Type
+  "Bugs". You pick Project, Owner and End date and save it.
+
 ## [5.0.0] - 2026-10-24
 
 ### Removed
