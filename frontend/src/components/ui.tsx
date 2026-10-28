@@ -18,20 +18,39 @@ export function StatTile({
   value,
   sub,
   tone = 'ok',
+  onClick,
+  active,
 }: {
   label: string
   value?: number | string
   sub?: ReactNode
   tone?: Tone
+  /** Makes the tile a button (e.g. to filter the list below it). */
+  onClick?: () => void
+  /** Highlights a clickable tile whose filter is currently applied. */
+  active?: boolean
 }) {
-  return (
-    <div className="rounded-2xl border border-border-hairline bg-surface-card p-4 shadow-sm">
+  const body = (
+    <>
       <div className={`text-xl font-semibold tabular-nums ${TONE_TEXT[tone]}`}>
         {value === undefined ? '—' : typeof value === 'number' ? value.toLocaleString() : value}
       </div>
       <div className="mt-1 text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</div>
       {sub && <div className="mt-1 truncate text-xs text-ink-muted">{sub}</div>}
-    </div>
+    </>
+  )
+  if (!onClick) return <div className="rounded-2xl border border-border-hairline bg-surface-card p-4 shadow-sm">{body}</div>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={!!active}
+      className={`rounded-2xl border bg-surface-card p-4 text-left shadow-sm transition-colors hover:border-accent ${
+        active ? 'border-accent ring-1 ring-accent' : 'border-border-hairline'
+      }`}
+    >
+      {body}
+    </button>
   )
 }
 

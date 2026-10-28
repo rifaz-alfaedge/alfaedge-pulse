@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **Logs tab renamed "Error Logs", and easier to work through:**
+  - Ignore and Create task are the first columns.
+  - The number cards filter the list: Total, Errors and General set the
+    type; Distinct Errors opens Recurring Errors.
+  - A **Clear filters** button resets everything.
+  - Recurring Errors uses the same columns and look as All Logs (last
+    seen, type, site, message, then occurrences, first seen, alert,
+    Resolve). Clicking one opens its latest occurrence instead of
+    changing the filters.
+
 ### Added
 - **Ignore an error.** Managers (System Manager, Proxmox Monitor Manager)
   can tick **Ignore** on an error in the Logs tab — in All Logs, Recurring

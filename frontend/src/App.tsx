@@ -36,7 +36,7 @@ import type { ProxmoxGuest, ProxmoxServer } from './lib/types'
 // wrong right now" tabs — followed by AI Usage, the renamed Overview
 // ("Usage Metrics"), Backups, Alerts, and AI Insights last (a weekly-
 // cadence tab, the lowest-traffic one here).
-const MAIN_TABS = ['Host Health', 'Uptime', 'Logs', 'AI Usage', 'Usage Metrics', 'Backups', 'Alerts', 'AI Insights'] as const
+const MAIN_TABS = ['Host Health', 'Uptime', 'Error Logs', 'AI Usage', 'Usage Metrics', 'Backups', 'Alerts', 'AI Insights'] as const
 const DEFAULT_WARNING_THRESHOLD = 85
 const DEFAULT_CRITICAL_THRESHOLD = 95
 const DEFAULT_POLL_SECONDS = 20
@@ -258,7 +258,7 @@ function App() {
       {mainTab === 'AI Insights' && <AiInsightsPanel />}
       {mainTab === 'Uptime' && <UptimePanel />}
       {mainTab === 'Host Health' && <HostHealthPanel />}
-      {mainTab === 'Logs' && <LogsPanel />}
+      {mainTab === 'Error Logs' && <LogsPanel />}
 
       <AlertsPopup />
 
