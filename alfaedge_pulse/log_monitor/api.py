@@ -32,12 +32,14 @@ from alfaedge_pulse.log_monitor.connection import (
 	get_site_aliases,
 	normalize_site,
 )
-from alfaedge_pulse.log_monitor.queries import base_params, build_filtered, site_host_expr, ts_out
+from alfaedge_pulse.log_monitor.queries import base_params, build_filtered, get_ignored, site_host_expr, ts_out
 
 VIEW_ROLES = ("System Manager", "Proxmox Monitor Manager", "Proxmox Monitor Viewer")
 #: Connection settings and site aliases are managed by this role alone —
 #: every other dashboard role can only view and filter the logs.
 MANAGER_ROLES = ("Proxmox Monitor Manager",)
+#: Who may ignore an error (hides it everywhere and stops its alerts).
+IGNORE_ROLES = ("System Manager", "Proxmox Monitor Manager")
 MAX_PAGE_LENGTH = 200
 PREVIEW_CHARS = 400
 #: ~this many points per trend chart, whatever the selected range.
@@ -83,7 +85,7 @@ def _range(start_date: str | None, end_date: str | None, default_days: int = 1) 
 	return start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _filters(start_date, end_date, site_url, log_type, signature=None, search=None):
+def _filters(start_date, end_date, site_url, log_type, signature=None, search=None, show_ignored=0):
 	start, end = _range(start_date, end_date)
 	return build_filtered(
 		start, end,
@@ -91,6 +93,7 @@ def _filters(start_date, end_date, site_url, log_type, signature=None, search=No
 		log_types=_parse_list(log_type),
 		signature=signature or None,
 		search=(search or "").strip() or None,
+		exclude_ignored=not cint(show_ignored),
 	)
 
 
@@ -115,11 +118,12 @@ def get_log_filter_options(days: int = 30) -> dict:
 
 
 @frappe.whitelist()
-def get_log_summary(start_date=None, end_date=None, site_url=None, log_type=None, search=None) -> dict:
-	"""Totals for the summary tiles plus a bucketed Error/General trend."""
+def get_log_summary(start_date=None, end_date=None, site_url=None, log_type=None, search=None, show_ignored=0) -> dict:
+	"""Totals for the summary tiles plus a bucketed Error/General trend.
+	Ignored errors are left out unless ``show_ignored``."""
 	frappe.only_for(VIEW_ROLES)
 	start, end = _range(start_date, end_date)
-	from_sql, params = _filters(start_date, end_date, site_url, log_type, search=search)
+	from_sql, params = _filters(start_date, end_date, site_url, log_type, search=search, show_ignored=show_ignored)
 	bucket = _bucket_seconds(start, end)
 	params["bucket"] = bucket
 	with _clickhouse_errors():
@@ -151,14 +155,15 @@ def get_log_summary(start_date=None, end_date=None, site_url=None, log_type=None
 @frappe.whitelist()
 def get_logs(
 	start_date=None, end_date=None, site_url=None, log_type=None, signature=None, search=None,
-	page: int = 1, page_length: int = 50, sort_order: str = "desc",
+	page: int = 1, page_length: int = 50, sort_order: str = "desc", show_ignored=0,
 ) -> dict:
-	"""One page of log rows (content truncated — see ``get_log_detail``)."""
+	"""One page of log rows (content truncated — see ``get_log_detail``).
+	Ignored errors are left out unless ``show_ignored``."""
 	frappe.only_for(VIEW_ROLES)
 	page = max(cint(page), 1)
 	page_length = min(max(cint(page_length), 1), MAX_PAGE_LENGTH)
 	direction = "ASC" if str(sort_order).lower() == "asc" else "DESC"
-	from_sql, params = _filters(start_date, end_date, site_url, log_type, signature, search)
+	from_sql, params = _filters(start_date, end_date, site_url, log_type, signature, search, show_ignored)
 	params.update({"limit": page_length, "offset": (page - 1) * page_length, "preview": PREVIEW_CHARS})
 	with _clickhouse_errors():
 		client = get_client()
@@ -170,8 +175,10 @@ def get_logs(
 				{from_sql} ORDER BY lm_ts {direction} LIMIT {{limit:UInt32}} OFFSET {{offset:UInt32}}""",
 			params,
 		)
+	ignored = set(get_ignored()) if cint(show_ignored) else set()
 	for r in rows:
 		r["truncated"] = bool(cint(r["truncated"]))
+		r["ignored"] = r["signature"] in ignored
 	return {"total": total, "page": page, "page_length": page_length, "rows": rows}
 
 
@@ -185,6 +192,7 @@ def get_log_detail(log_id: str, ts: str) -> dict:
 		add_to_date(moment, seconds=-1).strftime("%Y-%m-%d %H:%M:%S"),
 		add_to_date(moment, seconds=2).strftime("%Y-%m-%d %H:%M:%S"),
 		log_id=str(log_id),
+		exclude_ignored=False,
 	)
 	with _clickhouse_errors():
 		rows = get_client().query(
@@ -201,7 +209,7 @@ def get_log_detail(log_id: str, ts: str) -> dict:
 @frappe.whitelist()
 def get_recurring_errors(
 	start_date=None, end_date=None, site_url=None, search=None, min_count: int = 2, limit: int = 200,
-	hide_resolved: int = 1,
+	hide_resolved: int = 1, show_ignored: int = 0,
 ) -> list[dict]:
 	"""Error rows grouped by signature, most frequent first, annotated with
 	this app's own alert state for that signature.
@@ -218,6 +226,7 @@ def get_recurring_errors(
 		log_types=["Error"],
 		search=(search or "").strip() or None,
 		exclude_resolved=bool(cint(hide_resolved)),
+		exclude_ignored=not cint(show_ignored),
 	)
 	params.update({"min_count": max(cint(min_count), 1), "limit": min(max(cint(limit), 1), 1000)})
 	with _clickhouse_errors():
@@ -236,7 +245,8 @@ def get_recurring_errors(
 			for r in frappe.get_all(
 				"Recurring Error",
 				filters={"signature": ["in", [r["signature"] for r in rows]]},
-				fields=["name", "signature", "is_critical", "alert_count", "monitored_host", "resolved_at", "resolved_by"],
+				fields=["name", "signature", "is_critical", "alert_count", "monitored_host", "resolved_at", "resolved_by",
+					"ignored", "ignored_at", "ignored_by"],
 			)
 		}
 	for r in rows:
@@ -248,9 +258,46 @@ def get_recurring_errors(
 		r["monitored_host"] = local.monitored_host if local else None
 		r["resolved_at"] = str(local.resolved_at) if local and local.resolved_at else None
 		r["resolved_by"] = local.resolved_by if local else None
+		r["ignored"] = bool(local and local.ignored)
+		r["ignored_at"] = str(local.ignored_at) if local and local.ignored_at else None
+		r["ignored_by"] = local.ignored_by if local else None
 		# Shown despite a resolution → it has happened again since.
 		r["reopened"] = bool(r["resolved_at"]) and bool(cint(hide_resolved))
 	return rows
+
+
+def _lookup_error(signature: str) -> dict:
+	"""One error's site, latest title, first/last seen and count over the
+	last 30 days, looked up in ClickHouse rather than trusting display
+	fields from the client — the signature must be a real one."""
+	if not (signature or "").isdigit():
+		frappe.throw(frappe._("Invalid error signature"))
+	start, end = _range(None, None, default_days=30)
+	from_sql, params = build_filtered(start, end, log_types=["Error"], signature=signature, exclude_ignored=False)
+	with _clickhouse_errors():
+		found = get_client().query(
+			f"""SELECT any(lm_site) AS site_url, argMax(lm_title, lm_ts) AS title,
+				{ts_out('min(lm_ts)')} AS first_seen, {ts_out('max(lm_ts)')} AS last_seen, count() AS c
+				{from_sql}""",
+			params,
+		)
+	if not found or not cint(found[0]["c"]):
+		frappe.throw(frappe._("No error with this signature in the last 30 days"), frappe.DoesNotExistError)
+	return found[0]
+
+
+def _recurring_error_doc(signature: str, info: dict):
+	"""The signature's Recurring Error, created from ``info`` if new."""
+	name = frappe.db.get_value("Recurring Error", {"signature": signature})
+	doc = frappe.get_doc("Recurring Error", name) if name else frappe.new_doc("Recurring Error")
+	doc.update({
+		"signature": signature,
+		"title": doc.title or info["title"] or "(no message)",
+		"site_url": doc.site_url or info["site_url"],
+		"first_seen": doc.first_seen or info["first_seen"],
+		"last_seen": info["last_seen"],
+	})
+	return doc
 
 
 @frappe.whitelist(methods=["POST"])
@@ -264,33 +311,11 @@ def resolve_error(signature: str) -> dict:
 	from alfaedge_pulse.alerts.dispatch import dispatch_recovery, has_open_alert, resolve_alert
 
 	signature = (signature or "").strip()
-	if not signature.isdigit():
-		frappe.throw(frappe._("Invalid error signature"))
-
-	# Look the error up in ClickHouse rather than trusting display fields
-	# from the client — the signature must be a real one.
-	start, end = _range(None, None, default_days=30)
-	from_sql, params = build_filtered(start, end, log_types=["Error"], signature=signature)
-	with _clickhouse_errors():
-		found = get_client().query(
-			f"""SELECT any(lm_site) AS site_url, argMax(lm_title, lm_ts) AS title,
-				{ts_out('min(lm_ts)')} AS first_seen, {ts_out('max(lm_ts)')} AS last_seen, count() AS c
-				{from_sql}""",
-			params,
-		)
-	if not found or not cint(found[0]["c"]):
-		frappe.throw(frappe._("No error with this signature in the last 30 days"), frappe.DoesNotExistError)
-	info = found[0]
+	info = _lookup_error(signature)
 
 	now = now_datetime()
-	name = frappe.db.get_value("Recurring Error", {"signature": signature})
-	doc = frappe.get_doc("Recurring Error", name) if name else frappe.new_doc("Recurring Error")
+	doc = _recurring_error_doc(signature, info)
 	doc.update({
-		"signature": signature,
-		"title": doc.title or info["title"] or "(no message)",
-		"site_url": doc.site_url or info["site_url"],
-		"first_seen": doc.first_seen or info["first_seen"],
-		"last_seen": info["last_seen"],
 		"is_critical": 0,
 		"window_count": 0,
 		"resolved_at": now,
@@ -306,6 +331,71 @@ def resolve_error(signature: str) -> dict:
 			f"Marked resolved by {who}: {doc.title} on {doc.site_url}",
 		)
 	return {"signature": signature, "resolved_at": str(now), "resolved_by": frappe.session.user}
+
+
+@frappe.whitelist(methods=["POST"])
+def set_error_ignored(signature: str, ignored: int = 1) -> dict:
+	"""Ignore (or un-ignore) one error — one signature, i.e. one error on one
+	site. An ignored error is left out of every error list and count (the
+	Logs tab, the task board) and never alerts, until a manager un-ignores
+	it. Ignoring also closes any open Recurring Error alert for it, quietly:
+	no "back to normal" is sent, since nothing actually recovered."""
+	if not _can_ignore():
+		frappe.throw(frappe._("Only a Proxmox Monitor Manager or System Manager can ignore errors."), frappe.PermissionError)
+	from alfaedge_pulse.alerts.dispatch import has_open_alert, resolve_alert
+
+	signature = (signature or "").strip()
+	info = _lookup_error(signature)
+	doc = _recurring_error_doc(signature, info)
+	if cint(ignored):
+		doc.update({"ignored": 1, "ignored_at": now_datetime(), "ignored_by": frappe.session.user, "is_critical": 0, "window_count": 0})
+	else:
+		doc.update({"ignored": 0, "ignored_at": None, "ignored_by": None})
+	doc.save(ignore_permissions=True)
+	if cint(ignored) and has_open_alert("Recurring Error", doc.name, "Recurring Error"):
+		resolve_alert("Recurring Error", doc.name, "Recurring Error")
+	return {
+		"signature": signature,
+		"ignored": bool(doc.ignored),
+		"ignored_at": str(doc.ignored_at) if doc.ignored_at else None,
+		"ignored_by": doc.ignored_by,
+	}
+
+
+@frappe.whitelist()
+def create_task_url(signature: str) -> dict:
+	"""Desk URL that opens a new Task pre-filled from one error — Subject,
+	Description and Type "Bugs" (when that Task Type exists). Frappe copies a
+	new form's URL query parameters into its fields, so the person picks
+	Project, Owner and End date in the form and saves it themselves; nothing
+	is created here. Used by the Logs tab and the office task board."""
+	frappe.only_for(VIEW_ROLES)
+	from urllib.parse import urlencode
+
+	from frappe.utils import escape_html, get_url
+
+	signature = (signature or "").strip()
+	info = _lookup_error(signature)
+	site = info["site_url"] or "unknown site"
+	title = (info["title"] or "(no message)").strip()
+	subject = f"[{site}] {title}"
+	if len(subject) > 140:
+		subject = subject[:139].rstrip() + "…"
+	description = (
+		f"<p><strong>Error on {escape_html(site)}</strong></p>"
+		f"<p><code>{escape_html(title)}</code></p>"
+		"<ul>"
+		f"<li>Occurrences (last 30 days): {cint(info['c']):,}</li>"
+		f"<li>First seen: {escape_html(str(info['first_seen']))}</li>"
+		f"<li>Last seen: {escape_html(str(info['last_seen']))}</li>"
+		f"<li>Error signature: {escape_html(signature)}</li>"
+		"</ul>"
+		f'<p><a href="{escape_html(get_url("/alfaedge-pulse"))}">Open alfaEdge Pulse → Logs</a></p>'
+	)
+	params = {"subject": subject, "description": description}
+	if frappe.db.exists("Task Type", "Bugs"):
+		params["type"] = "Bugs"
+	return {"url": "/app/task/new?" + urlencode(params)}
 
 
 # ---------------------------------------------------------------------------
@@ -395,12 +485,17 @@ def get_log_settings() -> dict:
 		"configured": bool(settings.enabled and (settings.host or "").strip()),
 		"last_checked": settings.last_checked,
 		"can_edit": can_edit,
+		"can_ignore": _can_ignore(),
 	}
 	if can_edit:
 		data.update({field: settings.get(field) for field in EDITABLE_FIELDS})
 		data.update({f"has_{field}": bool(get_secret(field)) for field in SECRET_FIELDS})
 		data.update({"effective_url": settings.effective_url, "last_error": settings.last_error})
 	return data
+
+
+def _can_ignore() -> bool:
+	return frappe.session.user == "Administrator" or bool(set(frappe.get_roles()) & set(IGNORE_ROLES))
 
 
 def _is_manager() -> bool:

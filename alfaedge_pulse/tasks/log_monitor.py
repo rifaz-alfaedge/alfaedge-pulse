@@ -119,7 +119,7 @@ def run_check(settings=None, now=None) -> dict:
 			alerted += 1
 
 	for name, sig, title, site_url in frappe.get_all(
-		REFERENCE_DOCTYPE, filters={"is_critical": 1}, fields=["name", "signature", "title", "site_url"], as_list=True
+		REFERENCE_DOCTYPE, filters={"is_critical": 1, "ignored": 0}, fields=["name", "signature", "title", "site_url"], as_list=True
 	):
 		if sig in breaching:
 			continue

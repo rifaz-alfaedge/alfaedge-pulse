@@ -37,6 +37,11 @@ it.
   signature at or before its Recurring Error's ``resolved_at`` are
   dropped. A resolved error therefore vanishes from recurring-error views
   and alert counts until it happens again.
+- **Ignored errors**: a signature a manager marked ``ignored`` on its
+  Recurring Error is dropped from every query by default
+  (``exclude_ignored``) — error lists, counts, the task board and the
+  recurring-error alerts alike. Unlike a resolution it never comes back on
+  its own; only the dashboard's "Show ignored" view includes it.
 - **Timestamps** go in as ``String`` params converted with an explicit
   timezone (the site's system timezone), and come back formatted in that
   same timezone, so the dashboard's "naive string = site-local" convention
@@ -143,6 +148,11 @@ def get_resolutions() -> dict[str, str]:
 	}
 
 
+def get_ignored() -> list[str]:
+	"""Signatures a manager marked ignored."""
+	return frappe.get_all("Recurring Error", filters={"ignored": 1}, pluck="signature")
+
+
 def build_filtered(
 	start: str,
 	end: str,
@@ -152,6 +162,7 @@ def build_filtered(
 	search: str | None = None,
 	log_id: str | None = None,
 	exclude_resolved: bool = False,
+	exclude_ignored: bool = True,
 	cols: ColumnMap | None = None,
 ) -> tuple[str, dict]:
 	"""``FROM (...) WHERE ...`` fragment + params with all dashboard filters
@@ -183,6 +194,11 @@ def build_filtered(
 			)
 			params["res_sigs"] = list(resolutions.keys())
 			params["res_ats"] = list(resolutions.values())
+	if exclude_ignored:
+		ignored = get_ignored()
+		if ignored:
+			outer.append("lm_sig NOT IN {ign_sigs:Array(String)}")
+			params["ign_sigs"] = ignored
 	if search:
 		outer.append("(positionCaseInsensitive(lm_content, {q:String}) > 0 OR positionCaseInsensitive(lm_site, {q:String}) > 0)")
 		params["q"] = str(search)
