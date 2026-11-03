@@ -1,0 +1,304 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-11-04 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "monitored_host",
+  "collected_at",
+  "memory_section",
+  "mem_total_mb",
+  "mem_available_mb",
+  "mem_used_percent",
+  "cached_mb",
+  "buffers_mb",
+  "slab_mb",
+  "dirty_mb",
+  "writeback_mb",
+  "rates_valid",
+  "swap_section",
+  "swap_total_mb",
+  "swap_used_mb",
+  "swap_in_per_s",
+  "swap_out_per_s",
+  "pswpin_total",
+  "pswpout_total",
+  "oom_section",
+  "oom_kill_total",
+  "oom_kills_since_last",
+  "cgroup_section",
+  "cgroup_mem_limit_mb",
+  "cgroup_mem_current_mb",
+  "cgroup_oom_kill_total",
+  "cgroup_oom_kills_since_last",
+  "cpu_limit_cores",
+  "nr_throttled_total",
+  "throttled_usec_total",
+  "cpu_throttled_percent",
+  "psi_section",
+  "psi_cpu_some",
+  "psi_memory_some",
+  "psi_memory_full",
+  "psi_io_some",
+  "psi_io_full",
+  "proc_section",
+  "top_processes"
+ ],
+ "fields": [
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "label": "Collected At",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "memory_section",
+   "fieldtype": "Section Break",
+   "label": "Memory"
+  },
+  {
+   "fieldname": "mem_total_mb",
+   "fieldtype": "Float",
+   "label": "Total (MB)"
+  },
+  {
+   "fieldname": "mem_available_mb",
+   "fieldtype": "Float",
+   "label": "Available (MB)"
+  },
+  {
+   "fieldname": "mem_used_percent",
+   "fieldtype": "Percent",
+   "label": "Used %",
+   "description": "(total - available) / total. Cache that the kernel can give back counts as available."
+  },
+  {
+   "fieldname": "cached_mb",
+   "fieldtype": "Float",
+   "label": "Cached (MB)"
+  },
+  {
+   "fieldname": "buffers_mb",
+   "fieldtype": "Float",
+   "label": "Buffers (MB)"
+  },
+  {
+   "fieldname": "slab_mb",
+   "fieldtype": "Float",
+   "label": "Slab (MB)"
+  },
+  {
+   "fieldname": "dirty_mb",
+   "fieldtype": "Float",
+   "label": "Dirty (MB)"
+  },
+  {
+   "fieldname": "writeback_mb",
+   "fieldtype": "Float",
+   "label": "Writeback (MB)"
+  },
+  {
+   "fieldname": "rates_valid",
+   "fieldtype": "Check",
+   "label": "Rates Valid",
+   "read_only": 1,
+   "description": "0 for the first sample, after a counter reset or after a long gap: the per-second figures on this row are then 0 because nothing could be computed, not because nothing happened."
+  },
+  {
+   "fieldname": "swap_section",
+   "fieldtype": "Section Break",
+   "label": "Swap"
+  },
+  {
+   "fieldname": "swap_total_mb",
+   "fieldtype": "Float",
+   "label": "Swap Total (MB)"
+  },
+  {
+   "fieldname": "swap_used_mb",
+   "fieldtype": "Float",
+   "label": "Swap Used (MB)"
+  },
+  {
+   "fieldname": "swap_in_per_s",
+   "fieldtype": "Float",
+   "label": "Swap In (pages/s)"
+  },
+  {
+   "fieldname": "swap_out_per_s",
+   "fieldtype": "Float",
+   "label": "Swap Out (pages/s)"
+  },
+  {
+   "fieldname": "pswpin_total",
+   "fieldtype": "Long Int",
+   "label": "Swap In Counter"
+  },
+  {
+   "fieldname": "pswpout_total",
+   "fieldtype": "Long Int",
+   "label": "Swap Out Counter"
+  },
+  {
+   "fieldname": "oom_section",
+   "fieldtype": "Section Break",
+   "label": "Out-of-memory kills"
+  },
+  {
+   "fieldname": "oom_kill_total",
+   "fieldtype": "Long Int",
+   "label": "OOM Kill Counter"
+  },
+  {
+   "fieldname": "oom_kills_since_last",
+   "fieldtype": "Int",
+   "label": "OOM Kills Since Last Sample"
+  },
+  {
+   "fieldname": "cgroup_section",
+   "fieldtype": "Section Break",
+   "label": "Container limits"
+  },
+  {
+   "fieldname": "cgroup_mem_limit_mb",
+   "fieldtype": "Float",
+   "label": "Memory Limit (MB)"
+  },
+  {
+   "fieldname": "cgroup_mem_current_mb",
+   "fieldtype": "Float",
+   "label": "Memory In Use (MB)"
+  },
+  {
+   "fieldname": "cgroup_oom_kill_total",
+   "fieldtype": "Long Int",
+   "label": "Container OOM Kill Counter"
+  },
+  {
+   "fieldname": "cgroup_oom_kills_since_last",
+   "fieldtype": "Int",
+   "label": "Container OOM Kills Since Last Sample"
+  },
+  {
+   "fieldname": "cpu_limit_cores",
+   "fieldtype": "Float",
+   "label": "CPU Limit (cores)"
+  },
+  {
+   "fieldname": "nr_throttled_total",
+   "fieldtype": "Long Int",
+   "label": "Throttled Periods Counter"
+  },
+  {
+   "fieldname": "throttled_usec_total",
+   "fieldtype": "Long Int",
+   "label": "Throttled Time Counter (usec)"
+  },
+  {
+   "fieldname": "cpu_throttled_percent",
+   "fieldtype": "Float",
+   "label": "CPU Throttled %",
+   "description": "Share of wall time this container's CPU limit held it back since the last sample."
+  },
+  {
+   "fieldname": "psi_section",
+   "fieldtype": "Section Break",
+   "label": "Pressure (PSI, last 10 s)"
+  },
+  {
+   "fieldname": "psi_cpu_some",
+   "fieldtype": "Float",
+   "label": "CPU: some tasks waiting %"
+  },
+  {
+   "fieldname": "psi_memory_some",
+   "fieldtype": "Float",
+   "label": "Memory: some tasks waiting %"
+  },
+  {
+   "fieldname": "psi_memory_full",
+   "fieldtype": "Float",
+   "label": "Memory: all tasks waiting %"
+  },
+  {
+   "fieldname": "psi_io_some",
+   "fieldtype": "Float",
+   "label": "Disk: some tasks waiting %"
+  },
+  {
+   "fieldname": "psi_io_full",
+   "fieldtype": "Float",
+   "label": "Disk: all tasks waiting %"
+  },
+  {
+   "fieldname": "proc_section",
+   "fieldtype": "Section Break",
+   "label": "Largest processes"
+  },
+  {
+   "fieldname": "top_processes",
+   "fieldtype": "JSON",
+   "label": "Top Processes"
+  }
+ ],
+ "icon": "fa fa-microchip",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Memory Metric Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "collected_at",
+ "sort_order": "DESC",
+ "states": []
+}

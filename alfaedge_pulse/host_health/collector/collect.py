@@ -16,7 +16,9 @@ Args (JSON, argv[1]):
 Output (stdout, one JSON object):
 	{"collector_version": 1, "collected_at": "...", "errors": [...],
 	 "status": {"reported_at", "services", "benches", "sites"},
-	 "resources": {"reported_at", "load", "swap", "disks"}}
+	 "resources": {"reported_at", "load", "swap", "disks"},
+	 "performance": {"reported_at", "memory", "pressure", "cgroup", "counters",
+	                 "top_processes", "io"}}
 
 ``status`` and ``resources`` use exactly the shapes that
 ``host_health/ingest.py`` processes, so a section that cannot be collected
@@ -31,7 +33,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-COLLECTOR_VERSION = 1
+COLLECTOR_VERSION = 2
 MAX_FAILED_JOBS_PER_QUEUE = 50
 EXC_INFO_LIMIT = 4000
 REAL_FS = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "vfat", "ntfs", "exfat", "jfs", "reiserfs"}
@@ -299,6 +301,186 @@ def collect_disks():
 	return rows
 
 
+
+# --------------------------------------------------------------------------
+# performance: memory, pressure (PSI), container limits, disk I/O
+# --------------------------------------------------------------------------
+
+TOP_PROCESSES = 5
+MAX_IO_DEVICES = 24
+DB_PROCESS_NAMES = ("mariadbd", "mysqld")
+SKIP_DEVICE_PREFIXES = ("loop", "ram", "sr", "fd", "nbd")
+
+
+def read_kv_file(path):
+	out = {}
+	with open(path) as handle:
+		for line in handle:
+			parts = line.split()
+			if len(parts) >= 2:
+				out[parts[0].rstrip(":")] = parts[1]
+	return out
+
+
+def collect_memory():
+	info = read_kv_file("/proc/meminfo")
+	mb = lambda key: round(int(info.get(key, 0)) / 1024, 1)  # kB -> MB
+	return {
+		"total_mb": mb("MemTotal"),
+		"available_mb": mb("MemAvailable"),
+		"cached_mb": mb("Cached"),
+		"buffers_mb": mb("Buffers"),
+		"slab_mb": mb("Slab"),
+		"dirty_mb": mb("Dirty"),
+		"writeback_mb": mb("Writeback"),
+		"swap_total_mb": mb("SwapTotal"),
+		"swap_used_mb": round(mb("SwapTotal") - mb("SwapFree"), 1),
+	}
+
+
+def collect_counters():
+	vm = read_kv_file("/proc/vmstat")
+	out = {}
+	for key in ("pswpin", "pswpout", "oom_kill"):
+		if key in vm:
+			out[key] = int(vm[key])
+	return out
+
+
+def collect_pressure():
+	"""PSI: share of time tasks were stalled waiting for a resource (avg10 =
+	last 10 s). Missing on kernels without PSI, which is fine."""
+	out = {}
+	for name in ("cpu", "memory", "io"):
+		path = f"/proc/pressure/{name}"
+		if not os.path.exists(path):
+			continue
+		with open(path) as handle:
+			for line in handle:
+				kind, _, rest = line.partition(" ")
+				fields = dict(item.split("=") for item in rest.split() if "=" in item)
+				if "avg10" in fields:
+					out[f"{name}_{kind}_avg10"] = float(fields["avg10"])
+	return out
+
+
+def cgroup_dir():
+	try:
+		with open("/proc/self/cgroup") as handle:
+			for line in handle:
+				if line.startswith("0::"):
+					path = "/sys/fs/cgroup" + line.strip().split("::", 1)[1]
+					if os.path.isdir(path):
+						return path
+	except OSError:
+		pass
+	return "/sys/fs/cgroup" if os.path.isdir("/sys/fs/cgroup") else None
+
+
+def collect_cgroup():
+	"""Container limits (cgroup v2): memory ceiling and use, OOM kills inside
+	the limit, and how much the CPU limit is throttling this container."""
+	base = cgroup_dir()
+	if not base:
+		return None
+	out = {}
+
+	def read(name):
+		try:
+			with open(os.path.join(base, name)) as handle:
+				return handle.read().strip()
+		except OSError:
+			return None
+
+	limit = read("memory.max")
+	if limit and limit != "max":
+		out["mem_limit_mb"] = round(int(limit) / 1048576, 1)
+	current = read("memory.current")
+	if current:
+		out["mem_current_mb"] = round(int(current) / 1048576, 1)
+	events = read("memory.events")
+	if events:
+		kv = dict(line.split() for line in events.splitlines() if len(line.split()) == 2)
+		out["oom_kill_total"] = int(kv.get("oom_kill", 0))
+	cpu = read("cpu.stat")
+	if cpu:
+		kv = dict(line.split() for line in cpu.splitlines() if len(line.split()) == 2)
+		if "nr_throttled" in kv:
+			out["nr_throttled_total"] = int(kv["nr_throttled"])
+			out["throttled_usec_total"] = int(kv.get("throttled_usec", 0))
+	cpu_max = read("cpu.max")
+	if cpu_max:
+		quota, _, period = cpu_max.partition(" ")
+		if quota != "max" and period:
+			out["cpu_limit_cores"] = round(int(quota) / int(period), 2)
+	return out or None
+
+
+def collect_top_processes():
+	rows = []
+	for entry in os.listdir("/proc"):
+		if not entry.isdigit():
+			continue
+		try:
+			fields = read_kv_file(f"/proc/{entry}/status")
+			with open(f"/proc/{entry}/status") as handle:
+				name = next(line.split(":", 1)[1].strip() for line in handle if line.startswith("Name:"))
+		except (OSError, StopIteration):
+			continue
+		rss = int(fields.get("VmRSS", 0))
+		if rss:
+			rows.append(
+				{
+					"pid": int(entry),
+					"name": name,
+					"rss_mb": round(rss / 1024, 1),
+					"swap_mb": round(int(fields.get("VmSwap", 0)) / 1024, 1),
+				}
+			)
+	rows.sort(key=lambda r: r["rss_mb"], reverse=True)
+	top = rows[:TOP_PROCESSES]
+	# The database matters most when diagnosing, so keep it listed even
+	# when something else is bigger.
+	if not any(r["name"] in DB_PROCESS_NAMES for r in top):
+		top += [r for r in rows if r["name"] in DB_PROCESS_NAMES][:1]
+	return top
+
+
+def collect_io():
+	"""Raw cumulative counters per block device. Pulse turns two samples into
+	rates, so a restart of this script loses nothing."""
+	has_sysfs = os.path.isdir("/sys/block")
+	rows = []
+	with open("/proc/diskstats") as handle:
+		for line in handle:
+			f = line.split()
+			if len(f) < 14:
+				continue
+			name = f[2]
+			if name.startswith(SKIP_DEVICE_PREFIXES):
+				continue
+			if has_sysfs and not os.path.exists(f"/sys/block/{name}"):
+				continue  # a partition; its whole disk is already listed
+			reads, writes = int(f[3]), int(f[7])
+			if not reads and not writes:
+				continue
+			rows.append(
+				{
+					"device": name,
+					"reads": reads,
+					"writes": writes,
+					"sectors_read": int(f[5]),
+					"sectors_written": int(f[9]),
+					"read_ms": int(f[6]),
+					"write_ms": int(f[10]),
+					"in_flight": int(f[11]),
+					"io_ms": int(f[12]),
+					"weighted_ms": int(f[13]),
+				}
+			)
+	rows.sort(key=lambda r: r["io_ms"], reverse=True)
+	return rows[:MAX_IO_DEVICES]
+
 # --------------------------------------------------------------------------
 
 
@@ -339,6 +521,19 @@ def main():
 	if disks is not None:
 		resources["disks"] = disks
 
+	performance = {"reported_at": now}
+	for label, fn in (
+		("memory", collect_memory),
+		("counters", collect_counters),
+		("pressure", collect_pressure),
+		("cgroup", collect_cgroup),
+		("top_processes", collect_top_processes),
+		("io", collect_io),
+	):
+		value = attempt(label, fn)
+		if value is not None:
+			performance[label] = value
+
 	json.dump(
 		{
 			"collector_version": COLLECTOR_VERSION,
@@ -346,6 +541,7 @@ def main():
 			"errors": errors,
 			"status": status,
 			"resources": resources,
+			"performance": performance,
 		},
 		sys.stdout,
 	)

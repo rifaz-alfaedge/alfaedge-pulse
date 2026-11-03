@@ -26,7 +26,7 @@ import hashlib
 import json
 
 import frappe
-from frappe.utils import cint, convert_utc_to_system_timezone, flt, get_datetime, now_datetime
+from frappe.utils import add_to_date, cint, convert_utc_to_system_timezone, flt, get_datetime, now_datetime
 
 from alfaedge_pulse.host_health.doctype.monitored_host.monitored_host import get_host_role
 from alfaedge_pulse.tasks.poller import Thresholds, _handle_transition, _track_severity
@@ -787,3 +787,233 @@ def _delete_stale_resource_mounts(host_name: str, seen_mount_points: set) -> Non
 	)
 	for name in stale:
 		frappe.delete_doc("Resource Mount", name, ignore_permissions=True, force=True)
+
+
+# ---------------------------------------------------------------------------
+# Performance: memory, pressure, container limits, disk I/O
+# ---------------------------------------------------------------------------
+
+#: Samples further apart than this are not turned into rates: an average over
+#: a long gap would hide exactly the spikes the charts exist to show.
+MAX_RATE_GAP_SECONDS = 900
+MIN_RATE_GAP_SECONDS = 5
+#: Idle devices are not stored, and at most this many are kept per poll,
+#: busiest first, so a host that can see dozens of disks does not write dozens
+#: of rows every 30 seconds.
+MAX_IO_DEVICES_STORED = 6
+IO_HISTORY_LOOKBACK_MINUTES = 15
+SECTOR_BYTES = 512
+
+_MEMORY_PREVIOUS_FIELDS = [
+	"collected_at",
+	"pswpin_total",
+	"pswpout_total",
+	"oom_kill_total",
+	"cgroup_oom_kill_total",
+	"throttled_usec_total",
+]
+_IO_COUNTERS = (
+	"reads_total",
+	"writes_total",
+	"sectors_read_total",
+	"sectors_written_total",
+	"read_ms_total",
+	"write_ms_total",
+	"io_ms_total",
+	"weighted_ms_total",
+)
+
+
+def _counter_delta(current, previous):
+	"""Difference of two cumulative counters, or None when either is missing
+	or the counter went backwards (reboot, wrap): no rate beats a wrong one."""
+	if current is None or previous is None:
+		return None
+	delta = current - previous
+	return delta if delta >= 0 else None
+
+
+def _per_second(delta, seconds):
+	return None if delta is None or not seconds else round(delta / seconds, 2)
+
+
+def process_performance(
+	host_name: str,
+	reported_at: str,
+	memory: dict | None = None,
+	pressure: dict | None = None,
+	cgroup: dict | None = None,
+	counters: dict | None = None,
+	top_processes: list | None = None,
+	io: list | None = None,
+) -> dict:
+	"""Stores one performance report for ``host_name``: a Memory Metric Log
+	row (memory, swap, OOM kills, container limits, pressure) and a Disk IO
+	Sample row per busy block device. Counters arrive raw and are turned
+	into per-second rates against the previous stored sample, so a restarted
+	collector or a gap in polling never produces a wrong spike."""
+	warnings: list[str] = []
+	now = now_datetime()
+
+	memory_recorded = 0
+	if memory is not None:
+		try:
+			_store_memory_sample(host_name, now, memory, pressure or {}, cgroup or {}, counters or {}, top_processes)
+			memory_recorded = 1
+		except Exception:
+			frappe.log_error(title=f"Host Health: malformed memory payload from {host_name}", message=frappe.get_traceback())
+			warnings.append("skipped malformed memory payload")
+
+	io_recorded = 0
+	if io is not None:
+		try:
+			io_recorded = _store_io_samples(host_name, now, io)
+		except Exception:
+			frappe.log_error(title=f"Host Health: malformed disk I/O payload from {host_name}", message=frappe.get_traceback())
+			warnings.append("skipped malformed disk I/O payload")
+
+	frappe.db.commit()
+	return {"status": "ok", "monitored_host": host_name, "memory_recorded": memory_recorded, "io_recorded": io_recorded, "warnings": warnings}
+
+
+def _gap_seconds(previous_at, now):
+	if not previous_at:
+		return None
+	seconds = (now - get_datetime(previous_at)).total_seconds()
+	return seconds if MIN_RATE_GAP_SECONDS <= seconds <= MAX_RATE_GAP_SECONDS else None
+
+
+def _store_memory_sample(host_name, now, memory, pressure, cgroup, counters, top_processes) -> None:
+	previous = frappe.db.get_value(
+		"Memory Metric Log",
+		{"monitored_host": host_name},
+		_MEMORY_PREVIOUS_FIELDS,
+		order_by="collected_at desc",
+		as_dict=True,
+	)
+	gap = _gap_seconds(previous.collected_at, now) if previous else None
+	prev = previous if gap else frappe._dict()
+
+	total = flt(memory.get("total_mb"))
+	available = flt(memory.get("available_mb"))
+	doc = frappe.new_doc("Memory Metric Log")
+	doc.update(
+		{
+			"monitored_host": host_name,
+			"collected_at": now,
+			"mem_total_mb": total,
+			"mem_available_mb": available,
+			"mem_used_percent": round((total - available) / total * 100, 1) if total else None,
+			"cached_mb": memory.get("cached_mb"),
+			"buffers_mb": memory.get("buffers_mb"),
+			"slab_mb": memory.get("slab_mb"),
+			"dirty_mb": memory.get("dirty_mb"),
+			"writeback_mb": memory.get("writeback_mb"),
+			"swap_total_mb": memory.get("swap_total_mb"),
+			"swap_used_mb": memory.get("swap_used_mb"),
+			"pswpin_total": counters.get("pswpin"),
+			"pswpout_total": counters.get("pswpout"),
+			"swap_in_per_s": _per_second(_counter_delta(counters.get("pswpin"), prev.get("pswpin_total")), gap),
+			"swap_out_per_s": _per_second(_counter_delta(counters.get("pswpout"), prev.get("pswpout_total")), gap),
+			"oom_kill_total": counters.get("oom_kill"),
+			"oom_kills_since_last": _counter_delta(counters.get("oom_kill"), prev.get("oom_kill_total")) or 0,
+			"cgroup_mem_limit_mb": cgroup.get("mem_limit_mb"),
+			"cgroup_mem_current_mb": cgroup.get("mem_current_mb"),
+			"cgroup_oom_kill_total": cgroup.get("oom_kill_total"),
+			"cgroup_oom_kills_since_last": _counter_delta(cgroup.get("oom_kill_total"), prev.get("cgroup_oom_kill_total")) or 0,
+			"cpu_limit_cores": cgroup.get("cpu_limit_cores"),
+			"nr_throttled_total": cgroup.get("nr_throttled_total"),
+			"throttled_usec_total": cgroup.get("throttled_usec_total"),
+			"psi_cpu_some": pressure.get("cpu_some_avg10"),
+			"psi_memory_some": pressure.get("memory_some_avg10"),
+			"psi_memory_full": pressure.get("memory_full_avg10"),
+			"psi_io_some": pressure.get("io_some_avg10"),
+			"psi_io_full": pressure.get("io_full_avg10"),
+			"top_processes": json.dumps(top_processes) if top_processes else None,
+		}
+	)
+	swap_in = _counter_delta(counters.get("pswpin"), prev.get("pswpin_total"))
+	swap_out = _counter_delta(counters.get("pswpout"), prev.get("pswpout_total"))
+	# A reset (reboot) makes the counters go backwards: the row is kept for its
+	# raw readings, but its per-second figures must not be trusted.
+	doc.rates_valid = 1 if gap and swap_in is not None and swap_out is not None else 0
+	throttled = _counter_delta(cgroup.get("throttled_usec_total"), prev.get("throttled_usec_total"))
+	if throttled is not None and gap:
+		doc.cpu_throttled_percent = round(min(100.0, throttled / (gap * 1_000_000) * 100), 1)
+	doc.insert(ignore_permissions=True)
+
+
+def _store_io_samples(host_name, now, devices: list) -> int:
+	since = add_to_date(now, minutes=-IO_HISTORY_LOOKBACK_MINUTES)
+	previous_rows = frappe.db.sql(
+		"""SELECT device, collected_at, {cols} FROM `tabDisk IO Sample`
+		WHERE monitored_host = %(host)s AND collected_at >= %(since)s ORDER BY collected_at DESC""".format(
+			cols=", ".join(f"`{c}`" for c in _IO_COUNTERS)
+		),
+		{"host": host_name, "since": since},
+		as_dict=True,
+	)
+	latest: dict[str, dict] = {}
+	for row in previous_rows:
+		latest.setdefault(row.device, row)
+
+	with_rates, first_seen = [], []
+	for dev in devices:
+		name = dev.get("device")
+		if not name:
+			continue
+		current = {
+			"reads_total": dev.get("reads"),
+			"writes_total": dev.get("writes"),
+			"sectors_read_total": dev.get("sectors_read"),
+			"sectors_written_total": dev.get("sectors_written"),
+			"read_ms_total": dev.get("read_ms"),
+			"write_ms_total": dev.get("write_ms"),
+			"io_ms_total": dev.get("io_ms"),
+			"weighted_ms_total": dev.get("weighted_ms"),
+		}
+		prev = latest.get(name)
+		gap = _gap_seconds(prev.collected_at, now) if prev else None
+		if not gap:
+			first_seen.append((flt(dev.get("io_ms")), name, dev, current))
+			continue
+		d = {k: _counter_delta(current[k], prev[k]) for k in _IO_COUNTERS}
+		if any(v is None for v in d.values()):
+			first_seen.append((flt(dev.get("io_ms")), name, dev, current))  # counters reset
+			continue
+		ops = d["reads_total"] + d["writes_total"]
+		if not ops and not d["io_ms_total"]:
+			continue  # idle device: nothing to chart
+		rates = {
+			"read_iops": _per_second(d["reads_total"], gap),
+			"write_iops": _per_second(d["writes_total"], gap),
+			"read_mb_s": round(d["sectors_read_total"] * SECTOR_BYTES / 1e6 / gap, 2),
+			"write_mb_s": round(d["sectors_written_total"] * SECTOR_BYTES / 1e6 / gap, 2),
+			"await_ms": round((d["read_ms_total"] + d["write_ms_total"]) / ops, 2) if ops else 0.0,
+			"util_percent": round(min(100.0, d["io_ms_total"] / (gap * 1000) * 100), 1),
+			"avg_queue": round(d["weighted_ms_total"] / (gap * 1000), 2),
+		}
+		with_rates.append((d["io_ms_total"], name, dev, current, rates))
+
+	with_rates.sort(key=lambda t: t[0], reverse=True)
+	chosen = [(n, dv, cur, rt) for _, n, dv, cur, rt in with_rates[:MAX_IO_DEVICES_STORED]]
+	room = MAX_IO_DEVICES_STORED - len(chosen)
+	if room > 0:
+		first_seen.sort(key=lambda t: t[0], reverse=True)
+		chosen += [(n, dv, cur, None) for _, n, dv, cur in first_seen[:room]]
+
+	for name, dev, current, rates in chosen:
+		doc = frappe.new_doc("Disk IO Sample")
+		doc.update(
+			{
+				"monitored_host": host_name,
+				"collected_at": now,
+				"device": name,
+				"in_flight": dev.get("in_flight"),
+				"rates_valid": 1 if rates else 0,
+				**current,
+				**(rates or {}),
+			}
+		)
+		doc.insert(ignore_permissions=True)
+	return len(chosen)

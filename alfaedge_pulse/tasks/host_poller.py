@@ -28,7 +28,7 @@ import frappe
 from frappe.utils import cint
 
 from alfaedge_pulse.host_health import ssh_client
-from alfaedge_pulse.host_health.ingest import process_resources, process_status
+from alfaedge_pulse.host_health.ingest import process_performance, process_resources, process_status
 
 POLLER_JOB_ID = "alfaedge_pulse_host_poller"
 HEARTBEAT_CACHE_KEY = "alfaedge_pulse:host_poller_heartbeat"
@@ -149,6 +149,14 @@ def _store_report(name: str, target, report: dict, new_key: str | None, duration
 		resources = report.get("resources") or {}
 		process_status(name, **status)
 		process_resources(name, **resources)
+		performance = report.get("performance")
+		if performance:
+			try:
+				process_performance(name, **performance)
+			except Exception:
+				# Never let a performance problem hide the host's status.
+				frappe.db.rollback()
+				frappe.log_error(title=f"Host Health: performance report from {name} failed", message=frappe.get_traceback())
 		collector_errors = report.get("errors") or []
 		frappe.db.set_value(
 			"Monitored Host",

@@ -520,3 +520,69 @@ def get_host_health_trend(hours: int = 24) -> list[dict]:
 		out.append({"bucket": key, "avg_load_percent": round(float(avg), 1) if avg is not None else None, "new_failed_jobs": failures.get(key, 0)})
 		t = add_to_date(t, hours=1)
 	return out
+
+
+RATE_FIELDS = ("swap_in_per_s", "swap_out_per_s", "cpu_throttled_percent")
+MAX_TREND_POINTS = 120
+MAX_TREND_DEVICES = 3
+
+
+def _thin(rows: list[dict], limit: int = MAX_TREND_POINTS) -> list[dict]:
+	"""Evenly drops points so a long range stays light to send and draw."""
+	if len(rows) <= limit:
+		return rows
+	step = len(rows) / limit
+	return [rows[int(i * step)] for i in range(limit)]
+
+
+@frappe.whitelist()
+def get_host_diagnosis(monitored_host: str, hours: int = 6) -> dict:
+	"""Everything the Diagnose view needs for one host: findings with the
+	numbers behind them, the latest readings, and memory/pressure and disk
+	trends over the last ``hours`` (1 to 168)."""
+	frappe.has_permission("Monitored Host", "read", doc=monitored_host, throw=True)
+	from alfaedge_pulse.host_health.diagnosis import IO_FIELDS, MEMORY_FIELDS, diagnose_host
+
+	hours = max(1, min(cint(hours) or 6, 168))
+	since = add_to_date(now_datetime(), hours=-hours)
+
+	result = diagnose_host(monitored_host)
+
+	trend_fields = [f for f in MEMORY_FIELDS if f != "top_processes"]
+	memory_trend = frappe.get_all(
+		"Memory Metric Log",
+		filters={"monitored_host": monitored_host, "collected_at": [">=", since]},
+		fields=trend_fields,
+		order_by="collected_at asc",
+		limit_page_length=0,
+		ignore_permissions=True,
+	)
+
+	# Rows without computed rates would draw as a false zero, so rate fields
+	# are blanked (a gap in the chart) rather than shown as 0.
+	for row in memory_trend:
+		if not row.get("rates_valid"):
+			for key in RATE_FIELDS:
+				row[key] = None
+
+	io_rows = frappe.get_all(
+		"Disk IO Sample",
+		filters={"monitored_host": monitored_host, "rates_valid": 1, "collected_at": [">=", since]},
+		fields=IO_FIELDS,
+		order_by="collected_at asc",
+		limit_page_length=0,
+		ignore_permissions=True,
+	)
+	by_device: dict[str, list[dict]] = {}
+	for row in io_rows:
+		by_device.setdefault(row["device"], []).append(row)
+	busiest = sorted(
+		by_device,
+		key=lambda d: max((r["util_percent"] or 0) for r in by_device[d]),
+		reverse=True,
+	)[:MAX_TREND_DEVICES]
+
+	result["hours"] = hours
+	result["memory_trend"] = _thin(memory_trend)
+	result["io_trend"] = {d: _thin(by_device[d]) for d in busiest}
+	return result

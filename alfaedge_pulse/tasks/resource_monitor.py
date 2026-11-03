@@ -23,11 +23,12 @@ from frappe.utils import add_to_date, cint, now_datetime
 _PURGE_BATCH_SIZE = 5000
 
 DEFAULT_RETENTION_DAYS = 30
+IO_SAMPLE_RETENTION_DAYS = 7
 
 
 def purge_old_resource_logs() -> None:
-	"""Deletes Resource Metric Log and Resource Disk Sample rows older
-	than Resource Monitor Settings' Retention (days). Wired to Frappe's
+	"""Deletes Resource Metric Log, Resource Disk Sample, Memory Metric Log
+	and Disk IO Sample rows older than Resource Monitor Settings' Retention (days). Wired to Frappe's
 	daily scheduler event (see hooks.py), alongside
 	purge_old_check_logs."""
 	retention_days = cint(
@@ -35,11 +36,22 @@ def purge_old_resource_logs() -> None:
 	) or DEFAULT_RETENTION_DAYS
 	cutoff = add_to_date(now_datetime(), days=-retention_days)
 
-	for doctype in ("Resource Disk Sample", "Resource Metric Log"):
+	# Disk I/O samples are by far the busiest table (several rows per host
+	# every poll), so they keep a shorter window than the rest.
+	io_cutoff = add_to_date(now_datetime(), days=-min(retention_days, IO_SAMPLE_RETENTION_DAYS))
+	for doctype, doctype_cutoff in (
+		("Disk IO Sample", io_cutoff),
+		("Memory Metric Log", cutoff),
+		("Resource Disk Sample", cutoff),
+		("Resource Metric Log", cutoff),
+	):
 		total_deleted = 0
 		while True:
 			names = frappe.get_all(
-				doctype, filters={"collected_at": ["<", cutoff]}, limit_page_length=_PURGE_BATCH_SIZE, pluck="name"
+				doctype,
+				filters={"collected_at": ["<", doctype_cutoff]},
+				limit_page_length=_PURGE_BATCH_SIZE,
+				pluck="name",
 			)
 			if not names:
 				break
