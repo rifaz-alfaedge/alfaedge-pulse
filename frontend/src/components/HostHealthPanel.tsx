@@ -46,7 +46,7 @@ import {
 import { compareValues, nextSort, type SortDirection } from '../lib/sort'
 
 /** Bench Health trend-chart window presets, in minutes — 6h default: wide
- * enough to see a real trend, narrow enough that a ~20-30s agent push
+ * enough to see a real trend, narrow enough that a ~30s SSH poll
  * interval still renders as a readable line rather than a wall of points. */
 const TREND_RANGE_OPTIONS: { label: string; minutes: number }[] = [
   { label: '1h', minutes: 60 },
@@ -118,7 +118,7 @@ function assess(row: HostOverviewRow, t: HostOverview['thresholds']): AssessedHo
   const diskTone = toneFor(fullest?.usage_percent, t.disk_warning, t.disk_critical)
 
   if (!row.is_online) {
-    issues.push({ tone: 'critical', weight: 1000, text: `Offline — no agent report since ${timeAgo(row.last_seen)}` })
+    issues.push({ tone: 'critical', weight: 1000, text: `Offline — last successful SSH poll ${timeAgo(row.last_seen)}` })
   } else {
     const down = row.services.filter((s) => s.is_down).map((s) => s.service_name)
     if (down.length) issues.push({ tone: 'critical', weight: 500, text: `${down.join(', ')} ${down.length === 1 ? 'is' : 'are'} ${row.services.find((s) => s.is_down)?.current_state || 'down'}` })
@@ -232,7 +232,7 @@ export function HostHealthPanel() {
   if (overview && overview.hosts.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border-hairline p-10 text-center text-sm text-ink-muted">
-        No hosts being monitored yet — add a <em>Monitored Host</em> from Desk and point its push agent at this site to get started.
+        No hosts being monitored yet — add a <em>Monitored Host</em> from Desk and turn on SSH polling in <em>SSH Settings</em> to get started.
       </div>
     )
   }
@@ -272,7 +272,7 @@ export function HostHealthPanel() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <span className="flex items-center gap-2 text-sm text-ink-muted">
           <span aria-hidden="true" className={`h-2 w-2 rounded-full ${online.length ? 'bg-status-good' : 'bg-ink-muted'}`} />
-          Agent push · {assessed.length} host{assessed.length === 1 ? '' : 's'}
+          SSH poll · {assessed.length} host{assessed.length === 1 ? '' : 's'}
           {lastReport ? ` · last report ${timeAgo(lastReport)}` : ''}
         </span>
         <a

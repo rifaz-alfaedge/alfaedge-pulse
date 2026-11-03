@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## Unreleased (6.0.0, in progress)
+
+### Changed
+- **Host Health is polled over SSH.** Pulse logs in to each Monitored Host (through your Warpgate bastion, or directly), runs a read-only collector that it sends on stdin, and stores the result exactly as the push agent's reports were stored. Nothing is installed on the hosts. Polling is **off** until *SSH Settings → Polling Enabled* is switched on.
+- Host Unreachable now means "could not be polled over SSH"; the last failure reason is shown on the host.
+
+### Added
+- **SSH Settings**: Warpgate or Direct mode, encrypted private key (generate or import; only the public key is shown), host-key pinning, Test connection.
+- Monitored Host: SSH target, port, user, bench path, last poll result.
+
+### Removed
+- The push endpoints (`push_status`, `push_resource_metrics`), agent API keys, the shared agent user and role. The separate `pulse_agent` app is no longer used and can be uninstalled from guests.
+
 ## [5.1.0] - 2026-10-28
 
 ### Changed

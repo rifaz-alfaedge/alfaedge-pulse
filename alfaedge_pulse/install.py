@@ -26,50 +26,8 @@ def after_install() -> None:
 	from alfaedge_pulse.tasks.poller import ensure_poller_running
 
 	ensure_poller_running()
-	_setup_host_health_agent()
 	_seed_default_expected_services()
 	frappe.db.commit()
-
-
-def _setup_host_health_agent() -> None:
-	"""Creates the one shared, low-privilege identity every Monitored
-	Host authenticates as (see monitored_host.py's docstring for why a
-	shared identity + per-host api_key/api_secret, rather than a Frappe
-	User per host). Idempotent — safe to call more than once."""
-	from alfaedge_pulse.host_health.doctype.monitored_host.monitored_host import agent_user_email
-
-	if not frappe.db.exists("Role", "Host Health Agent"):
-		frappe.get_doc(
-			{
-				"doctype": "Role",
-				"role_name": "Host Health Agent",
-				"desk_access": 0,
-				# Deliberately zero permission rows anywhere — the ingest
-				# endpoint writes via ignore_permissions=True, matching every
-				# other poller/upsert in this app. This role exists purely to
-				# keep the shared user's blast radius at zero if its
-				# credentials ever leaked, not to grant it access.
-			}
-		).insert(ignore_permissions=True)
-
-	email = agent_user_email()
-	if not frappe.db.exists("User", email):
-		frappe.get_doc(
-			{
-				"doctype": "User",
-				"email": email,
-				"first_name": "Host Health Agent",
-				# Frappe's own User.set_system_user() recomputes this from the
-				# role's desk_access regardless of what's passed here — since
-				# Host Health Agent has none, this always lands on "Website
-				# User" (no desk access at all), which suits a pure API-only
-				# identity even better than "System User" would have.
-				"user_type": "System User",
-				"send_welcome_email": 0,
-				"enabled": 1,
-				"roles": [{"role": "Host Health Agent"}],
-			}
-		).insert(ignore_permissions=True)
 
 
 def _seed_default_expected_services() -> None:

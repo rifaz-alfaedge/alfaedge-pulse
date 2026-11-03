@@ -14,7 +14,7 @@ import { EMPTY_GUEST_FILTERS, EMPTY_HOST_FILTERS, type GuestFilters, type HostFi
 
 const SEVERITY_LABEL: Record<Severity, string> = { critical: 'Critical', warning: 'Warning', ok: 'OK' }
 const SEVERITY_OPTIONS = ['Critical', 'Warning', 'OK']
-/** A resource-agent reading older than this is shown greyed, with its age. */
+/** A host poll reading older than this is shown greyed, with its age. */
 const LOAD_STALE_MS = 15 * 60 * 1000
 
 interface Thresholds {
@@ -437,7 +437,7 @@ export function HostUsageTable({
 // VMs & containers
 // ---------------------------------------------------------------------------
 
-type HealthLabel = 'Online' | 'Issue' | 'No agent'
+type HealthLabel = 'Online' | 'Issue' | 'Not polled'
 
 export function GuestUsageTable({
   guests,
@@ -476,7 +476,7 @@ export function GuestUsageTable({
 
   const healthOf = (g: ProxmoxGuest): HealthLabel => {
     const h = healthByGuest.get(g.name)
-    if (!h) return 'No agent'
+    if (!h) return 'Not polled'
     return hostHealthStatus(h) === 'Online' ? 'Online' : 'Issue'
   }
   const typeOf = (g: ProxmoxGuest) => (g.guest_type === 'QEMU (VM)' ? 'VM' : 'CT')
@@ -642,10 +642,10 @@ export function GuestUsageTable({
     {
       key: 'health',
       label: 'Host Health',
-      sortValue: (g) => ({ Issue: 0, Online: 1, 'No agent': 2 })[healthOf(g)],
+      sortValue: (g) => ({ Issue: 0, Online: 1, 'Not polled': 2 })[healthOf(g)],
       render: (g) => {
         const h = healthOf(g)
-        return h === 'No agent' ? <span className="text-ink-muted">—</span> : <Badge tone={h === 'Online' ? 'good' : 'critical'}>{h}</Badge>
+        return h === 'Not polled' ? <span className="text-ink-muted">—</span> : <Badge tone={h === 'Online' ? 'good' : 'critical'}>{h}</Badge>
       },
     },
   ]
@@ -668,7 +668,7 @@ export function GuestUsageTable({
         <MultiSelectFilter label="Type" options={['VM', 'CT']} selected={filters.type} onChange={(type) => onFiltersChange({ ...filters, type })} />
         <MultiSelectFilter
           label="Host Health"
-          options={['Online', 'Issue', 'No agent']}
+          options={['Online', 'Issue', 'Not polled']}
           selected={filters.hostHealth}
           onChange={(hostHealth) => onFiltersChange({ ...filters, hostHealth })}
         />

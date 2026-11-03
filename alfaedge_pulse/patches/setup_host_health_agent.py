@@ -1,20 +1,13 @@
 # Copyright (c) 2026, AlfaEdge and contributors
 # For license information, please see license.txt
 
-"""Backfills the Host Health agent user/role and default expected services
-on sites that had alfaedge_pulse installed *before* v3.0.0 (Host Health)
-shipped. install.after_install only runs on a fresh `install-app` — a site
-that already had this app installed just picks up new doctypes via
-`bench migrate` and never re-runs it, so the shared agent user never gets
-created there, breaking every "Generate / Regenerate Agent Key" click with
-a "Could not find Agent User" error. Both callees are already idempotent
-(see their own docstrings in install.py), so this is safe to run on a site
-that's already correctly set up too.
-"""
+"""Historic patch (v3.0.0): created the Host Health agent user and role and
+seeded the default expected services. The agent is gone as of v6.0.0 (see
+``remove_push_agent``), so only the idempotent service seeding is kept, which
+keeps this safe to run on a fresh site."""
 
-from alfaedge_pulse.install import _seed_default_expected_services, _setup_host_health_agent
+from alfaedge_pulse.install import _seed_default_expected_services
 
 
 def execute():
-	_setup_host_health_agent()
 	_seed_default_expected_services()

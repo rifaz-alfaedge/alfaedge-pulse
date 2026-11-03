@@ -2,18 +2,17 @@
 # For license information, please see license.txt
 
 """Periodic staleness checks for Host Health — the two conditions that
-have to keep getting re-evaluated even when the agent stops pushing
-entirely (Host Unreachable), or keeps pushing while the *underlying*
-Frappe scheduler itself has stalled (Scheduler Stalled) — neither of
-which a push-triggered check alone could ever catch on its own once the
-pushes themselves are the thing that's stopped, or aren't what's broken.
+have to keep getting re-evaluated even when polling a host keeps failing
+(Host Unreachable), or keeps succeeding while the *underlying* Frappe
+scheduler itself has stalled (Scheduler Stalled) — neither of which a
+check that only runs after a successful poll could ever catch.
 
 Wired to the same 1-minute cron as the Proxmox/Uptime watchdogs (see
 hooks.py), but deliberately does *not* use their bounded-loop/heartbeat-
 cache pattern — that machinery exists solely to get sub-minute polling
 out of Frappe's once-a-minute scheduler floor. A staleness check that
 only needs to run once a minute (timeouts here are already expected to
-be several times the agent's own push interval) is fully satisfied by
+be several times the poll interval) is fully satisfied by
 the cron floor itself — this is a plain self-throttled-nothing function,
 closer in shape to uptime_kuma_poller.purge_old_check_logs than to
 poller.run_poll_loop.
@@ -71,8 +70,8 @@ def _check_one_host(host, heartbeat_cutoff, scheduler_cutoff, heartbeat_timeout:
 		"Monitored Host",
 		host.name,
 		"Host Unreachable",
-		f"{host.hostname or host.name}: agent has not reported in over {heartbeat_timeout}s.",
-		recovery_message=f"{host.hostname or host.name}: agent reporting again.",
+		f"{host.hostname or host.name}: could not be reached over SSH for over {heartbeat_timeout}s.",
+		recovery_message=f"{host.hostname or host.name}: answering SSH polls again.",
 		notify_global=True,
 	)
 

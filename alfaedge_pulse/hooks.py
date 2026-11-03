@@ -94,6 +94,7 @@ after_install = "alfaedge_pulse.install.after_install"
 after_migrate = [
 	"alfaedge_pulse.tasks.poller.ensure_poller_running",
 	"alfaedge_pulse.tasks.uptime_kuma_poller.ensure_uptime_poller_running",
+	"alfaedge_pulse.tasks.host_poller.ensure_host_poller_running",
 ]
 
 # Uninstallation
@@ -164,6 +165,10 @@ scheduler_events = {
 		"* * * * *": [
 			"alfaedge_pulse.tasks.poller.ensure_poller_running",
 			"alfaedge_pulse.tasks.uptime_kuma_poller.ensure_uptime_poller_running",
+			# Host Health polls every Monitored Host over SSH (only while SSH
+			# Settings -> Polling Enabled is on) in the same bounded-loop
+			# style, so this is a (re)start watchdog too.
+			"alfaedge_pulse.tasks.host_poller.ensure_host_poller_running",
 			# A plain, self-throttled function (not a bounded loop) — checks
 			# its own Settings doctype's interval and no-ops most ticks. See
 			# its module docstring for why a fixed */N cron key isn't used
@@ -171,9 +176,8 @@ scheduler_events = {
 			# without a code change. Minutes-granularity is fine for this
 			# one (unlike polling, nothing needs a sub-minute Bifrost sync).
 			"alfaedge_pulse.tasks.bifrost_sync.sync_bifrost_logs",
-			# Host Health is push-based (an agent posts to it), not polled —
-			# nothing here to (re)start. This is purely a staleness check
-			# (Host Unreachable / Scheduler Stalled) — see its own module
+			# Purely a staleness check (Host Unreachable / Scheduler
+			# Stalled) over what the SSH poller last stored — see its module
 			# docstring for why once-a-minute is already enough, no bounded
 			# loop needed.
 			"alfaedge_pulse.tasks.host_health_watchdog.check_host_heartbeats",

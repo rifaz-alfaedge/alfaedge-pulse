@@ -19,6 +19,9 @@ dependencies = [
     # endpoint via plain `requests`, so this dependency's blast radius is
     # limited to that one admin-initiated convenience feature.
     "python-socketio[client]>=5.11.0",
+    # Host Health polls monitored hosts over SSH (optionally through a
+    # Warpgate bastion) — see host_health/ssh_client.py.
+    "paramiko>=4.0.0",
 ]
 
 [build-system]

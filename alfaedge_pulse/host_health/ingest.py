@@ -1,41 +1,27 @@
 # Copyright (c) 2026, AlfaEdge and contributors
 # For license information, please see license.txt
 
-"""The two endpoints reached by code running on remote, comparatively
-less-trusted guest machines — kept in their own small file so the
-security-relevant surface stays trivially auditable in one read, rather
-than mixed into a larger api.py-style module.
+"""Turns one collector report into stored state and alerts.
 
-Auth: every ``Monitored Host`` shares one low-privilege Frappe User (see
-``monitored_host.agent_user_email``), authenticated via Frappe core's own
-``Authorization: token <api_key>:<api_secret>`` mechanism
-(``Frappe-Authorization-Source: Monitored Host`` header) — by the time
-either endpoint's body runs, core has already rejected the request if the
-pair didn't match an enabled Monitored Host. Since every host resolves to
-the same session user, ``_identify_monitored_host`` re-parses the header
-itself to recover *which* host authenticated (core doesn't stash that
-anywhere) — extracting, not re-verifying, the already-proven key.
+Hosts are polled over SSH (see ``host_health/ssh_client.py`` and
+``tasks/host_poller.py``); the poller hands each report to the two plain
+functions here, ``process_status`` and ``process_resources``. There is no
+HTTP endpoint any more, so nothing remote can write to this module.
 
-Every alert either endpoint can raise (Service Down, Worker Degraded,
-Failed Job Threshold, High Load Average, High Swap Usage, and disk/inode
-Critical Resource / Resource Warning on a Resource Mount) reuses
+Every alert raised here (Service Down, Worker Degraded, Failed Job
+Threshold, High Load Average, High Swap Usage, and disk/inode Critical
+Resource / Resource Warning on a Resource Mount) reuses
 ``_handle_transition``/``dispatch_alert``/``dispatch_recovery`` from
 ``alerts/dispatch.py`` and ``tasks/poller.py`` verbatim — no parallel
 alerting mechanism. Scheduler Stalled and Host Unreachable are evaluated
 by the heartbeat watchdog instead (see ``tasks/host_health_watchdog.py``),
-not here — both are staleness checks that need to keep re-evaluating even
-when the agent stops pushing entirely, which only a periodic,
-push-independent check can do. ``push_resource_metrics`` deliberately
-never touches ``Monitored Host.last_seen``/``is_online`` — that stays
-owned by ``push_status`` alone, since the resource agent is designed as an
-add-on to an already-running Host Health agent on the same host, sharing
-its Monitored Host identity rather than getting its own heartbeat.
+since they are staleness checks that must keep re-evaluating even when a
+host stops answering. ``process_resources`` deliberately never touches
+``Monitored Host.last_seen``/``is_online``; ``process_status`` owns those.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
 import hashlib
 import json
 
@@ -74,36 +60,16 @@ def _parse_remote_timestamp(value):
 	return dt
 
 
-def _identify_monitored_host() -> str:
-	"""Re-derives which Monitored Host authenticated this request, from the
-	same Authorization header core already validated — see this module's
-	docstring for why re-verifying the secret here isn't necessary."""
-	header = frappe.get_request_header("Authorization", "")
-	parts = header.split(" ", 1)
-	if len(parts) != 2:
-		frappe.throw("Missing or malformed Authorization header", frappe.AuthenticationError)
-	scheme, token = parts[0].lower(), parts[1]
-	try:
-		if scheme == "basic":
-			api_key, _secret = frappe.safe_decode(base64.b64decode(token)).split(":", 1)
-		elif scheme == "token":
-			api_key, _secret = token.split(":", 1)
-		else:
-			frappe.throw("Unsupported Authorization scheme", frappe.AuthenticationError)
-	except (ValueError, binascii.Error):
-		frappe.throw("Malformed Authorization header", frappe.AuthenticationError)
-
-	host = frappe.db.get_value("Monitored Host", {"api_key": api_key, "enabled": 1}, "name")
-	if not host:
-		frappe.throw("Unknown or disabled agent key", frappe.AuthenticationError)
-	return host
-
-
-@frappe.whitelist(methods=["POST"])
-def push_status(
-	reported_at: str, services: list | None = None, benches: list | None = None, sites: list | None = None
+def process_status(
+	host_name: str,
+	reported_at: str,
+	services: list | None = None,
+	benches: list | None = None,
+	sites: list | None = None,
 ) -> dict:
-	host_name = _identify_monitored_host()
+	"""Stores one status report (services, bench/RQ health, hosted sites)
+	for ``host_name``. Omitting a key means "not applicable"; only keys that
+	are present are processed."""
 	warnings: list[str] = []
 
 	try:
@@ -225,11 +191,14 @@ def push_status(
 	}
 
 
-@frappe.whitelist(methods=["POST"])
-def push_resource_metrics(
-	reported_at: str, load: dict | None = None, swap: dict | None = None, disks: list | None = None
+def process_resources(
+	host_name: str,
+	reported_at: str,
+	load: dict | None = None,
+	swap: dict | None = None,
+	disks: list | None = None,
 ) -> dict:
-	host_name = _identify_monitored_host()
+	"""Stores one resource report (load, swap, disks) for ``host_name``."""
 	warnings: list[str] = []
 
 	try:

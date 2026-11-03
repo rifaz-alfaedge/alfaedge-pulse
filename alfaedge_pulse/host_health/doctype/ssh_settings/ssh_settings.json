@@ -1,0 +1,228 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-04 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "connection_mode",
+  "connection_section",
+  "server_host",
+  "server_port",
+  "warpgate_user",
+  "default_user",
+  "default_bench_path",
+  "server_host_key",
+  "reset_host_key",
+  "key_section",
+  "public_key",
+  "key_fingerprint",
+  "private_key",
+  "key_passphrase",
+  "generate_key",
+  "import_key",
+  "limits_section",
+  "poll_interval_seconds",
+  "parallelism",
+  "connect_timeout",
+  "command_timeout",
+  "test_section",
+  "test_host",
+  "test_connection"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Polling Enabled",
+   "default": "0",
+   "description": "Off by default. Nothing connects to any host until this is on."
+  },
+  {
+   "fieldname": "connection_mode",
+   "fieldtype": "Select",
+   "label": "Connection Mode",
+   "options": "Warpgate\nDirect",
+   "default": "Warpgate",
+   "reqd": 1,
+   "description": "Warpgate: Pulse logs in to your bastion as <user>:<target> and Warpgate reaches the server. Direct: Pulse logs in to each host itself."
+  },
+  {
+   "fieldname": "connection_section",
+   "fieldtype": "Section Break",
+   "label": "Connection"
+  },
+  {
+   "fieldname": "server_host",
+   "fieldtype": "Data",
+   "label": "Warpgate Host",
+   "depends_on": "eval:doc.connection_mode=='Warpgate'",
+   "mandatory_depends_on": "eval:doc.connection_mode=='Warpgate'"
+  },
+  {
+   "fieldname": "server_port",
+   "fieldtype": "Int",
+   "label": "Warpgate SSH Port",
+   "default": "2222",
+   "depends_on": "eval:doc.connection_mode=='Warpgate'"
+  },
+  {
+   "fieldname": "warpgate_user",
+   "fieldtype": "Data",
+   "label": "Warpgate User",
+   "depends_on": "eval:doc.connection_mode=='Warpgate'",
+   "mandatory_depends_on": "eval:doc.connection_mode=='Warpgate'",
+   "description": "The Warpgate user that holds Pulse's public key, e.g. pulse-monitor."
+  },
+  {
+   "fieldname": "default_user",
+   "fieldtype": "Data",
+   "label": "Default SSH User",
+   "depends_on": "eval:doc.connection_mode=='Direct'",
+   "description": "Used when a host does not set its own SSH user."
+  },
+  {
+   "fieldname": "default_bench_path",
+   "fieldtype": "Data",
+   "label": "Default Bench Path",
+   "description": "Used when a host does not set its own bench path, e.g. /home/ubuntu/frappe-bench."
+  },
+  {
+   "fieldname": "server_host_key",
+   "fieldtype": "Small Text",
+   "label": "Pinned Warpgate Host Key",
+   "read_only": 1,
+   "depends_on": "eval:doc.connection_mode=='Warpgate'",
+   "description": "Stored on first connection. A change blocks polling until you reset it."
+  },
+  {
+   "fieldname": "reset_host_key",
+   "fieldtype": "Button",
+   "label": "Reset Pinned Host Key",
+   "depends_on": "eval:doc.connection_mode=='Warpgate'"
+  },
+  {
+   "fieldname": "key_section",
+   "fieldtype": "Section Break",
+   "label": "SSH Key"
+  },
+  {
+   "fieldname": "public_key",
+   "fieldtype": "Small Text",
+   "label": "Public Key",
+   "read_only": 1,
+   "description": "Add this to the Warpgate user (or to authorized_keys in Direct mode)."
+  },
+  {
+   "fieldname": "key_fingerprint",
+   "fieldtype": "Data",
+   "label": "Fingerprint",
+   "read_only": 1
+  },
+  {
+   "fieldname": "private_key",
+   "fieldtype": "Password",
+   "label": "Private Key",
+   "read_only": 1,
+   "description": "Encrypted, write-only, never sent to the browser."
+  },
+  {
+   "fieldname": "key_passphrase",
+   "fieldtype": "Password",
+   "label": "Key Passphrase",
+   "description": "Only if you imported a passphrase-protected key."
+  },
+  {
+   "fieldname": "generate_key",
+   "fieldtype": "Button",
+   "label": "Generate New Key Pair"
+  },
+  {
+   "fieldname": "import_key",
+   "fieldtype": "Button",
+   "label": "Import Existing Key"
+  },
+  {
+   "fieldname": "limits_section",
+   "fieldtype": "Section Break",
+   "label": "Polling"
+  },
+  {
+   "fieldname": "poll_interval_seconds",
+   "fieldtype": "Int",
+   "label": "Poll Interval (seconds)",
+   "default": "30"
+  },
+  {
+   "fieldname": "parallelism",
+   "fieldtype": "Int",
+   "label": "Parallel Hosts",
+   "default": "8"
+  },
+  {
+   "fieldname": "connect_timeout",
+   "fieldtype": "Int",
+   "label": "Connect Timeout (seconds)",
+   "default": "20"
+  },
+  {
+   "fieldname": "command_timeout",
+   "fieldtype": "Int",
+   "label": "Command Timeout (seconds)",
+   "default": "60"
+  },
+  {
+   "fieldname": "test_section",
+   "fieldtype": "Section Break",
+   "label": "Test"
+  },
+  {
+   "fieldname": "test_host",
+   "fieldtype": "Link",
+   "label": "Host to Test",
+   "options": "Monitored Host"
+  },
+  {
+   "fieldname": "test_connection",
+   "fieldtype": "Button",
+   "label": "Test Connection"
+  }
+ ],
+ "icon": "fa fa-key",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "SSH Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

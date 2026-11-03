@@ -394,8 +394,8 @@ export function useUptimeHistory(site: string, days = 7) {
 }
 
 // ---------------------------------------------------------------------------
-// Host Health — service/worker/failed-job status changes on every agent
-// push (~20-30s, see host_health/agent), so the "live" doctypes below use
+// Host Health — service/worker/failed-job status changes on every SSH
+// poll (~30s, see tasks/host_poller), so the "live" doctypes below use
 // UI_POLL_MS like the rest of the dashboard; Host Monitor Settings and the
 // site-inventory child table change as rarely as any other settings/
 // inventory data, so those two use SLOW_POLL_MS.
@@ -724,8 +724,8 @@ export function useRecurringErrors(f: LogFilters, minCount: number, enabled: boo
   return { ...result, data: result.data?.message }
 }
 
-/** Latest resource-agent load average per Proxmox Guest (Usage Metrics'
- * Load avg column). The agent pushes every ~3 minutes, so a 60s refresh
+/** Latest polled load average per Proxmox Guest (Usage Metrics'
+ * Load avg column). Hosts are polled every ~30 seconds, so a 60s refresh
  * is plenty. */
 export function useGuestLoadAverages() {
   const result = useFrappeGetCall<{ message: GuestLoadAverages }>(
