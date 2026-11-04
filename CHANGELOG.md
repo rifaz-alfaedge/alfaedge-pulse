@@ -2,11 +2,18 @@
 
 All notable changes to this project are documented here.
 
-## Unreleased
+## [6.1.1] - 2026-11-04
+
+Warpgate targets default to the host's hostname, and a safety limit for servers that hold copies of production.
 
 ### Added
 - **Warpgate target naming.** A host's Warpgate target is now its **hostname** by default (SSH Settings > *Warpgate Target Name*: *Hostname*), so naming Warpgate targets after the servers needs no per-host setup. A name typed in a host's **SSH Target** still wins, for a server Warpgate calls something else, and *Custom per host only* restores the old behaviour. A hostname that cannot be a target (a space or a colon) is refused with a clear reason. Direct mode is unchanged.
 - **`pulse_ssh_roles`** in a server's own `site_config.json` limits which Proxmox server roles it may poll (for example `["Staging", "Development"]` on a dev copy of production). A refused host gets a plain message and is never contacted. This is what stops a restored copy of production from logging in to production guests once hosts no longer need a typed target.
+
+### Upgrade notes
+- After deploying, a host's Warpgate target is its **hostname** unless a name is typed on the host. Create the Warpgate targets with the hostnames (or type each custom name in the host's SSH Target) before switching **Polling Enabled** back on.
+- On any server that is **not** production, add `"pulse_ssh_roles": ["Staging", "Development"]` to its `site_config.json`. Leave it unset on production.
+- No new indexes, tables or settings to configure; the migrate is quick.
 
 ## [6.1.0] - 2026-11-04
 
