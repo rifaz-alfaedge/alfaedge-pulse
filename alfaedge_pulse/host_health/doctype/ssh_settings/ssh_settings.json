@@ -28,6 +28,11 @@
   "parallelism",
   "connect_timeout",
   "command_timeout",
+  "state_section",
+  "bastion_unreachable",
+  "bastion_failure_streak",
+  "hosts_section",
+  "add_hosts",
   "test_section",
   "test_host",
   "test_connection"
@@ -172,6 +177,36 @@
    "fieldtype": "Int",
    "label": "Command Timeout (seconds)",
    "default": "60"
+  },
+  {
+   "fieldname": "state_section",
+   "fieldtype": "Section Break",
+   "label": "State"
+  },
+  {
+   "fieldname": "bastion_unreachable",
+   "fieldtype": "Check",
+   "label": "Warpgate Unreachable",
+   "read_only": 1,
+   "description": "Set after several polling cycles in a row where every host failed at the connection to Warpgate. Raises one alert; per-host unreachable alerts are held back meanwhile."
+  },
+  {
+   "fieldname": "bastion_failure_streak",
+   "fieldtype": "Int",
+   "label": "Consecutive Failed Cycles",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "hosts_section",
+   "fieldtype": "Section Break",
+   "label": "Hosts"
+  },
+  {
+   "fieldname": "add_hosts",
+   "fieldtype": "Button",
+   "label": "Add Hosts from Proxmox Guests",
+   "description": "Creates a Monitored Host per guest, switched off, with the Warpgate target name filled in from the guest name."
   },
   {
    "fieldname": "test_section",

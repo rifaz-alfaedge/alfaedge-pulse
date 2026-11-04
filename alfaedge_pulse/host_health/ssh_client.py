@@ -35,13 +35,25 @@ MAX_OUTPUT_BYTES = 4 * 1024 * 1024
 RECONNECT_AFTER_SECONDS = 3600
 
 
+def polling_allowed() -> bool:
+	"""Whether this server may poll hosts at all: ``pulse_ssh_polling`` must be
+	set in ``site_config.json``. That file is not part of a database backup, so
+	a restored copy of production (which carries SSH Settings, including the
+	key and the *Polling Enabled* switch) stays silent until someone sets it
+	here on purpose, the same way ``mute_emails`` works."""
+	return bool(frappe.conf.get("pulse_ssh_polling"))
+
+
 class SSHPollError(Exception):
 	"""A poll failed in a way worth showing on the host. ``kind`` is a short
-	machine-friendly reason (auth, timeout, hostkey, refused, collector)."""
+	machine-friendly reason (auth, timeout, hostkey, refused, collector).
+	``scope`` is "bastion" when the failure is reaching the Warpgate server
+	itself (so it affects every host the same way) and "host" otherwise."""
 
-	def __init__(self, kind: str, message: str):
+	def __init__(self, kind: str, message: str, scope: str = "host"):
 		super().__init__(message)
 		self.kind = kind
+		self.scope = scope
 
 
 class HostKeyChanged(paramiko.SSHException):
@@ -163,6 +175,12 @@ def resolve_target(host_name: str) -> Target:
 	)
 
 
+def _connect_scope(target: Target) -> str:
+	"""A failed connection is a bastion problem only in Warpgate mode, where
+	the connection goes to Warpgate rather than to the host."""
+	return "bastion" if target.pin_scope == "settings" else "host"
+
+
 def _connect(target: Target, pkey: paramiko.PKey) -> tuple[paramiko.SSHClient, str | None]:
 	policy = _PinPolicy(target.pinned_key)
 	client = paramiko.SSHClient()
@@ -181,17 +199,21 @@ def _connect(target: Target, pkey: paramiko.PKey) -> tuple[paramiko.SSHClient, s
 		)
 	except HostKeyChanged as exc:
 		client.close()
-		raise SSHPollError("hostkey", str(exc))
+		raise SSHPollError("hostkey", str(exc), scope=_connect_scope(target))
 	except paramiko.AuthenticationException:
 		client.close()
 		raise SSHPollError("auth", "SSH authentication was refused.")
 	except (TimeoutError, OSError) as exc:
 		client.close()
 		kind = "timeout" if isinstance(exc, TimeoutError) else "refused"
-		raise SSHPollError(kind, f"Could not connect to {target.hostname}:{target.port} ({type(exc).__name__}).")
+		raise SSHPollError(
+			kind,
+			f"Could not connect to {target.hostname}:{target.port} ({type(exc).__name__}).",
+			scope=_connect_scope(target),
+		)
 	except paramiko.SSHException as exc:
 		client.close()
-		raise SSHPollError("refused", f"SSH negotiation failed ({type(exc).__name__}).")
+		raise SSHPollError("refused", f"SSH negotiation failed ({type(exc).__name__}).", scope=_connect_scope(target))
 	transport = client.get_transport()
 	if transport:
 		transport.set_keepalive(30)

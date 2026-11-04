@@ -93,3 +93,82 @@ def test_connection(monitored_host: str) -> dict:
 		"disks": len(report.get("resources", {}).get("disks", [])),
 		"errors": report.get("errors", []),
 	}
+
+
+@frappe.whitelist()
+def get_polling_state() -> dict:
+	"""For the form banner: is this server allowed to poll at all (see
+	``ssh_client.polling_allowed``)."""
+	frappe.only_for(MANAGE_ROLES)
+	from alfaedge_pulse.host_health.ssh_client import polling_allowed
+
+	return {"allowed": polling_allowed()}
+
+
+# ---------------------------------------------------------------------------
+# Adding hosts in bulk
+# ---------------------------------------------------------------------------
+
+TARGET_PATTERNS = {
+	# altaza-staging.alfaedge.in -> Altaza-Staging (the usual Warpgate target naming)
+	"title": lambda guest_name: "-".join(part.capitalize() for part in guest_name.split(".")[0].split("-")),
+	"short": lambda guest_name: guest_name.split(".")[0],
+	"full": lambda guest_name: guest_name,
+}
+MAX_BULK_HOSTS = 200
+
+
+def _candidate_guests(role: str, only_running: bool, pattern: str) -> list[dict]:
+	if pattern not in TARGET_PATTERNS:
+		frappe.throw("Unknown target name pattern.")
+	servers = frappe.get_all("Proxmox Server", filters={"role": role, "server_type": "PVE"}, pluck="name")
+	if not servers:
+		return []
+	filters = {"server": ["in", servers]}
+	if only_running:
+		filters["status"] = "running"
+	existing = set(frappe.get_all("Monitored Host", pluck="proxmox_guest"))
+	rows = []
+	for guest in frappe.get_all(
+		"Proxmox Guest", filters=filters, fields=["name", "guest_name", "status", "ip_address"], order_by="guest_name asc"
+	):
+		if guest.name in existing or not guest.guest_name:
+			continue
+		rows.append(
+			{
+				"guest": guest.name,
+				"guest_name": guest.guest_name,
+				"status": guest.status,
+				"target": TARGET_PATTERNS[pattern](guest.guest_name),
+			}
+		)
+	return rows[:MAX_BULK_HOSTS]
+
+
+@frappe.whitelist()
+def preview_hosts_from_guests(role: str = "Staging", only_running: int = 1, pattern: str = "title") -> list[dict]:
+	"""Guests of this role that have no Monitored Host yet, with the Warpgate
+	target name each would get. Nothing is created."""
+	frappe.only_for(MANAGE_ROLES)
+	return _candidate_guests(role, bool(int(only_running)), pattern)
+
+
+@frappe.whitelist()
+def create_hosts_from_guests(guests: str, role: str = "Staging", only_running: int = 1, pattern: str = "title") -> dict:
+	"""Creates a Monitored Host for each chosen guest, **switched off**, with
+	the Warpgate target filled in. They start being polled only after someone
+	adds the matching target in Warpgate and enables the host. The target
+	names are recomputed here, never taken from the browser."""
+	frappe.only_for(MANAGE_ROLES)
+	chosen = set(frappe.parse_json(guests) or [])
+	by_guest = {row["guest"]: row for row in _candidate_guests(role, bool(int(only_running)), pattern)}
+	created = []
+	for guest in chosen:
+		row = by_guest.get(guest)
+		if not row:
+			continue  # already monitored, wrong role, or not a candidate
+		doc = frappe.get_doc(
+			{"doctype": "Monitored Host", "proxmox_guest": guest, "enabled": 0, "ssh_target": row["target"]}
+		).insert()
+		created.append(doc.name)
+	return {"created": len(created), "skipped": len(chosen) - len(created)}

@@ -12,7 +12,13 @@ All notable changes to this project are documented here.
 - **SSH Settings**: Warpgate or Direct mode, encrypted private key (generate or import; only the public key is shown), host-key pinning, Test connection.
 - Monitored Host: SSH target, port, user, bench path, last poll result.
 
+- **Safeguards.** Polling also needs `"pulse_ssh_polling": true` in the server's own `site_config.json` (not in database backups, so a restored copy of production stays silent). If the Warpgate server cannot be reached, one *Warpgate Unreachable* alert replaces a *Host Unreachable* alert per host. The poll loops fall back to the `long` queue, with a log warning, when the `pulse` queue has no worker.
+- **Add Hosts from Proxmox Guests** (SSH Settings) creates a Monitored Host per guest, switched off, with the Warpgate target name filled in from the guest name.
+- Retention now also covers Frappe Worker Health Log (30 days) and resolved Frappe Failed Job Log rows (90 days).
+- `scripts/remove-pulse-agent.sh` removes the old agent from a guest (dry run unless `--yes`); manual test scripts are in `tests/manual/`.
+
 ### Upgrade notes (needed on every bench that runs Pulse)
+- Add `"pulse_ssh_polling": true` to `sites/<site>/site_config.json` on the server that should poll.
 - `pip install "paramiko>=4"` in the bench environment (or `bench setup requirements`).
 - The three always-on poll loops (Proxmox, Uptime Kuma, SSH hosts) run on their **own queue and workers** (`pulse`), one worker process per loop. Left on `long`, they pinned both long workers around the clock and starved every real long job (Bifrost sync, site discovery, AI reports, ERPNext/Helpdesk scheduled jobs). Add `"workers": {"pulse": {"timeout": 420, "background_workers": 3}}` to `sites/common_site_config.json`, add a `frappe-bench-frappe-pulse-worker` program (`bench worker --queue pulse`, `stopwaitsecs=420`, `numprocs=3`) to the supervisor config and to the `frappe-bench-workers` group, then `sudo supervisorctl reread && sudo supervisorctl update`. `bench setup supervisor` also generates it, but regenerates the whole file. A fourth loop would need a fourth process.
 - The Uptime loop no longer runs while every Uptime Kuma instance is disabled.

@@ -14,8 +14,9 @@ database writes happen back on the loop's own thread as each host's result
 arrives, through ``host_health/ingest.py``'s ``process_status`` and
 ``process_resources``.
 
-Nothing is polled unless ``SSH Settings`` → *Polling Enabled* is on, so a
-restored copy of production stays silent until someone turns it on.
+Nothing is polled unless ``pulse_ssh_polling`` is set in this server's
+``site_config.json`` *and* ``SSH Settings`` → *Polling Enabled* is on, so a
+restored copy of production stays silent until someone turns it on here.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from frappe.utils import cint
 
 from alfaedge_pulse.host_health import ssh_client
 from alfaedge_pulse.host_health.ingest import process_performance, process_resources, process_status
-from alfaedge_pulse.tasks.jobs import POLLER_QUEUE
+from alfaedge_pulse.tasks.jobs import poller_queue
 
 POLLER_JOB_ID = "alfaedge_pulse_host_poller"
 HEARTBEAT_CACHE_KEY = "alfaedge_pulse:host_poller_heartbeat"
@@ -37,10 +38,13 @@ MAX_LOOP_SECONDS = 300
 STALE_JOB_SECONDS = MAX_LOOP_SECONDS + 300
 DEFAULT_INTERVAL_SECONDS = 30
 DEFAULT_PARALLELISM = 8
+BASTION_ALERT = "Warpgate Unreachable"
 
 
 def _enabled() -> bool:
-	return bool(cint(frappe.db.get_single_value("SSH Settings", "enabled")))
+	"""Both switches must be on: the site_config.json opt-in for this server
+	(see ``ssh_client.polling_allowed``) and SSH Settings' own switch."""
+	return ssh_client.polling_allowed() and bool(cint(frappe.db.get_single_value("SSH Settings", "enabled")))
 
 
 def ensure_host_poller_running() -> None:
@@ -56,7 +60,7 @@ def ensure_host_poller_running() -> None:
 	clear_stale_job(POLLER_JOB_ID, STALE_JOB_SECONDS, "host poller")
 	frappe.enqueue(
 		"alfaedge_pulse.tasks.host_poller.run_host_poll_loop",
-		queue=POLLER_QUEUE,
+		queue=poller_queue(),
 		timeout=MAX_LOOP_SECONDS + 120,
 		job_id=POLLER_JOB_ID,
 		deduplicate=True,
@@ -127,6 +131,7 @@ def poll_all_hosts() -> None:
 		except ssh_client.SSHPollError as exc:
 			return None, None, exc, int((time.monotonic() - started) * 1000)
 
+	succeeded = bastion_failed = 0
 	with ThreadPoolExecutor(max_workers=parallelism) as pool:
 		futures = {pool.submit(_timed, t): name for name, t in targets.items()}
 		for future in as_completed(futures):
@@ -137,9 +142,54 @@ def poll_all_hosts() -> None:
 				frappe.log_error(title=f"Host Health: poll crashed for {name}", message=frappe.get_traceback())
 				continue
 			if error:
+				bastion_failed += 1 if error.scope == "bastion" else 0
 				_record_failure(name, error.kind, str(error), duration_ms)
 			else:
+				succeeded += 1
 				_store_report(name, targets[name], report, new_key, duration_ms)
+
+	if targets:
+		update_bastion_state(len(targets), succeeded, bastion_failed)
+
+
+def update_bastion_state(attempted: int, succeeded: int, bastion_failed: int) -> bool:
+	"""Tracks whether Warpgate itself is unreachable and raises one alert for
+	it, instead of one "Host Unreachable" per host.
+
+	A cycle counts against Warpgate only when every host that was tried failed
+	at the connection to Warpgate (refused, timed out, host key changed).
+	Any success, or any failure of another kind (a refused login for one
+	target, a collector error), means Warpgate is up. It is declared down
+	after ``confirmation_checks`` such cycles in a row, like every other alert
+	here, and back up on the first cycle that reaches it. While it is down the
+	heartbeat check leaves the hosts alone. Returns the new state."""
+	from alfaedge_pulse.tasks.host_health_watchdog import DEFAULT_CONFIRMATION_CHECKS
+	from alfaedge_pulse.tasks.poller import _handle_transition
+
+	bastion_cycle = attempted > 0 and succeeded == 0 and bastion_failed == attempted
+	settings = frappe.db.get_value(
+		"SSH Settings", None, ["bastion_unreachable", "bastion_failure_streak"], as_dict=True
+	) or frappe._dict()
+	was_down = bool(cint(settings.bastion_unreachable))
+	streak = cint(settings.bastion_failure_streak) + 1 if bastion_cycle else 0
+	checks = cint(frappe.db.get_single_value("Host Monitor Settings", "confirmation_checks")) or DEFAULT_CONFIRMATION_CHECKS
+	is_down = streak >= checks if bastion_cycle else False
+
+	if streak != cint(settings.bastion_failure_streak) or is_down != was_down:
+		frappe.db.set_single_value("SSH Settings", {"bastion_failure_streak": streak, "bastion_unreachable": 1 if is_down else 0})
+		frappe.clear_cache(doctype="SSH Settings")
+	_handle_transition(
+		was_down,
+		is_down,
+		"SSH Settings",
+		"SSH Settings",
+		BASTION_ALERT,
+		"alfaEdge Pulse: the Warpgate server cannot be reached, so no host can be polled. Per-host unreachable alerts are held back until it is back.",
+		recovery_message="alfaEdge Pulse: Warpgate is reachable again; host polling has resumed.",
+		notify_global=True,
+	)
+	frappe.db.commit()
+	return is_down
 
 
 def _store_report(name: str, target, report: dict, new_key: str | None, duration_ms: int) -> None:

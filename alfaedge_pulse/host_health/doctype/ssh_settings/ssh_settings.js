@@ -4,6 +4,70 @@
 const SSH = "alfaedge_pulse.host_health.doctype.ssh_settings.ssh_settings";
 
 frappe.ui.form.on("SSH Settings", {
+	refresh(frm) {
+		frm.set_intro("");
+		frappe.call({
+			method: `${SSH}.get_polling_state`,
+			callback(r) {
+				if (r.message && !r.message.allowed) {
+					frm.set_intro(
+						__("This server will not poll any host: <b>pulse_ssh_polling</b> is not set in its site_config.json. Set it on the server that should poll (not on copies of production), then restart."),
+						"orange"
+					);
+				}
+			},
+		});
+	},
+
+	add_hosts(frm) {
+		let candidates = [];
+		const d = new frappe.ui.Dialog({
+			title: __("Add Hosts from Proxmox Guests"),
+			fields: [
+				{ fieldname: "role", fieldtype: "Select", label: __("Server role"), options: "Staging\nDevelopment\nProduction\nBackup", default: "Staging" },
+				{ fieldname: "pattern", fieldtype: "Select", label: __("Warpgate target name"), options: "title\nshort\nfull", default: "title",
+					description: __("title: altaza-staging.alfaedge.in becomes Altaza-Staging. short: altaza-staging. full: the whole guest name.") },
+				{ fieldname: "only_running", fieldtype: "Check", label: __("Only running guests"), default: 1 },
+				{ fieldname: "preview_button", fieldtype: "Button", label: __("Preview") },
+				{ fieldname: "preview", fieldtype: "HTML" },
+			],
+			primary_action_label: __("Create (switched off)"),
+			primary_action(values) {
+				if (!candidates.length) {
+					frappe.msgprint(__("Preview first."));
+					return;
+				}
+				frappe.call({
+					method: `${SSH}.create_hosts_from_guests`,
+					args: { guests: candidates.map((c) => c.guest), role: values.role, only_running: values.only_running ? 1 : 0, pattern: values.pattern },
+					freeze: true,
+					callback(r) {
+						d.hide();
+						const m = r.message || {};
+						frappe.msgprint(__("Created {0} host(s), all switched off. Add each target in Warpgate, then enable the host.", [m.created]));
+					},
+				});
+			},
+		});
+		d.fields_dict.preview_button.input.onclick = () => {
+			const v = d.get_values();
+			frappe.call({
+				method: `${SSH}.preview_hosts_from_guests`,
+				args: { role: v.role, only_running: v.only_running ? 1 : 0, pattern: v.pattern },
+				callback(r) {
+					candidates = r.message || [];
+					const rows = candidates.map((c) => `<tr><td>${frappe.utils.escape_html(c.guest_name)}</td><td>${frappe.utils.escape_html(c.target)}</td></tr>`).join("");
+					d.fields_dict.preview.$wrapper.html(
+						candidates.length
+							? `<table class="table table-bordered"><thead><tr><th>${__("Guest")}</th><th>${__("Warpgate target")}</th></tr></thead><tbody>${rows}</tbody></table>`
+							: `<p class="text-muted">${__("No guests without a Monitored Host.")}</p>`
+					);
+				},
+			});
+		};
+		d.show();
+	},
+
 	generate_key(frm) {
 		frappe.confirm(
 			__("This replaces the current key. Hosts keep working only after the new public key is added to Warpgate (or authorized_keys). Continue?"),

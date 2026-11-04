@@ -1,6 +1,6 @@
 # alfaEdge Pulse
 
-**Version 2.1.0** — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version 6.0.0 (in progress)** — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 A standalone Frappe 16 app (no ERPNext dependency) that gives you a single,
 real-time dashboard for a Proxmox fleet — PVE hosts, every VM/CT running on
@@ -56,8 +56,8 @@ self-hosted [Bifrost](https://getbifrost.ai) gateway (see
   - **Hosts and backup server:** CPU, RAM, swap and per-drive disk, each
     as used/total, plus load average and uptime.
   - **VMs and containers:** CPU, RAM and disk, each as used/allocated,
-    plus load average from the Pulse resource agent, IP, uptime, last
-    backup and Host Health.
+    plus load average from the host poll, IP, uptime, last backup and
+    Host Health.
 
   Values past the warning/critical thresholds are coloured. A heartbeat
   indicator shows how recently each node synced, and clicking a row
@@ -453,6 +453,42 @@ down alerts after the usual *Alert Window Checks* — never on checks from
 before the shutdown. Windows live in Pulse only (Desk: **Uptime
 Maintenance Window**) and never touch Kuma.
 
+## Host Health (SSH polling)
+
+Pulse watches the inside of your guests (services, the Frappe bench, load,
+memory, swap, disks and disk I/O) by logging in over SSH and running a
+read-only script it sends on stdin. **Nothing is installed on the guests.**
+The older `pulse_agent` app is no longer used; remove it with
+[`scripts/remove-pulse-agent.sh`](scripts/remove-pulse-agent.sh) (it only
+prints what it would do unless you pass `--yes`).
+
+**One-time setup on the server that polls**
+
+1. `pip install "paramiko>=4"` in the bench environment.
+2. Give the poll loops their own queue and workers (see the CHANGELOG
+   upgrade notes): a `workers` entry in `sites/common_site_config.json`
+   and a supervisor program, one process per loop. If this is missing,
+   the loops fall back to the `long` queue and log a warning.
+3. Allow polling on this server: add `"pulse_ssh_polling": true` to its
+   `sites/<site>/site_config.json`. That file is not part of a database
+   backup, so a restored copy of production stays silent until you do
+   the same there.
+4. Open **SSH Settings** in Desk. Choose *Warpgate* (Pulse logs in to your
+   bastion as `<user>:<target>`) or *Direct*. Click **Generate New Key Pair**
+   and add the public key to the Warpgate user, or import an existing key.
+   Use a Pulse-only Warpgate user and key, per environment.
+5. Add hosts: **Add Hosts from Proxmox Guests** creates a Monitored Host per
+   guest, switched off, with the Warpgate target name filled in. Create the
+   same targets in Warpgate, enable the host, use **Test Connection**, then
+   switch on *Polling Enabled*.
+
+Each guest's login needs read access to the bench folder (to read the site
+config). Set *Default Bench Path* once if it is the same everywhere.
+
+**If Warpgate goes down**, polling every host fails the same way. After a few
+cycles Pulse raises one *Warpgate Unreachable* alert and holds back the
+per-host *Host Unreachable* alerts until it is reachable again.
+
 ## Site discovery (NPM + Cloudflare)
 
 The **Sites** column in Usage Metrics, and the site list in each row's
@@ -461,7 +497,8 @@ popup, come from a daily sync that combines three sources:
 - **Nginx Proxy Manager:** each Proxmox host's NPM. A proxy host's forward
   IP identifies the VM/CT.
 - **Cloudflare DNS:** records pointing straight at a VM/CT's own IP.
-- **The Pulse agent:** sites reported from each bench.
+- **SSH polling:** sites read from each bench's `sites` folder on every
+  host Pulse polls (see [Host Health](#host-health-ssh-polling)).
 
 When the same domain exists in two or more NPMs, the NPM whose public IP
 the domain's Cloudflare record points to wins. Anything that can't be

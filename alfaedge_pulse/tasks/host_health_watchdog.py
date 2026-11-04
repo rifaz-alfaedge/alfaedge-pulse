@@ -25,11 +25,17 @@ from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from alfaedge_pulse.tasks.poller import _handle_transition
 
+DEFAULT_CONFIRMATION_CHECKS = 3
 DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 90
 DEFAULT_SCHEDULER_HEARTBEAT_TIMEOUT_MINUTES = 15
 
 
 def check_host_heartbeats() -> None:
+	if cint(frappe.db.get_single_value("SSH Settings", "bastion_unreachable")):
+		# Warpgate itself is down, so every host looks stale for the same one
+		# reason, which has its own alert (see host_poller.update_bastion_state).
+		# Leave every host's state as it was instead of raising one alert each.
+		return
 	settings = frappe.get_cached_doc("Host Monitor Settings")
 	heartbeat_timeout = cint(settings.heartbeat_timeout_seconds) or DEFAULT_HEARTBEAT_TIMEOUT_SECONDS
 	scheduler_timeout_minutes = (

@@ -83,7 +83,7 @@ from alfaedge_pulse.proxmox_client.base import ProxmoxAPIError
 from alfaedge_pulse.proxmox_client.pbs import PBSClient
 from alfaedge_pulse.proxmox_client.pve import PVEClient
 from alfaedge_pulse.proxmox_resource_history.collector import log_guest_metrics, log_host_metrics
-from alfaedge_pulse.tasks.jobs import POLLER_QUEUE
+from alfaedge_pulse.tasks.jobs import poller_queue
 
 POLLER_JOB_ID = "alfaedge_pulse_poller"
 HEARTBEAT_CACHE_KEY = "alfaedge_pulse:poller_heartbeat"
@@ -155,7 +155,7 @@ def ensure_poller_running() -> None:
 	_clear_stale_poller_job()
 	frappe.enqueue(
 		"alfaedge_pulse.tasks.poller.run_poll_loop",
-		queue=POLLER_QUEUE,
+		queue=poller_queue(),
 		# A little headroom over MAX_LOOP_SECONDS for the final sync +
 		# commit to finish; RQ force-kills the job if it ever runs past
 		# this, as a hard backstop behind the loop's own bound.
