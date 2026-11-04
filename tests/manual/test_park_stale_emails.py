@@ -40,6 +40,19 @@ try:
 	check("it says why in the error field", "Held back by hand" in (frappe.db.get_value("Email Queue", old1, "error") or ""))
 	check("nothing is deleted", all(frappe.db.exists("Email Queue", n) for n in (old1, old2, partial, recent, sent_old, errored)))
 	check("a second run finds nothing old", park(hours=24, dry_run=False, say=lambda m: None)["parked"] == 0)
+	# keeping a document type
+	def typed(hours_old, doctype):
+		name = queue(hours_old)
+		frappe.db.set_value("Email Queue", name, "reference_doctype", doctype, update_modified=False)
+		return name
+
+	leave, task = typed(300, "Staff Leave"), typed(300, "Task")
+	said = []
+	r = park(hours=24, dry_run=False, say=said.append, keep=["Staff Leave"])
+	st = lambda n: frappe.db.get_value("Email Queue", n, "status")
+	check("an old email of a kept type is left to send", st(leave) == "Not Sent" and r["kept"] >= 1, (st(leave), r))
+	check("an old email of another type is still held back", st(task) == "Error")
+	check("the kept ones are listed as going out", any("kept on purpose" in m for m in said), said)
 	check("a longer threshold spares more", park(hours=24 * 365, dry_run=True, say=lambda m: None)["old"] == 0)
 finally:
 	frappe.db.commit = orig_commit

@@ -8,6 +8,8 @@ recent emails are left alone.
 
 By default it only LISTS. It changes things only when PULSE_PARK_CONFIRM=yes.
 PULSE_PARK_HOURS sets what counts as old (default 24 hours).
+PULSE_PARK_KEEP names document types whose old emails are NOT held back and will
+be sent (comma separated, e.g. "Staff Leave").
 
     cd /home/ubuntu/frappe-bench
     bench --site alfaedge execute 'exec(open("/home/ubuntu/park_stale_emails.py").read(), {"__name__": "t"})'
@@ -23,10 +25,13 @@ WAITING = ("Not Sent", "Partially Sent")
 NOTE = "Held back by hand before the scheduler was resumed, because it was queued long before."
 
 
-def park_stale_emails(hours=24, dry_run=True, say=print) -> dict:
+def park_stale_emails(hours=24, dry_run=True, say=print, keep=()) -> dict:
 	cutoff = add_to_date(now_datetime(), hours=-hours)
 	waiting = frappe.get_all("Email Queue", filters={"status": ["in", WAITING]}, fields=["name", "creation", "reference_doctype", "sender"], order_by="creation asc", limit_page_length=0)
-	old = [e for e in waiting if e.creation < cutoff]
+	keep = set(keep)
+	older = [e for e in waiting if e.creation < cutoff]
+	old = [e for e in older if (e.reference_doctype or "") not in keep]
+	kept = [e for e in older if (e.reference_doctype or "") in keep]
 	recent = [e for e in waiting if e.creation >= cutoff]
 	say(f"Waiting to be sent: {len(waiting)} | older than {hours} h: {len(old)} | newer: {len(recent)}")
 	if old:
@@ -34,18 +39,24 @@ def park_stale_emails(hours=24, dry_run=True, say=print) -> dict:
 		for (what, sender), n in by_what.most_common(6):
 			say(f"  {n:>4} old  about {what}  from {sender}")
 		say(f"  oldest {old[0].creation} | newest of the old ones {old[-1].creation}")
+	if kept:
+		say(f"These {len(kept)} old ones are kept on purpose and WILL be sent ({', '.join(sorted(keep))}; oldest {kept[0].creation}).")
 	if recent:
 		say(f"These {len(recent)} recent ones WILL be sent when the scheduler runs (newest {recent[-1].creation}).")
 	if dry_run or not old:
 		say("Nothing was changed." if dry_run else "Nothing old to hold back.")
-		return {"old": len(old), "recent": len(recent), "parked": 0}
+		return {"old": len(old), "recent": len(recent), "kept": len(kept), "parked": 0}
 	names = [e.name for e in old]
 	for i in range(0, len(names), 500):
 		frappe.db.sql("update `tabEmail Queue` set status = 'Error', error = %(note)s where name in %(names)s", {"note": NOTE, "names": names[i : i + 500]})
 	frappe.db.commit()
 	say(f"Marked {len(names)} old email(s) as Error. They will not be sent. Nothing was deleted.")
-	return {"old": len(old), "recent": len(recent), "parked": len(names)}
+	return {"old": len(old), "recent": len(recent), "kept": len(kept), "parked": len(names)}
 
 
 if __name__ == "t":  # `bench execute` runs this file with that name; tests import it under another
-	park_stale_emails(hours=float(os.environ.get("PULSE_PARK_HOURS", "24")), dry_run=os.environ.get("PULSE_PARK_CONFIRM") != "yes")
+	park_stale_emails(
+		hours=float(os.environ.get("PULSE_PARK_HOURS", "24")),
+		dry_run=os.environ.get("PULSE_PARK_CONFIRM") != "yes",
+		keep=[x.strip() for x in os.environ.get("PULSE_PARK_KEEP", "").split(",") if x.strip()],
+	)
