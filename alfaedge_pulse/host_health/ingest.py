@@ -1017,3 +1017,201 @@ def _store_io_samples(host_name, now, devices: list) -> int:
 		)
 		doc.insert(ignore_permissions=True)
 	return len(chosen)
+
+
+# ---------------------------------------------------------------------------
+# MariaDB: status counters into rates, gauges, configuration snapshots
+# ---------------------------------------------------------------------------
+
+#: Cumulative counters kept raw between samples. Everything per-second below
+#: is the difference to the previous sample over the time between them.
+MARIADB_COUNTER_KEYS = (
+	"Questions", "Slow_queries", "Connections", "Aborted_connects", "Aborted_clients",
+	"Connection_errors_max_connections",
+	"Innodb_buffer_pool_reads", "Innodb_buffer_pool_read_requests", "Innodb_buffer_pool_wait_free",
+	"Innodb_buffer_pool_pages_flushed", "Innodb_data_reads", "Innodb_data_writes", "Innodb_data_fsyncs",
+	"Innodb_log_waits", "Innodb_row_lock_waits", "Innodb_row_lock_time", "Innodb_deadlocks",
+	"Created_tmp_disk_tables", "Created_tmp_tables", "Select_full_join", "Sort_merge_passes",
+	"Opened_tables", "Table_locks_waited",
+)
+#: A configuration snapshot is stored when a setting changes, and at least this
+#: often while sizes are being read, so data growth can be charted.
+MARIADB_SNAPSHOT_EVERY_SECONDS = 3600
+MB = 1048576
+
+
+def _ratio_percent(part, whole):
+	return round(part / whole * 100, 2) if whole else None
+
+
+def process_mariadb(
+	host_name: str,
+	reported_at: str,
+	via: str | None = None,
+	status: dict | None = None,
+	variables: dict | None = None,
+	data: dict | None = None,
+	process: dict | None = None,
+	oldest_trx_s: int | None = None,
+	trx_count: int | None = None,
+	limited: list | None = None,
+	sites_total: int | None = None,
+) -> dict:
+	"""Stores one MariaDB report for ``host_name``: a Metric Log row (gauges
+	plus per-second rates against the previous sample) and, when a setting
+	changed or sizes were read, a Config Snapshot. A MariaDB restart (uptime
+	going backwards) or a long gap yields a row whose rates are marked invalid
+	instead of a wrong spike."""
+	warnings: list[str] = []
+	now = now_datetime()
+	logged = snapshots = 0
+	status, variables, process = status or {}, variables or {}, process or {}
+	try:
+		if status:
+			_store_mariadb_sample(host_name, now, status, variables, process, oldest_trx_s, trx_count)
+			logged = 1
+		if variables or data:
+			snapshots = _store_mariadb_snapshot(host_name, now, variables, data, limited, sites_total)
+	except Exception:
+		frappe.log_error(title=f"Host Health: malformed MariaDB payload from {host_name}", message=frappe.get_traceback())
+		warnings.append("skipped malformed MariaDB payload")
+	frappe.db.commit()
+	return {"status": "ok", "monitored_host": host_name, "logged": logged, "snapshots": snapshots, "warnings": warnings}
+
+
+def _store_mariadb_sample(host_name, now, status, variables, process, oldest_trx_s, trx_count) -> None:
+	previous = frappe.db.get_value(
+		"MariaDB Metric Log",
+		{"monitored_host": host_name},
+		["collected_at", "uptime_s", "raw_counters"],
+		order_by="collected_at desc",
+		as_dict=True,
+	)
+	gap = _gap_seconds(previous.collected_at, now) if previous else None
+	uptime = cint(status.get("Uptime"))
+	restarted = bool(previous and previous.uptime_s and uptime < previous.uptime_s)
+	usable = bool(gap) and not restarted
+	prev_raw = {}
+	if usable and previous.raw_counters:
+		try:
+			prev_raw = json.loads(previous.raw_counters)
+		except ValueError:
+			usable = False
+
+	def delta(key):
+		return _counter_delta(status.get(key), prev_raw.get(key)) if usable else None
+
+	def rate(key):
+		return _per_second(delta(key), gap)
+
+	def num(key, source=None):
+		value = (source if source is not None else status).get(key)
+		return flt(value) if value not in (None, "") else None
+
+	pages_total = num("Innodb_buffer_pool_pages_total")
+	max_age = num("Innodb_checkpoint_max_age")
+	reads_d, requests_d = delta("Innodb_buffer_pool_reads"), delta("Innodb_buffer_pool_read_requests")
+	tmp_disk_d, tmp_all_d = delta("Created_tmp_disk_tables"), delta("Created_tmp_tables")
+	lock_waits_d, lock_time_d = delta("Innodb_row_lock_waits"), delta("Innodb_row_lock_time")
+	pool_bytes = num("innodb_buffer_pool_size", variables)
+	log_bytes = num("innodb_log_file_size", variables)
+
+	values = {
+		"monitored_host": host_name,
+		"collected_at": now,
+		"rates_valid": 1 if usable else 0,
+		"uptime_s": uptime,
+		"threads_connected": cint(status.get("Threads_connected")),
+		"threads_running": cint(status.get("Threads_running")),
+		"max_used_connections": cint(status.get("Max_used_connections")),
+		"max_connections": cint(variables.get("max_connections")),
+		"connections_per_s": rate("Connections"),
+		"aborted_connects_per_s": rate("Aborted_connects"),
+		"connection_limit_errors": delta("Connection_errors_max_connections") or 0,
+		"bp_size_mb": round(pool_bytes / MB, 1) if pool_bytes else None,
+		"bp_data_mb": round(flt(status.get("Innodb_buffer_pool_bytes_data")) / MB, 1) if "Innodb_buffer_pool_bytes_data" in status else None,
+		"bp_dirty_percent": _ratio_percent(flt(status.get("Innodb_buffer_pool_pages_dirty")), pages_total),
+		"bp_free_percent": _ratio_percent(flt(status.get("Innodb_buffer_pool_pages_free")), pages_total),
+		"bp_hit_percent": max(0.0, min(100.0, round((1 - reads_d / requests_d) * 100, 2))) if requests_d and reads_d is not None else None,
+		"bp_disk_reads_per_s": rate("Innodb_buffer_pool_reads"),
+		"bp_wait_free": delta("Innodb_buffer_pool_wait_free") or 0,
+		"data_reads_per_s": rate("Innodb_data_reads"),
+		"data_writes_per_s": rate("Innodb_data_writes"),
+		"data_fsyncs_per_s": rate("Innodb_data_fsyncs"),
+		"pages_flushed_per_s": rate("Innodb_buffer_pool_pages_flushed"),
+		"pending_reads": cint(status.get("Innodb_data_pending_reads")),
+		"pending_writes": cint(status.get("Innodb_data_pending_writes")),
+		"pending_fsyncs": cint(status.get("Innodb_data_pending_fsyncs")),
+		"checkpoint_age_percent": _ratio_percent(flt(status.get("Innodb_checkpoint_age")), max_age),
+		"log_waits": delta("Innodb_log_waits") or 0,
+		"io_capacity": cint(variables.get("innodb_io_capacity")),
+		"io_capacity_max": cint(variables.get("innodb_io_capacity_max")),
+		"log_file_size_mb": round(log_bytes / MB, 1) if log_bytes else None,
+		"history_list_length": cint(status.get("Innodb_history_list_length")),
+		"oldest_trx_s": oldest_trx_s,
+		"trx_count": trx_count,
+		"row_lock_current_waits": cint(status.get("Innodb_row_lock_current_waits")),
+		"row_lock_waits_per_s": rate("Innodb_row_lock_waits"),
+		"row_lock_avg_wait_ms": round(lock_time_d / lock_waits_d, 1) if lock_waits_d and lock_time_d is not None else None,
+		"deadlocks": delta("Innodb_deadlocks") or 0,
+		"queries_per_s": rate("Questions"),
+		"slow_queries_per_s": rate("Slow_queries"),
+		"tmp_disk_percent": _ratio_percent(tmp_disk_d, tmp_all_d) if tmp_all_d and tmp_disk_d is not None else None,
+		"tmp_disk_per_s": _per_second(tmp_disk_d, gap),
+		"full_joins_per_s": rate("Select_full_join"),
+		"sort_merge_passes_per_s": rate("Sort_merge_passes"),
+		"table_opens_per_s": rate("Opened_tables"),
+		"table_locks_waited_per_s": rate("Table_locks_waited"),
+		"open_files": cint(status.get("Open_files")),
+		"open_files_limit": cint(variables.get("open_files_limit")),
+		"open_tables": cint(status.get("Open_tables")),
+		"mariadbd_rss_mb": process.get("rss_mb"),
+		"mariadbd_swap_mb": process.get("swap_mb"),
+		"raw_counters": json.dumps({k: status[k] for k in MARIADB_COUNTER_KEYS if k in status}),
+	}
+	doc = frappe.new_doc("MariaDB Metric Log")
+	# A column that is never set stays at its default (0); an explicit None
+	# would be rejected, so unknown values are simply left out.
+	doc.update({k: v for k, v in values.items() if v is not None})
+	doc.insert(ignore_permissions=True)
+
+
+def _store_mariadb_snapshot(host_name, now, variables, data, limited, sites_total) -> int:
+	digest = hashlib.sha1(json.dumps(variables, sort_keys=True, default=str).encode()).hexdigest()[:20] if variables else None
+	latest = frappe.db.get_value(
+		"MariaDB Config Snapshot",
+		{"monitored_host": host_name},
+		["variables_hash", "collected_at"],
+		order_by="collected_at desc",
+		as_dict=True,
+	)
+	changed = bool(variables) and (not latest or latest.variables_hash != digest)
+	age = (now - get_datetime(latest.collected_at)).total_seconds() if latest else None
+	sizes_due = bool(data) and (age is None or age >= MARIADB_SNAPSHOT_EVERY_SECONDS)
+	if not (changed or sizes_due):
+		return 0
+	doc = frappe.new_doc("MariaDB Config Snapshot")
+	doc.update(
+		{
+			"monitored_host": host_name,
+			"collected_at": now,
+			"variables_hash": digest,
+			"version": variables.get("version"),
+			"variables": json.dumps(variables, default=str) if variables else None,
+			"limited": ", ".join(limited or []) or None,
+			"sites_total": sites_total,
+		}
+	)
+	if data:
+		doc.update(
+			{
+				"data_mb": data.get("data_mb"),
+				"index_mb": data.get("index_mb"),
+				"free_mb": data.get("free_mb"),
+				"sites_counted": data.get("sites_counted"),
+				"by_site": json.dumps(data.get("by_site") or []),
+				"top_tables": json.dumps(data.get("top_tables") or []),
+			}
+		)
+	doc.insert(ignore_permissions=True)
+	return 1

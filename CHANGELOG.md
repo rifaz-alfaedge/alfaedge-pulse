@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## Unreleased
+
+### Added
+- **MariaDB monitoring.** Each poll reads about 54 status counters and 33 settings from the host's MariaDB, using each site's own database login (read on the host, never printed or sent), plus the server process's memory and swap, and every 5 minutes the data size per site. Counters become per-second rates (hit ratio, disk reads, flushing, row locks, temporary tables, connections, slow queries); a restart or long gap is marked instead of shown as a spike. New MariaDB Metric Log and MariaDB Config Snapshot (a snapshot when a setting changes, and about hourly with sizes).
+- **MariaDB findings** in `get_host_diagnosis`, each with the numbers and a concrete next step: reading from disk too often (judged over about 5 minutes, with a buffer pool size suggested from the data size and the guest's memory), running out of free pages, a nearly full redo log, flushing limited by `innodb_io_capacity` while the disk is idle, temporary tables on disk, connection limit, purge lag, MariaDB in swap, log buffer waits, row locks, table cache, open files and slow queries. Things that need the PROCESS privilege (open transactions) are reported as not readable, not as errors.
+
 ## [6.0.0] - 2026-11-04
 
 This is a breaking release for Host Health: the push agent is gone and hosts are read over SSH.

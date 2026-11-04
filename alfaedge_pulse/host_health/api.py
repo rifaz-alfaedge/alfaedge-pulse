@@ -523,6 +523,12 @@ def get_host_health_trend(hours: int = 24) -> list[dict]:
 
 
 RATE_FIELDS = ("swap_in_per_s", "swap_out_per_s", "cpu_throttled_percent")
+MARIADB_RATE_FIELDS = (
+	"connections_per_s", "bp_hit_percent", "bp_disk_reads_per_s", "data_reads_per_s", "data_writes_per_s",
+	"data_fsyncs_per_s", "pages_flushed_per_s", "row_lock_waits_per_s", "row_lock_avg_wait_ms", "queries_per_s",
+	"slow_queries_per_s", "tmp_disk_percent", "tmp_disk_per_s", "full_joins_per_s", "sort_merge_passes_per_s",
+	"table_opens_per_s", "table_locks_waited_per_s",
+)
 MAX_TREND_POINTS = 120
 MAX_TREND_DEVICES = 3
 
@@ -582,6 +588,21 @@ def get_host_diagnosis(monitored_host: str, hours: int = 6) -> dict:
 		reverse=True,
 	)[:MAX_TREND_DEVICES]
 
+	from alfaedge_pulse.host_health.diagnosis import MARIADB_LOG_FIELDS
+
+	mariadb_trend = frappe.get_all(
+		"MariaDB Metric Log",
+		filters={"monitored_host": monitored_host, "collected_at": [">=", since]},
+		fields=MARIADB_LOG_FIELDS,
+		order_by="collected_at asc",
+		limit_page_length=0,
+		ignore_permissions=True,
+	)
+	for row in mariadb_trend:
+		if not row.get("rates_valid"):
+			for key in MARIADB_RATE_FIELDS:
+				row[key] = None
+	result["mariadb"]["trend"] = _thin(mariadb_trend)
 	result["hours"] = hours
 	result["memory_trend"] = _thin(memory_trend)
 	result["io_trend"] = {d: _thin(by_device[d]) for d in busiest}

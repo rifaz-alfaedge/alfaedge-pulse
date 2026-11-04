@@ -143,7 +143,7 @@ try:
 	                      capture_output=True, text=True, timeout=60)
 	rep = json.loads(proc.stdout)
 	perf = rep["performance"]
-	check("collector v2 reports performance", rep["collector_version"] == 2 and all(k in perf for k in ("memory", "counters", "pressure", "io", "top_processes")), list(perf))
+	check("collector v2 reports performance", rep["collector_version"] >= 2 and all(k in perf for k in ("memory", "counters", "pressure", "io", "top_processes")), list(perf))
 	check("collector had no errors", not rep["errors"], rep["errors"])
 	ingest.now_datetime = orig_now
 	r = ingest.process_performance(host, **perf)

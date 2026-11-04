@@ -75,6 +75,7 @@ class Target:
 	services: list[dict]
 	connect_timeout: int
 	command_timeout: int
+	slow: bool = False  # also do the heavier, slower-changing reads this time
 
 
 class _PinPolicy(paramiko.MissingHostKeyPolicy):
@@ -249,7 +250,7 @@ def _read_collector() -> str:
 
 
 def _exec_collector(client: paramiko.SSHClient, target: Target) -> dict:
-	args = json.dumps({"services": target.services, "bench_path": target.bench_path})
+	args = json.dumps({"services": target.services, "bench_path": target.bench_path, "slow": target.slow})
 	bench_python = f"{target.bench_path.rstrip('/')}/env/bin/python" if target.bench_path else ""
 	command = (
 		f"P={shlex.quote(bench_python)}; [ -n \"$P\" ] && [ -x \"$P\" ] || P=python3; "

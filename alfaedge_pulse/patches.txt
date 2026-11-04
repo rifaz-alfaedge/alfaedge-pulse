@@ -16,3 +16,4 @@ alfaedge_pulse.patches.set_default_backup_overdue_hours
 alfaedge_pulse.patches.remove_unused_features
 alfaedge_pulse.patches.remove_push_agent
 alfaedge_pulse.patches.add_performance_log_indexes
+alfaedge_pulse.patches.add_mariadb_log_indexes

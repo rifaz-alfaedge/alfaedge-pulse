@@ -25,6 +25,7 @@ _PURGE_BATCH_SIZE = 5000
 DEFAULT_RETENTION_DAYS = 30
 IO_SAMPLE_RETENTION_DAYS = 7
 FAILED_JOB_RETENTION_DAYS = 90
+SNAPSHOT_RETENTION_DAYS = 180
 
 
 def purge_old_resource_logs() -> None:
@@ -42,9 +43,13 @@ def purge_old_resource_logs() -> None:
 	# every poll), so they keep a shorter window than the rest.
 	io_cutoff = add_to_date(now_datetime(), days=-min(retention_days, IO_SAMPLE_RETENTION_DAYS))
 	failed_job_cutoff = add_to_date(now_datetime(), days=-FAILED_JOB_RETENTION_DAYS)
+	# Snapshots are about one an hour and hold the size history, so they last longer.
+	snapshot_cutoff = add_to_date(now_datetime(), days=-SNAPSHOT_RETENTION_DAYS)
 	for doctype, filters in (
 		("Disk IO Sample", {"collected_at": ["<", io_cutoff]}),
 		("Memory Metric Log", {"collected_at": ["<", cutoff]}),
+		("MariaDB Metric Log", {"collected_at": ["<", cutoff]}),
+		("MariaDB Config Snapshot", {"collected_at": ["<", snapshot_cutoff]}),
 		("Resource Disk Sample", {"collected_at": ["<", cutoff]}),
 		("Resource Metric Log", {"collected_at": ["<", cutoff]}),
 		("Frappe Worker Health Log", {"timestamp": ["<", cutoff]}),

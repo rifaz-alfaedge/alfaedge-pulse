@@ -1,0 +1,157 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-11-04 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "monitored_host",
+  "collected_at",
+  "variables_hash",
+  "version",
+  "size_section",
+  "data_mb",
+  "index_mb",
+  "free_mb",
+  "sites_counted",
+  "sites_total",
+  "by_site",
+  "top_tables",
+  "var_section",
+  "variables",
+  "limited"
+ ],
+ "fields": [
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "label": "Collected At",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "variables_hash",
+   "fieldtype": "Data",
+   "label": "Variables Hash",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Data",
+   "label": "Version"
+  },
+  {
+   "fieldname": "size_section",
+   "fieldtype": "Section Break",
+   "label": "Data size"
+  },
+  {
+   "fieldname": "data_mb",
+   "fieldtype": "Float",
+   "label": "Data (MB)"
+  },
+  {
+   "fieldname": "index_mb",
+   "fieldtype": "Float",
+   "label": "Indexes (MB)"
+  },
+  {
+   "fieldname": "free_mb",
+   "fieldtype": "Float",
+   "label": "Free Space in Tables (MB)"
+  },
+  {
+   "fieldname": "sites_counted",
+   "fieldtype": "Int",
+   "label": "Sites Counted"
+  },
+  {
+   "fieldname": "sites_total",
+   "fieldtype": "Int",
+   "label": "Sites Found"
+  },
+  {
+   "fieldname": "by_site",
+   "fieldtype": "JSON",
+   "label": "Largest Sites"
+  },
+  {
+   "fieldname": "top_tables",
+   "fieldtype": "JSON",
+   "label": "Largest Tables"
+  },
+  {
+   "fieldname": "var_section",
+   "fieldtype": "Section Break",
+   "label": "Configuration"
+  },
+  {
+   "fieldname": "variables",
+   "fieldtype": "JSON",
+   "label": "Variables"
+  },
+  {
+   "fieldname": "limited",
+   "fieldtype": "Small Text",
+   "label": "Not Readable With This Login"
+  }
+ ],
+ "icon": "fa fa-sliders",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "MariaDB Config Snapshot",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "collected_at",
+ "sort_order": "DESC",
+ "states": []
+}

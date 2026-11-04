@@ -1,0 +1,421 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-11-04 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "monitored_host",
+  "collected_at",
+  "rates_valid",
+  "uptime_s",
+  "conn_section",
+  "threads_connected",
+  "threads_running",
+  "max_used_connections",
+  "max_connections",
+  "connections_per_s",
+  "aborted_connects_per_s",
+  "connection_limit_errors",
+  "pool_section",
+  "bp_size_mb",
+  "bp_data_mb",
+  "bp_dirty_percent",
+  "bp_free_percent",
+  "bp_hit_percent",
+  "bp_disk_reads_per_s",
+  "bp_wait_free",
+  "io_section",
+  "data_reads_per_s",
+  "data_writes_per_s",
+  "data_fsyncs_per_s",
+  "pages_flushed_per_s",
+  "pending_reads",
+  "pending_writes",
+  "pending_fsyncs",
+  "checkpoint_age_percent",
+  "log_waits",
+  "io_capacity",
+  "io_capacity_max",
+  "log_file_size_mb",
+  "lock_section",
+  "history_list_length",
+  "oldest_trx_s",
+  "trx_count",
+  "row_lock_current_waits",
+  "row_lock_waits_per_s",
+  "row_lock_avg_wait_ms",
+  "deadlocks",
+  "query_section",
+  "queries_per_s",
+  "slow_queries_per_s",
+  "tmp_disk_percent",
+  "tmp_disk_per_s",
+  "full_joins_per_s",
+  "sort_merge_passes_per_s",
+  "table_opens_per_s",
+  "table_locks_waited_per_s",
+  "open_files",
+  "open_files_limit",
+  "open_tables",
+  "proc_section",
+  "mariadbd_rss_mb",
+  "mariadbd_swap_mb",
+  "raw_section",
+  "raw_counters"
+ ],
+ "fields": [
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "label": "Collected At",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "rates_valid",
+   "fieldtype": "Check",
+   "label": "Rates Valid",
+   "read_only": 1,
+   "description": "0 for the first sample, after a MariaDB restart or after a long gap: the per-second figures on this row are then 0 because nothing could be computed."
+  },
+  {
+   "fieldname": "uptime_s",
+   "fieldtype": "Long Int",
+   "label": "Server Uptime (s)"
+  },
+  {
+   "fieldname": "conn_section",
+   "fieldtype": "Section Break",
+   "label": "Connections"
+  },
+  {
+   "fieldname": "threads_connected",
+   "fieldtype": "Int",
+   "label": "Connected"
+  },
+  {
+   "fieldname": "threads_running",
+   "fieldtype": "Int",
+   "label": "Running"
+  },
+  {
+   "fieldname": "max_used_connections",
+   "fieldtype": "Int",
+   "label": "Highest Used Ever"
+  },
+  {
+   "fieldname": "max_connections",
+   "fieldtype": "Int",
+   "label": "Limit (max_connections)"
+  },
+  {
+   "fieldname": "connections_per_s",
+   "fieldtype": "Float",
+   "label": "New Connections/s"
+  },
+  {
+   "fieldname": "aborted_connects_per_s",
+   "fieldtype": "Float",
+   "label": "Failed Connects/s"
+  },
+  {
+   "fieldname": "connection_limit_errors",
+   "fieldtype": "Int",
+   "label": "Refused for Limit (since last)"
+  },
+  {
+   "fieldname": "pool_section",
+   "fieldtype": "Section Break",
+   "label": "Buffer pool"
+  },
+  {
+   "fieldname": "bp_size_mb",
+   "fieldtype": "Float",
+   "label": "Pool Size (MB)"
+  },
+  {
+   "fieldname": "bp_data_mb",
+   "fieldtype": "Float",
+   "label": "Data in Pool (MB)"
+  },
+  {
+   "fieldname": "bp_dirty_percent",
+   "fieldtype": "Percent",
+   "label": "Dirty Pages %"
+  },
+  {
+   "fieldname": "bp_free_percent",
+   "fieldtype": "Percent",
+   "label": "Free Pages %"
+  },
+  {
+   "fieldname": "bp_hit_percent",
+   "fieldtype": "Percent",
+   "label": "Hit Ratio %",
+   "description": "Share of page reads served from memory since the last sample."
+  },
+  {
+   "fieldname": "bp_disk_reads_per_s",
+   "fieldtype": "Float",
+   "label": "Reads from Disk/s"
+  },
+  {
+   "fieldname": "bp_wait_free",
+   "fieldtype": "Int",
+   "label": "No-free-page Waits (since last)",
+   "description": "Times a query had to wait for a free page: a sign flushing cannot keep up."
+  },
+  {
+   "fieldname": "io_section",
+   "fieldtype": "Section Break",
+   "label": "Write and flush"
+  },
+  {
+   "fieldname": "data_reads_per_s",
+   "fieldtype": "Float",
+   "label": "Data Reads/s"
+  },
+  {
+   "fieldname": "data_writes_per_s",
+   "fieldtype": "Float",
+   "label": "Data Writes/s"
+  },
+  {
+   "fieldname": "data_fsyncs_per_s",
+   "fieldtype": "Float",
+   "label": "fsyncs/s"
+  },
+  {
+   "fieldname": "pages_flushed_per_s",
+   "fieldtype": "Float",
+   "label": "Pages Flushed/s"
+  },
+  {
+   "fieldname": "pending_reads",
+   "fieldtype": "Int",
+   "label": "Pending Reads"
+  },
+  {
+   "fieldname": "pending_writes",
+   "fieldtype": "Int",
+   "label": "Pending Writes"
+  },
+  {
+   "fieldname": "pending_fsyncs",
+   "fieldtype": "Int",
+   "label": "Pending fsyncs"
+  },
+  {
+   "fieldname": "checkpoint_age_percent",
+   "fieldtype": "Percent",
+   "label": "Checkpoint Age % of Max",
+   "description": "How far the redo log is filled before InnoDB must flush hard."
+  },
+  {
+   "fieldname": "log_waits",
+   "fieldtype": "Int",
+   "label": "Log Buffer Waits (since last)"
+  },
+  {
+   "fieldname": "io_capacity",
+   "fieldtype": "Int",
+   "label": "innodb_io_capacity"
+  },
+  {
+   "fieldname": "io_capacity_max",
+   "fieldtype": "Int",
+   "label": "innodb_io_capacity_max"
+  },
+  {
+   "fieldname": "log_file_size_mb",
+   "fieldtype": "Float",
+   "label": "Redo Log Size (MB)"
+  },
+  {
+   "fieldname": "lock_section",
+   "fieldtype": "Section Break",
+   "label": "Locks and purge"
+  },
+  {
+   "fieldname": "history_list_length",
+   "fieldtype": "Long Int",
+   "label": "History List Length"
+  },
+  {
+   "fieldname": "oldest_trx_s",
+   "fieldtype": "Int",
+   "label": "Oldest Open Transaction (s)"
+  },
+  {
+   "fieldname": "trx_count",
+   "fieldtype": "Int",
+   "label": "Open Transactions"
+  },
+  {
+   "fieldname": "row_lock_current_waits",
+   "fieldtype": "Int",
+   "label": "Waiting on Row Locks Now"
+  },
+  {
+   "fieldname": "row_lock_waits_per_s",
+   "fieldtype": "Float",
+   "label": "Row Lock Waits/s"
+  },
+  {
+   "fieldname": "row_lock_avg_wait_ms",
+   "fieldtype": "Float",
+   "label": "Average Row Lock Wait (ms)"
+  },
+  {
+   "fieldname": "deadlocks",
+   "fieldtype": "Int",
+   "label": "Deadlocks (since last)"
+  },
+  {
+   "fieldname": "query_section",
+   "fieldtype": "Section Break",
+   "label": "Queries"
+  },
+  {
+   "fieldname": "queries_per_s",
+   "fieldtype": "Float",
+   "label": "Queries/s"
+  },
+  {
+   "fieldname": "slow_queries_per_s",
+   "fieldtype": "Float",
+   "label": "Slow Queries/s"
+  },
+  {
+   "fieldname": "tmp_disk_percent",
+   "fieldtype": "Percent",
+   "label": "Temp Tables on Disk %"
+  },
+  {
+   "fieldname": "tmp_disk_per_s",
+   "fieldtype": "Float",
+   "label": "Disk Temp Tables/s"
+  },
+  {
+   "fieldname": "full_joins_per_s",
+   "fieldtype": "Float",
+   "label": "Joins Without Index/s"
+  },
+  {
+   "fieldname": "sort_merge_passes_per_s",
+   "fieldtype": "Float",
+   "label": "Sort Merge Passes/s"
+  },
+  {
+   "fieldname": "table_opens_per_s",
+   "fieldtype": "Float",
+   "label": "Table Opens/s",
+   "description": "Tables re-opened because table_open_cache is too small."
+  },
+  {
+   "fieldname": "table_locks_waited_per_s",
+   "fieldtype": "Float",
+   "label": "Table Lock Waits/s"
+  },
+  {
+   "fieldname": "open_files",
+   "fieldtype": "Int",
+   "label": "Open Files"
+  },
+  {
+   "fieldname": "open_files_limit",
+   "fieldtype": "Int",
+   "label": "Open Files Limit"
+  },
+  {
+   "fieldname": "open_tables",
+   "fieldtype": "Int",
+   "label": "Open Tables"
+  },
+  {
+   "fieldname": "proc_section",
+   "fieldtype": "Section Break",
+   "label": "Server process"
+  },
+  {
+   "fieldname": "mariadbd_rss_mb",
+   "fieldtype": "Float",
+   "label": "Memory Held (MB)"
+  },
+  {
+   "fieldname": "mariadbd_swap_mb",
+   "fieldtype": "Float",
+   "label": "Swapped Out (MB)"
+  },
+  {
+   "fieldname": "raw_section",
+   "fieldtype": "Section Break",
+   "label": "Raw counters"
+  },
+  {
+   "fieldname": "raw_counters",
+   "fieldtype": "Long Text",
+   "label": "Counters",
+   "description": "Cumulative counters as read, used to turn the next sample into rates."
+  }
+ ],
+ "icon": "fa fa-database",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "MariaDB Metric Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "collected_at",
+ "sort_order": "DESC",
+ "states": []
+}

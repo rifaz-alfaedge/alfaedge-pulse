@@ -29,7 +29,7 @@ import frappe
 from frappe.utils import cint
 
 from alfaedge_pulse.host_health import ssh_client
-from alfaedge_pulse.host_health.ingest import process_performance, process_resources, process_status
+from alfaedge_pulse.host_health.ingest import process_mariadb, process_performance, process_resources, process_status
 from alfaedge_pulse.tasks.jobs import hand_off_loop, start_loop_if_needed
 
 POLLER_JOB_ID = "alfaedge_pulse_host_poller"
@@ -38,6 +38,8 @@ MAX_LOOP_SECONDS = 300
 STALE_JOB_SECONDS = MAX_LOOP_SECONDS + 300
 DEFAULT_INTERVAL_SECONDS = 30
 DEFAULT_PARALLELISM = 8
+#: Heavier reads (database sizes per site) run this often; the rest every poll.
+SLOW_TIER_SECONDS = 300
 BASTION_ALERT = "Warpgate Unreachable"
 
 
@@ -121,6 +123,11 @@ def poll_all_hosts() -> None:
 		except Exception:
 			frappe.log_error(title=f"Host Health: cannot resolve SSH target for {name}", message=frappe.get_traceback())
 
+	now_ts = time.time()
+	for name, target in targets.items():
+		last = frappe.cache().get_value(_slow_key(name))
+		target.slow = not last or now_ts - float(last) >= SLOW_TIER_SECONDS
+
 	def _timed(target):
 		started = time.monotonic()
 		try:
@@ -190,6 +197,10 @@ def update_bastion_state(attempted: int, succeeded: int, bastion_failed: int) ->
 	return is_down
 
 
+def _slow_key(name: str) -> str:
+	return f"alfaedge_pulse:slow_collect:{name}"
+
+
 def _store_report(name: str, target, report: dict, new_key: str | None, duration_ms: int) -> None:
 	try:
 		if new_key:
@@ -198,6 +209,18 @@ def _store_report(name: str, target, report: dict, new_key: str | None, duration
 		resources = report.get("resources") or {}
 		process_status(name, **status)
 		process_resources(name, **resources)
+		mariadb = report.get("mariadb")
+		if target.slow and (mariadb is None or mariadb.get("data") is not None):
+			# The heavy reads happened (or there is no database to read), so
+			# the next one is due in SLOW_TIER_SECONDS; if MariaDB could not be
+			# read, try again on the next poll.
+			frappe.cache().set_value(_slow_key(name), str(time.time()), expires_in_sec=SLOW_TIER_SECONDS * 4)
+		if mariadb:
+			try:
+				process_mariadb(name, **mariadb)
+			except Exception:
+				frappe.db.rollback()
+				frappe.log_error(title=f"Host Health: MariaDB report from {name} failed", message=frappe.get_traceback())
 		performance = report.get("performance")
 		if performance:
 			try:

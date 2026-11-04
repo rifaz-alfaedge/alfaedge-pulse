@@ -300,9 +300,375 @@ def diagnose_host(monitored_host: str) -> dict:
 		if len(rows) < SUSTAINED_SAMPLES:
 			rows.append(row)
 
+	io_latest = [rows[0] for rows in io_by_device.values() if rows]
+	mariadb = diagnose_mariadb(monitored_host, memory_rows[0] if memory_rows else None, io_latest)
+	findings = evaluate(memory_rows, io_by_device, int(kills or 0)) + mariadb["findings"]
+	findings.sort(key=lambda f: SEVERITY_ORDER[f["severity"]])
 	return {
-		"findings": evaluate(memory_rows, io_by_device, int(kills or 0)),
+		"findings": findings,
 		"latest": memory_rows[0] if memory_rows else None,
-		"io_latest": [rows[0] for rows in io_by_device.values() if rows],
-		"has_data": bool(memory_rows),
+		"io_latest": io_latest,
+		"has_data": bool(memory_rows) or mariadb["has_data"],
+		"mariadb": {k: v for k, v in mariadb.items() if k != "findings"},
+	}
+
+
+# ---------------------------------------------------------------------------
+# MariaDB
+# ---------------------------------------------------------------------------
+
+DB_MIN_UPTIME_SECONDS = 1800  # a freshly started server has a cold cache
+DB_HIT_WARN_PERCENT = 99
+DB_HIT_CRIT_PERCENT = 95
+DB_MIN_DISK_READS_PER_S = 20  # below this a low hit ratio changes nothing
+#: A burst (a heavy job for a minute or two) is not a cache problem, so the
+#: hit ratio is judged over this many samples (about 5 minutes), most of which
+#: must be bad.
+DB_CACHE_WINDOW = 10
+DB_CACHE_MIN_SHARE = 0.8
+DB_CHECKPOINT_WARN_PERCENT = 75
+DB_CHECKPOINT_CRIT_PERCENT = 90
+DB_DIRTY_WARN_FRACTION = 0.75  # of innodb_max_dirty_pages_pct
+DB_FLUSH_AT_CAPACITY = 0.9
+DB_DISK_BUSY_OK_PERCENT = 60
+DB_TMP_DISK_WARN_PERCENT = 25
+DB_TMP_DISK_MIN_PER_S = 0.2
+DB_CONNECTIONS_WARN_RATIO = 0.8
+DB_CONNECTIONS_CRIT_RATIO = 0.95
+DB_HISTORY_WARN = 1_000_000
+DB_HISTORY_CRIT = 5_000_000
+DB_SWAP_WARN_MB = 50
+DB_SWAP_CRIT_MB = 500
+DB_ROW_LOCK_WAITING_WARN = 5
+DB_ROW_LOCK_AVG_WAIT_WARN_MS = 1000
+DB_TABLE_OPENS_WARN_PER_S = 5
+DB_OPEN_FILES_WARN_RATIO = 0.8
+DB_SLOW_QUERIES_WARN_PER_S = 1
+POOL_SHARE_OF_FREE_RAM = 0.7  # never suggest a pool bigger than this share of the guest's memory
+RAM_RESERVED_MB = 1024
+
+
+def _mb(value):
+	return f"{flt(value):,.0f} MB" if flt(value) < 10240 else f"{flt(value) / 1024:,.1f} GB"
+
+
+def _round_to(value, step=64):
+	return int(round(flt(value) / step) * step)
+
+
+def _min_over(rows, field):
+	"""The lowest value across the rows (all must have it): a problem counts
+	only when every recent sample shows it."""
+	values = [flt(r.get(field)) for r in rows if r.get(field) is not None]
+	return min(values) if len(values) == len(rows) and values else None
+
+
+def evaluate_mariadb(
+	rows: list[dict],
+	config: dict | None,
+	sizes: dict | None,
+	memory: dict | None,
+	io_latest: list[dict] | None,
+	process_limit: int | None = None,
+) -> list[dict]:
+	"""``rows``: MariaDB Metric Log rows, newest first. ``config``: the
+	variables of the latest snapshot. ``sizes``: the latest snapshot that read
+	data sizes. ``memory``: the latest Memory Metric Log row. ``io_latest``:
+	latest disk samples. Findings carry the numbers and a concrete next step."""
+	findings: list[dict] = []
+	valid = [r for r in rows if r.get("rates_valid")]
+	if not rows:
+		return findings
+	latest = rows[0]
+	recent = valid[:SUSTAINED_SAMPLES]
+	have_recent = len(recent) >= SUSTAINED_SAMPLES
+	config = config or {}
+	sizes = sizes or {}
+	memory = memory or {}
+	pool_mb = flt(latest.get("bp_size_mb"))
+	data_mb = flt(sizes.get("data_mb")) + flt(sizes.get("index_mb"))
+	ram_mb = flt(memory.get("mem_total_mb"))
+	uptime = flt(latest.get("uptime_s"))
+
+	# Queries stalling because there is no free page to read into.
+	if have_recent and sum(flt(r.get("bp_wait_free")) for r in recent) > 0:
+		findings.append(
+			_finding(
+				"db_wait_free",
+				"critical",
+				"MariaDB ran out of free memory pages",
+				f"Queries had to wait for the buffer pool to flush pages, {int(sum(flt(r.get('bp_wait_free')) for r in recent))} time(s) in the last {len(recent)} samples. The pool is {_mb(pool_mb)} and {flt(latest.get('bp_dirty_percent')):.0f}% of it is waiting to be written.",
+				"Flushing cannot keep up with writes. Raise innodb_io_capacity if the disk has room (see the other findings), and enlarge innodb_buffer_pool_size if there is free memory.",
+			)
+		)
+
+	# Cache misses reaching the disk, sustained over a longer window than the
+	# other rules: a short burst of reads is normal for a heavy job.
+	window = valid[:DB_CACHE_WINDOW]
+	hit = disk_reads = None
+	if len(window) >= DB_CACHE_WINDOW:
+		bad = [
+			r for r in window
+			if r.get("bp_hit_percent") is not None
+			and flt(r.get("bp_hit_percent")) < DB_HIT_WARN_PERCENT
+			and flt(r.get("bp_disk_reads_per_s")) >= DB_MIN_DISK_READS_PER_S
+		]
+		if len(bad) >= len(window) * DB_CACHE_MIN_SHARE:
+			hit = sum(flt(r.get("bp_hit_percent")) for r in bad) / len(bad)
+			disk_reads = sum(flt(r.get("bp_disk_reads_per_s")) for r in bad) / len(bad)
+	if hit is not None and uptime >= DB_MIN_UPTIME_SECONDS:
+		suggest = None
+		if data_mb and ram_mb:
+			suggest = _round_to(min(data_mb * 1.1, max(ram_mb * POOL_SHARE_OF_FREE_RAM, ram_mb - RAM_RESERVED_MB * 2)))
+		if suggest and suggest > pool_mb * 1.1:
+			advice = f"The data is larger than the pool. Raise innodb_buffer_pool_size toward {_mb(suggest)} (about {_mb(ram_mb)} of memory on this guest, so leave room for everything else)."
+		elif pool_mb and data_mb and pool_mb >= data_mb:
+			advice = "The pool already holds all the data, so the misses come from queries scanning large tables. Look at slow queries and missing indexes rather than memory."
+		else:
+			advice = "Raise innodb_buffer_pool_size if the guest has free memory; otherwise look at what is scanning large tables."
+		findings.append(
+			_finding(
+				"db_cache_misses",
+				"critical" if hit < DB_HIT_CRIT_PERCENT else "warning",
+				"MariaDB is reading from disk too often",
+				f"Over the last {len(window)} samples (about {len(window) // 2} minutes) only {hit:.1f}% of page reads came from memory and about {flt(disk_reads):.0f} per second went to disk. The buffer pool is {_mb(pool_mb)}"
+				+ (f" for about {_mb(data_mb)} of data and indexes on this guest" if data_mb else "")
+				+ ".",
+				advice,
+			)
+		)
+
+	# The redo log filling up forces hard flushing.
+	checkpoint = _min_over(recent, "checkpoint_age_percent") if have_recent else None
+	if checkpoint is not None and checkpoint >= DB_CHECKPOINT_WARN_PERCENT:
+		log_mb = flt(latest.get("log_file_size_mb"))
+		findings.append(
+			_finding(
+				"db_checkpoint",
+				"critical" if checkpoint >= DB_CHECKPOINT_CRIT_PERCENT else "warning",
+				"MariaDB's redo log is nearly full",
+				f"The redo log is {checkpoint:.0f}% full before InnoDB must flush hard, which stalls writes. innodb_log_file_size is {_mb(log_mb)}.",
+				f"Raise innodb_log_file_size (for example to {_mb(log_mb * 2)}) so flushing can be spread out, and check innodb_io_capacity.",
+			)
+		)
+
+	# Dirty pages piling up.
+	max_dirty = flt(config.get("innodb_max_dirty_pages_pct")) or 90
+	dirty = _min_over(recent, "bp_dirty_percent") if have_recent else None
+	if dirty is not None and dirty >= max_dirty * DB_DIRTY_WARN_FRACTION:
+		findings.append(
+			_finding(
+				"db_dirty_pages",
+				"warning",
+				"Many changed pages are waiting to be written",
+				f"{dirty:.0f}% of the buffer pool is changed pages not yet on disk (the limit is {max_dirty:.0f}%).",
+				"Writes are arriving faster than they are flushed. See whether flushing is held back by innodb_io_capacity or by the disk.",
+			)
+		)
+
+	# InnoDB is throttled by its own setting, not by the disk.
+	capacity = flt(latest.get("io_capacity"))
+	flushed = _min_over(recent, "pages_flushed_per_s") if have_recent else None
+	busiest = max((flt(d.get("util_percent")) for d in (io_latest or [])), default=None)
+	under_pressure = (dirty or 0) >= 50 or (checkpoint or 0) >= 50
+	if capacity and flushed is not None and flushed >= capacity * DB_FLUSH_AT_CAPACITY and under_pressure and (busiest is None or busiest < DB_DISK_BUSY_OK_PERCENT):
+		cap_max = flt(latest.get("io_capacity_max"))
+		target = min(capacity * 2, cap_max) if cap_max else capacity * 2
+		findings.append(
+			_finding(
+				"db_io_capacity",
+				"warning",
+				"MariaDB is limited by its own I/O setting, not the disk",
+				f"It is flushing about {flushed:.0f} pages per second, right at innodb_io_capacity ({capacity:.0f}), while changed pages and the redo log keep filling up"
+				+ (f". The busiest disk is only {busiest:.0f}% busy." if busiest is not None else "."),
+				f"Raise innodb_io_capacity to about {target:.0f} (innodb_io_capacity_max is {cap_max:.0f}) and watch the disk's busy percentage.",
+			)
+		)
+
+	# Temporary tables spilling to disk.
+	tmp_pct = _min_over(recent, "tmp_disk_percent") if have_recent else None
+	tmp_rate = _min_over(recent, "tmp_disk_per_s") if have_recent else None
+	if tmp_pct is not None and tmp_pct >= DB_TMP_DISK_WARN_PERCENT and flt(tmp_rate) >= DB_TMP_DISK_MIN_PER_S:
+		tmp_size = flt(config.get("tmp_table_size")) / MB if config.get("tmp_table_size") else None
+		findings.append(
+			_finding(
+				"db_tmp_tables",
+				"warning",
+				"Temporary tables are being written to disk",
+				f"{tmp_pct:.0f}% of temporary tables spill to disk, about {flt(tmp_rate):.1f} per second."
+				+ (f" tmp_table_size is {_mb(tmp_size)}." if tmp_size else ""),
+				"Raise tmp_table_size and max_heap_table_size together (try double). If it persists, look for queries that sort or group large results without an index.",
+			)
+		)
+
+	# Connection limit.
+	limit = flt(latest.get("max_connections"))
+	connected = flt(latest.get("threads_connected"))
+	refused = sum(flt(r.get("connection_limit_errors")) for r in recent) if recent else 0
+	if limit and (connected / limit >= DB_CONNECTIONS_WARN_RATIO or refused > 0):
+		findings.append(
+			_finding(
+				"db_connections",
+				"critical" if connected / limit >= DB_CONNECTIONS_CRIT_RATIO or refused > 0 else "warning",
+				"MariaDB is close to its connection limit" if not refused else "MariaDB refused connections at its limit",
+				f"{connected:.0f} of {limit:.0f} connections are in use ({flt(latest.get('threads_running')):.0f} running)."
+				+ (f" {refused:.0f} connection(s) were refused for being over the limit." if refused else ""),
+				"Find what holds connections open (idle web workers, long jobs) before raising max_connections; each connection uses memory.",
+			)
+		)
+
+	# Purge lag from long transactions.
+	history = flt(latest.get("history_list_length"))
+	if history >= DB_HISTORY_WARN:
+		oldest = latest.get("oldest_trx_s")
+		findings.append(
+			_finding(
+				"db_history",
+				"critical" if history >= DB_HISTORY_CRIT else "warning",
+				"MariaDB cannot clean up old row versions",
+				f"The history list holds {history:,.0f} entries, so a long transaction is keeping old versions alive."
+				+ (f" The oldest open transaction has run {int(oldest)} seconds." if oldest else ""),
+				"Find the long-running transaction or an idle connection with an open transaction and end it. Until then queries get slower and the data files grow."
+				+ ("" if oldest is not None else " This login cannot see open transactions; grant PROCESS to see which one."),
+			)
+		)
+
+	# The database itself in swap.
+	swap = flt(latest.get("mariadbd_swap_mb"))
+	if swap >= DB_SWAP_WARN_MB:
+		findings.append(
+			_finding(
+				"db_swapped",
+				"critical" if swap >= DB_SWAP_CRIT_MB else "warning",
+				"Part of MariaDB's memory is in swap",
+				f"{_mb(swap)} of MariaDB's {_mb(latest.get('mariadbd_rss_mb'))} in memory has been moved to swap. Reading it back from disk makes queries slow.",
+				"Reduce innodb_buffer_pool_size or other memory use, or add memory to the guest.",
+			)
+		)
+
+	# Waiting for the log buffer.
+	waits = sum(flt(r.get("log_waits")) for r in recent) if have_recent else 0
+	if waits > 0:
+		buf = flt(config.get("innodb_log_buffer_size")) / MB if config.get("innodb_log_buffer_size") else None
+		findings.append(
+			_finding(
+				"db_log_buffer",
+				"warning",
+				"Transactions waited for the log buffer",
+				f"{int(waits)} wait(s) in the last {len(recent)} samples." + (f" innodb_log_buffer_size is {_mb(buf)}." if buf else ""),
+				"Raise innodb_log_buffer_size (for example to double), especially if large transactions are common.",
+			)
+		)
+
+	# Row lock contention.
+	waiting = _min_over(recent, "row_lock_current_waits") if have_recent else None
+	avg_wait = flt(latest.get("row_lock_avg_wait_ms"))
+	if (waiting is not None and waiting >= DB_ROW_LOCK_WAITING_WARN) or (avg_wait >= DB_ROW_LOCK_AVG_WAIT_WARN_MS and flt(latest.get("row_lock_waits_per_s")) >= 0.1):
+		findings.append(
+			_finding(
+				"db_row_locks",
+				"warning",
+				"Queries are waiting on row locks",
+				f"{flt(latest.get('row_lock_current_waits')):.0f} waiting now, average wait {avg_wait:.0f} ms, {flt(latest.get('row_lock_waits_per_s')):.1f} waits per second.",
+				"Look for long transactions or batch updates holding locks. Keep transactions short.",
+			)
+		)
+
+	# Table cache too small.
+	opens = _min_over(recent, "table_opens_per_s") if have_recent else None
+	if opens is not None and opens >= DB_TABLE_OPENS_WARN_PER_S:
+		cache = config.get("table_open_cache")
+		findings.append(
+			_finding(
+				"db_table_cache",
+				"warning",
+				"MariaDB keeps reopening tables",
+				f"About {opens:.1f} tables are reopened per second" + (f"; table_open_cache is {cache}." if cache else "."),
+				"Raise table_open_cache (and table_definition_cache), and check the open-files limit allows it.",
+			)
+		)
+
+	# Open files near the limit.
+	files, files_limit = flt(latest.get("open_files")), flt(latest.get("open_files_limit"))
+	if process_limit:
+		files_limit = min(files_limit, flt(process_limit)) if files_limit else flt(process_limit)
+	if files_limit and files / files_limit >= DB_OPEN_FILES_WARN_RATIO:
+		findings.append(
+			_finding(
+				"db_open_files",
+				"warning",
+				"MariaDB is close to its open files limit",
+				f"{files:.0f} of {files_limit:.0f} files are open.",
+				"Raise LimitNOFILE for the mariadb service and open_files_limit, or lower table_open_cache.",
+			)
+		)
+
+	# Slow queries.
+	slow = _min_over(recent, "slow_queries_per_s") if have_recent else None
+	if slow is not None and slow >= DB_SLOW_QUERIES_WARN_PER_S:
+		findings.append(
+			_finding(
+				"db_slow_queries",
+				"warning",
+				"MariaDB is logging many slow queries",
+				f"About {slow:.1f} queries per second take longer than long_query_time ({config.get('long_query_time', '?')} s).",
+				"Turn on slow_query_log (it is " + str(config.get("slow_query_log", "unknown")) + ") and review the slowest queries for missing indexes.",
+			)
+		)
+
+	return findings
+
+
+MARIADB_LOG_FIELDS = [
+	"collected_at", "rates_valid", "uptime_s", "threads_connected", "threads_running", "max_connections",
+	"connections_per_s", "connection_limit_errors", "bp_size_mb", "bp_data_mb", "bp_dirty_percent",
+	"bp_free_percent", "bp_hit_percent", "bp_disk_reads_per_s", "bp_wait_free", "data_reads_per_s",
+	"data_writes_per_s", "data_fsyncs_per_s", "pages_flushed_per_s", "pending_reads", "pending_writes",
+	"pending_fsyncs", "checkpoint_age_percent", "log_waits", "io_capacity", "io_capacity_max", "log_file_size_mb",
+	"history_list_length", "oldest_trx_s", "trx_count", "row_lock_current_waits", "row_lock_waits_per_s",
+	"row_lock_avg_wait_ms", "deadlocks", "queries_per_s", "slow_queries_per_s", "tmp_disk_percent",
+	"tmp_disk_per_s", "full_joins_per_s", "sort_merge_passes_per_s", "table_opens_per_s",
+	"table_locks_waited_per_s", "open_files", "open_files_limit", "open_tables", "mariadbd_rss_mb", "mariadbd_swap_mb",
+]
+MB = 1048576
+
+
+def diagnose_mariadb(monitored_host: str, memory_latest: dict | None, io_latest: list[dict] | None) -> dict:
+	"""Loads the recent MariaDB samples of one host and evaluates the rules."""
+	rows = frappe.get_all(
+		"MariaDB Metric Log",
+		filters={"monitored_host": monitored_host},
+		fields=MARIADB_LOG_FIELDS,
+		order_by="collected_at desc",
+		limit_page_length=DB_CACHE_WINDOW + 2,
+		ignore_permissions=True,
+	)
+	snapshots = frappe.get_all(
+		"MariaDB Config Snapshot",
+		filters={"monitored_host": monitored_host},
+		fields=["collected_at", "variables", "data_mb", "index_mb", "free_mb", "sites_counted", "sites_total", "by_site", "top_tables", "limited", "version"],
+		order_by="collected_at desc",
+		limit_page_length=20,
+		ignore_permissions=True,
+	)
+	config = {}
+	if snapshots and snapshots[0].get("variables"):
+		try:
+			config = frappe.parse_json(snapshots[0]["variables"])
+		except Exception:
+			config = {}
+	sizes = next((s for s in snapshots if s.get("sites_counted")), None)
+	if sizes:
+		for key in ("by_site", "top_tables"):
+			try:
+				sizes[key] = frappe.parse_json(sizes[key]) if sizes.get(key) else []
+			except Exception:
+				sizes[key] = []
+	return {
+		"findings": evaluate_mariadb(rows, config, sizes, memory_latest, io_latest),
+		"latest": rows[0] if rows else None,
+		"config": config,
+		"sizes": sizes,
+		"limited": [x.strip() for x in (snapshots[0].get("limited") or "").split(",") if x.strip()] if snapshots else [],
+		"has_data": bool(rows),
 	}

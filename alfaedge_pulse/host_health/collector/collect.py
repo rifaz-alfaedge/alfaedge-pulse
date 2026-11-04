@@ -12,13 +12,17 @@ writes anything and never prints credentials.
 Args (JSON, argv[1]):
 	services:   [{"service_name": str, "unit_name": str}, ...]
 	bench_path: str | ""      absolute path of the bench on this host
+	slow:       bool          also do the heavier, slower-changing reads
+	                          (database sizes per site); the rest runs every time
 
 Output (stdout, one JSON object):
 	{"collector_version": 1, "collected_at": "...", "errors": [...],
 	 "status": {"reported_at", "services", "benches", "sites"},
 	 "resources": {"reported_at", "load", "swap", "disks"},
 	 "performance": {"reported_at", "memory", "pressure", "cgroup", "counters",
-	                 "top_processes", "io"}}
+	                 "top_processes", "io"},
+	 "mariadb": {"reported_at", "via", "status", "variables", "data", "process",
+	             "oldest_trx_s", "trx_count", "limited", "sites_total"}}
 
 ``status`` and ``resources`` use exactly the shapes that
 ``host_health/ingest.py`` processes, so a section that cannot be collected
@@ -33,7 +37,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-COLLECTOR_VERSION = 2
+COLLECTOR_VERSION = 3
 MAX_FAILED_JOBS_PER_QUEUE = 50
 EXC_INFO_LIMIT = 4000
 REAL_FS = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "vfat", "ntfs", "exfat", "jfs", "reiserfs"}
@@ -481,6 +485,232 @@ def collect_io():
 	rows.sort(key=lambda r: r["io_ms"], reverse=True)
 	return rows[:MAX_IO_DEVICES]
 
+
+# --------------------------------------------------------------------------
+# MariaDB: status counters, configuration, data size, the server process
+# --------------------------------------------------------------------------
+
+#: Read with each site's own database login, taken from site_config.json on
+#: this host and used here only: the password is never printed or sent.
+#: SHOW GLOBAL STATUS/VARIABLES need no privilege; the engine status, open
+#: transactions and other users' queries need PROCESS, so those are tried
+#: and reported as "limited" when refused.
+MARIADB_STATUS_KEYS = (
+	"Uptime", "Questions", "Slow_queries", "Connections", "Aborted_connects", "Aborted_clients",
+	"Threads_connected", "Threads_running", "Max_used_connections", "Connection_errors_max_connections",
+	"Innodb_buffer_pool_reads", "Innodb_buffer_pool_read_requests", "Innodb_buffer_pool_wait_free",
+	"Innodb_buffer_pool_pages_total", "Innodb_buffer_pool_pages_free", "Innodb_buffer_pool_pages_dirty",
+	"Innodb_buffer_pool_pages_flushed", "Innodb_buffer_pool_pages_data", "Innodb_buffer_pool_bytes_data",
+	"Innodb_buffer_pool_bytes_dirty", "Innodb_buffer_pool_read_ahead", "Innodb_buffer_pool_read_ahead_evicted",
+	"Innodb_data_reads", "Innodb_data_writes", "Innodb_data_fsyncs", "Innodb_data_read", "Innodb_data_written",
+	"Innodb_data_pending_reads", "Innodb_data_pending_writes", "Innodb_data_pending_fsyncs",
+	"Innodb_log_waits", "Innodb_log_writes", "Innodb_checkpoint_age", "Innodb_checkpoint_max_age",
+	"Innodb_history_list_length", "Innodb_row_lock_waits", "Innodb_row_lock_time", "Innodb_row_lock_current_waits",
+	"Innodb_deadlocks", "Innodb_pages_read", "Innodb_pages_written",
+	"Created_tmp_disk_tables", "Created_tmp_tables", "Select_full_join", "Sort_merge_passes",
+	"Handler_read_rnd_next", "Opened_tables", "Open_tables", "Open_files", "Table_locks_waited",
+	"Table_locks_immediate", "Binlog_cache_disk_use", "Bytes_received", "Bytes_sent",
+)
+MARIADB_VARIABLE_KEYS = (
+	"version", "innodb_buffer_pool_size", "innodb_buffer_pool_instances", "innodb_io_capacity",
+	"innodb_io_capacity_max", "innodb_log_file_size", "innodb_log_buffer_size",
+	"innodb_flush_log_at_trx_commit", "innodb_flush_method", "innodb_read_io_threads",
+	"innodb_write_io_threads", "innodb_doublewrite", "innodb_file_per_table", "innodb_adaptive_hash_index",
+	"innodb_lru_scan_depth", "innodb_max_dirty_pages_pct", "innodb_max_dirty_pages_pct_lwm",
+	"max_connections", "thread_cache_size", "tmp_table_size", "max_heap_table_size", "table_open_cache",
+	"table_definition_cache", "open_files_limit", "sort_buffer_size", "join_buffer_size",
+	"read_rnd_buffer_size", "slow_query_log", "long_query_time", "log_bin", "sync_binlog",
+	"binlog_cache_size", "key_buffer_size", "performance_schema",
+)
+MAX_DB_SITES = 60
+MARIADB_CONNECT_TIMEOUT = 5
+TOP_TABLES = 10
+
+
+def short_error(exc):
+	"""Class name and MySQL error number only: driver messages can carry the
+	user and host, and must never carry anything secret."""
+	code = exc.args[0] if getattr(exc, "args", None) and isinstance(exc.args[0], int) else ""
+	return f"{type(exc).__name__} {code}".strip()
+
+
+def number(value):
+	try:
+		return int(value)
+	except (TypeError, ValueError):
+		try:
+			return float(value)
+		except (TypeError, ValueError):
+			return value
+
+
+def mariadb_site_configs(bench_path, common):
+	sites_dir = os.path.join(bench_path, "sites")
+	found = []
+	for name in sorted(os.listdir(sites_dir)):
+		cfg_path = os.path.join(sites_dir, name, "site_config.json")
+		if name == "assets" or not os.path.isfile(cfg_path):
+			continue
+		try:
+			cfg = read_json(cfg_path)
+		except Exception:
+			continue
+		if cfg.get("db_name") and cfg.get("db_password"):
+			found.append((name, cfg))
+	return found[:MAX_DB_SITES]
+
+
+def mariadb_connect(pymysql, cfg, common):
+	return pymysql.connect(
+		host=cfg.get("db_host") or common.get("db_host") or "127.0.0.1",
+		port=int(cfg.get("db_port") or common.get("db_port") or 3306),
+		user=cfg.get("db_user") or cfg["db_name"],
+		password=cfg["db_password"],
+		database=cfg["db_name"],
+		connect_timeout=MARIADB_CONNECT_TIMEOUT,
+		read_timeout=10,
+	)
+
+
+def mariadb_process():
+	"""The server process itself: how much memory it holds, whether any of it
+	is swapped out, and the open-files limit it actually runs under."""
+	for entry in os.listdir("/proc"):
+		if not entry.isdigit():
+			continue
+		try:
+			with open(f"/proc/{entry}/comm") as handle:
+				comm = handle.read().strip()
+		except OSError:
+			continue
+		if comm not in DB_PROCESS_NAMES:
+			continue
+		out = {"pid": int(entry), "name": comm}
+		try:
+			status = read_kv_file(f"/proc/{entry}/status")
+			out["rss_mb"] = round(int(status.get("VmRSS", 0)) / 1024, 1)
+			out["swap_mb"] = round(int(status.get("VmSwap", 0)) / 1024, 1)
+			out["threads"] = int(status.get("Threads", 0))
+		except OSError:
+			pass
+		try:
+			with open(f"/proc/{entry}/limits") as handle:
+				for line in handle:
+					if line.startswith("Max open files"):
+						out["os_open_files_limit"] = int(line.split()[3])
+		except (OSError, ValueError, IndexError):
+			pass
+		try:
+			out["open_fds"] = len(os.listdir(f"/proc/{entry}/fd"))
+		except OSError:
+			pass
+		return out
+	return None
+
+
+def collect_mariadb(bench_path, slow):
+	import pymysql
+
+	common = read_json(os.path.join(bench_path, "sites", "common_site_config.json"))
+	sites = mariadb_site_configs(bench_path, common)
+	if not sites:
+		return None
+	out = {"limited": [], "sites_total": len(sites), "via": None}
+
+	conn = None
+	for name, cfg in sites:
+		try:
+			conn = mariadb_connect(pymysql, cfg, common)
+			out["via"] = name
+			break
+		except Exception as exc:
+			errors.append(f"mariadb connect {name}: {short_error(exc)}")
+	if conn is None:
+		return out
+	try:
+		with conn.cursor() as cur:
+			cur.execute("SHOW GLOBAL STATUS")
+			status = {k: v for k, v in cur.fetchall() if k in MARIADB_STATUS_KEYS}
+			out["status"] = {k: number(v) for k, v in status.items()}
+			cur.execute("SHOW GLOBAL VARIABLES")
+			variables = {k: v for k, v in cur.fetchall() if k in MARIADB_VARIABLE_KEYS}
+			out["variables"] = {k: number(v) for k, v in variables.items()}
+			try:
+				cur.execute(
+					"SELECT COUNT(*), COALESCE(MAX(TIMESTAMPDIFF(SECOND, trx_started, NOW())), 0) FROM information_schema.INNODB_TRX"
+				)
+				count, oldest = cur.fetchone()
+				out["trx_count"], out["oldest_trx_s"] = int(count), int(oldest)
+			except Exception as exc:
+				# 1227: needs the PROCESS privilege; not an error, a known limit.
+				out["limited"].append("transactions")
+				if not (exc.args and exc.args[0] == 1227):
+					errors.append(f"mariadb transactions: {short_error(exc)}")
+	finally:
+		conn.close()
+
+	out["process"] = attempt_quiet(mariadb_process)
+
+	if slow:
+		out["data"] = mariadb_data_sizes(pymysql, sites, common)
+	return out
+
+
+def attempt_quiet(fn):
+	try:
+		return fn()
+	except Exception as exc:
+		errors.append(f"{fn.__name__}: {type(exc).__name__}")
+		return None
+
+
+def mariadb_data_sizes(pymysql, sites, common):
+	"""Each site's login only sees its own schema, so sizes are summed over
+	the sites it can connect to. Heavier than the status read, hence slow tier."""
+	total = {"data_mb": 0.0, "index_mb": 0.0, "free_mb": 0.0}
+	by_site, tables, counted = [], [], 0
+	for name, cfg in sites:
+		try:
+			conn = mariadb_connect(pymysql, cfg, common)
+		except Exception as exc:
+			errors.append(f"mariadb size {name}: {short_error(exc)}")
+			continue
+		try:
+			with conn.cursor() as cur:
+				cur.execute(
+					"SELECT COALESCE(SUM(data_length),0), COALESCE(SUM(index_length),0), COALESCE(SUM(data_free),0) "
+					"FROM information_schema.TABLES WHERE table_schema = %s",
+					(cfg["db_name"],),
+				)
+				data, index, free = (float(v) / 1048576 for v in cur.fetchone())
+				cur.execute(
+					"SELECT table_name, data_length + index_length FROM information_schema.TABLES "
+					"WHERE table_schema = %s ORDER BY 2 DESC LIMIT %s",
+					(cfg["db_name"], TOP_TABLES),
+				)
+				for table, size in cur.fetchall():
+					tables.append({"site": name, "table": table, "mb": round(float(size) / 1048576, 1)})
+		except Exception as exc:
+			errors.append(f"mariadb size {name}: {short_error(exc)}")
+			continue
+		finally:
+			conn.close()
+		counted += 1
+		total["data_mb"] += data
+		total["index_mb"] += index
+		total["free_mb"] += free
+		by_site.append({"site": name, "mb": round(data + index, 1)})
+	tables.sort(key=lambda t: t["mb"], reverse=True)
+	by_site.sort(key=lambda t: t["mb"], reverse=True)
+	return {
+		"data_mb": round(total["data_mb"], 1),
+		"index_mb": round(total["index_mb"], 1),
+		"free_mb": round(total["free_mb"], 1),
+		"sites_counted": counted,
+		"by_site": by_site[:10],
+		"top_tables": tables[:TOP_TABLES],
+	}
+
 # --------------------------------------------------------------------------
 
 
@@ -510,6 +740,16 @@ def main():
 		bench = attempt("bench", lambda: collect_bench(bench_path))
 		if bench is not None:
 			status["benches"] = [bench]
+
+	if bench_path and os.path.isdir(os.path.join(bench_path, "sites")):
+		mariadb = attempt("mariadb", lambda: collect_mariadb(bench_path, bool(args.get("slow"))))
+		if mariadb is not None:
+			mariadb["reported_at"] = now
+			mariadb_report = mariadb
+		else:
+			mariadb_report = None
+	else:
+		mariadb_report = None
 
 	load = attempt("load", collect_load)
 	if load is not None:
@@ -542,6 +782,7 @@ def main():
 			"status": status,
 			"resources": resources,
 			"performance": performance,
+			**({"mariadb": mariadb_report} if mariadb_report else {}),
 		},
 		sys.stdout,
 	)
