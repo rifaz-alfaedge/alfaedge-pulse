@@ -30,7 +30,7 @@ from frappe.utils import cint
 
 from alfaedge_pulse.host_health import ssh_client
 from alfaedge_pulse.host_health.ingest import process_performance, process_resources, process_status
-from alfaedge_pulse.tasks.jobs import poller_queue
+from alfaedge_pulse.tasks.jobs import hand_off_loop, start_loop_if_needed
 
 POLLER_JOB_ID = "alfaedge_pulse_host_poller"
 HEARTBEAT_CACHE_KEY = "alfaedge_pulse:host_poller_heartbeat"
@@ -52,18 +52,13 @@ def ensure_host_poller_running() -> None:
 	while SSH polling is switched off."""
 	if not _enabled():
 		return
-	if frappe.cache().get_value(HEARTBEAT_CACHE_KEY):
-		return
-
-	from alfaedge_pulse.tasks.jobs import clear_stale_job
-
-	clear_stale_job(POLLER_JOB_ID, STALE_JOB_SECONDS, "host poller")
-	frappe.enqueue(
+	start_loop_if_needed(
 		"alfaedge_pulse.tasks.host_poller.run_host_poll_loop",
-		queue=poller_queue(),
-		timeout=MAX_LOOP_SECONDS + 120,
-		job_id=POLLER_JOB_ID,
-		deduplicate=True,
+		POLLER_JOB_ID,
+		HEARTBEAT_CACHE_KEY,
+		MAX_LOOP_SECONDS + 120,
+		STALE_JOB_SECONDS,
+		"host poller",
 	)
 
 
@@ -98,6 +93,9 @@ def run_host_poll_loop() -> None:
 				time.sleep(1)
 	finally:
 		signal.signal(signal.SIGTERM, previous_handler)
+
+	if not stop_requested and (time.monotonic() - start) >= MAX_LOOP_SECONDS:
+		hand_off_loop("alfaedge_pulse.tasks.host_poller.run_host_poll_loop", POLLER_JOB_ID, MAX_LOOP_SECONDS + 120)
 
 
 def poll_all_hosts() -> None:

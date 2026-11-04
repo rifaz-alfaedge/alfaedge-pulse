@@ -83,7 +83,7 @@ from alfaedge_pulse.proxmox_client.base import ProxmoxAPIError
 from alfaedge_pulse.proxmox_client.pbs import PBSClient
 from alfaedge_pulse.proxmox_client.pve import PVEClient
 from alfaedge_pulse.proxmox_resource_history.collector import log_guest_metrics, log_host_metrics
-from alfaedge_pulse.tasks.jobs import poller_queue
+from alfaedge_pulse.tasks.jobs import hand_off_loop, start_loop_if_needed
 
 POLLER_JOB_ID = "alfaedge_pulse_poller"
 HEARTBEAT_CACHE_KEY = "alfaedge_pulse:poller_heartbeat"
@@ -149,25 +149,17 @@ def ensure_poller_running() -> None:
 	except Exception:
 		frappe.log_error(title="alfaEdge Pulse: poller stall check failed", message=frappe.get_traceback())
 
-	if frappe.cache().get_value(HEARTBEAT_CACHE_KEY):
-		return  # loop is alive and ticking; nothing to do
-
-	_clear_stale_poller_job()
-	frappe.enqueue(
+	# MAX_LOOP_SECONDS + 120: headroom for the final sync + commit; RQ
+	# force-kills the job past this, as a hard backstop behind the loop's own
+	# bound. deduplicate=True (inside the helper) is a separate, required
+	# opt-in in Frappe: a job_id alone does not stop a second enqueue.
+	start_loop_if_needed(
 		"alfaedge_pulse.tasks.poller.run_poll_loop",
-		queue=poller_queue(),
-		# A little headroom over MAX_LOOP_SECONDS for the final sync +
-		# commit to finish; RQ force-kills the job if it ever runs past
-		# this, as a hard backstop behind the loop's own bound.
-		timeout=MAX_LOOP_SECONDS + 120,
-		job_id=POLLER_JOB_ID,
-		# job_id alone does not dedupe in Frappe -- deduplicate=True is a
-		# separate, required opt-in (confirmed by reading enqueue()'s own
-		# source). Without it, a job with this ID already queued/running
-		# wouldn't actually block a second enqueue. In practice the
-		# heartbeat check above already prevents most redundant calls, but
-		# this closes the same race window explicitly rather than by luck.
-		deduplicate=True,
+		POLLER_JOB_ID,
+		HEARTBEAT_CACHE_KEY,
+		MAX_LOOP_SECONDS + 120,
+		STALE_JOB_SECONDS,
+		"poller",
 	)
 
 
@@ -256,6 +248,9 @@ def run_poll_loop() -> None:
 				time.sleep(1)
 	finally:
 		signal.signal(signal.SIGTERM, previous_handler)
+
+	if not stop_requested and (time.monotonic() - start_time) >= MAX_LOOP_SECONDS:
+		hand_off_loop("alfaedge_pulse.tasks.poller.run_poll_loop", POLLER_JOB_ID, MAX_LOOP_SECONDS + 120)
 
 
 # ---------------------------------------------------------------------------

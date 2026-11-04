@@ -22,6 +22,7 @@ This is a breaking release for Host Health: the push agent is gone and hosts are
 - `scripts/remove-pulse-agent.sh` removes the old agent from a guest (dry run unless `--yes`); manual test scripts are in `tests/manual/`.
 
 ### Fixed
+- **Polling gaps.** Each poll loop runs for 5 minutes and was then restarted by a check that only runs when Frappe's scheduler ticks (every 4 minutes by default), so up to 4 minutes in every 9 had no polling, for Proxmox as well as hosts. A loop now queues its successor just before it ends (alternating between two job ids); the check stays as the safety net. Measured on a test server: longest gap between polls 32 seconds over 12 minutes.
 - The Proxmox, Uptime Kuma and SSH poll loops no longer pin both `long` queue workers. They run on their own `pulse` queue, so Bifrost sync, site discovery, AI reports and other scheduled long jobs are no longer starved.
 - The Uptime loop no longer runs while every Uptime Kuma instance is disabled.
 

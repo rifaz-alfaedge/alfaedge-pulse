@@ -83,3 +83,46 @@ def clear_stale_job(job_id: str, max_age_seconds: int, label: str) -> bool:
 	)
 	job.delete()
 	return True
+
+
+def _loop_job_ids(job_id: str) -> tuple[str, str]:
+	"""A poll loop alternates between two job ids, so the run that is ending
+	can queue its successor under the other id while it is still recorded as
+	running under its own (Frappe refuses to enqueue a job id that is queued
+	or running)."""
+	return job_id, f"{job_id}_b"
+
+
+def start_loop_if_needed(method: str, job_id: str, heartbeat_key: str, timeout: int, stale_seconds: int, label: str) -> bool:
+	"""Watchdog half of a poll loop: start it unless it is alive. Alive means
+	a fresh heartbeat, or either of its two job ids already queued/running
+	(which covers the moment between one run ending and its successor
+	starting). Returns True if a loop was queued."""
+	from frappe.utils.background_jobs import is_job_enqueued
+
+	if frappe.cache().get_value(heartbeat_key):
+		return False
+	for one in _loop_job_ids(job_id):
+		clear_stale_job(one, stale_seconds, label)
+	if any(is_job_enqueued(one) for one in _loop_job_ids(job_id)):
+		return False
+	frappe.enqueue(method, queue=poller_queue(), timeout=timeout, job_id=job_id, deduplicate=True)
+	return True
+
+
+def hand_off_loop(method: str, job_id: str, timeout: int) -> None:
+	"""Called by a poll loop as its last act after running to its time bound:
+	queue the next run right away.
+
+	Without this the next run only started when the once-a-minute watchdog
+	next ran, and Frappe's scheduler ticks every 4 minutes by default, so each
+	5-minute run was followed by up to 4 minutes of no polling. The watchdog
+	stays as the safety net for a loop that dies. Not called when a loop ends
+	because it was told to stop or because there is nothing to do."""
+	from rq import get_current_job
+
+	current = get_current_job()
+	current_id = current.id.split("||")[-1] if current else job_id
+	first, second = _loop_job_ids(job_id)
+	successor = second if current_id == first else first
+	frappe.enqueue(method, queue=poller_queue(), timeout=timeout, job_id=successor, deduplicate=True)

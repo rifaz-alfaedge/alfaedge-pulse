@@ -86,7 +86,7 @@ import frappe
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 from frappe.utils.password import get_decrypted_password
 
-from alfaedge_pulse.tasks.jobs import poller_queue
+from alfaedge_pulse.tasks.jobs import hand_off_loop, start_loop_if_needed
 from alfaedge_pulse.tasks.poller import _handle_transition
 from alfaedge_pulse.uptime_kuma_client.base import UptimeKumaAPIError
 from alfaedge_pulse.uptime_kuma_client.metrics_client import fetch_metrics
@@ -133,25 +133,18 @@ def ensure_uptime_poller_running() -> None:
 	or updating the app. Also what picks the loop back up after each
 	bounded ``run_uptime_poll_loop`` invocation ends normally.
 	"""
-	if frappe.cache().get_value(UPTIME_HEARTBEAT_CACHE_KEY):
-		return  # loop is alive and ticking; nothing to do
 	if not _any_instance_enabled():
 		# Nothing to poll (e.g. a restored copy with every Kuma instance
 		# disabled): don't hold a background worker around the clock for it.
 		return
 
-	frappe.enqueue(
+	start_loop_if_needed(
 		"alfaedge_pulse.tasks.uptime_kuma_poller.run_uptime_poll_loop",
-		queue=poller_queue(),
-		# A little headroom over MAX_LOOP_SECONDS for the final cycle to
-		# finish; RQ force-kills the job if it ever runs past this, as a
-		# hard backstop behind the loop's own bound.
-		timeout=MAX_LOOP_SECONDS + 120,
-		job_id=UPTIME_POLLER_JOB_ID,
-		# job_id alone does not dedupe in Frappe — deduplicate=True is a
-		# separate, required opt-in. Without it, a job with this ID
-		# already queued/running wouldn't actually block a second enqueue.
-		deduplicate=True,
+		UPTIME_POLLER_JOB_ID,
+		UPTIME_HEARTBEAT_CACHE_KEY,
+		MAX_LOOP_SECONDS + 120,
+		MAX_LOOP_SECONDS + 300,
+		"uptime poller",
 	)
 
 
@@ -212,6 +205,9 @@ def run_uptime_poll_loop() -> None:
 				time.sleep(1)
 	finally:
 		signal.signal(signal.SIGTERM, previous_handler)
+
+	if not stop_requested and (time.monotonic() - start_time) >= MAX_LOOP_SECONDS:
+		hand_off_loop("alfaedge_pulse.tasks.uptime_kuma_poller.run_uptime_poll_loop", UPTIME_POLLER_JOB_ID, MAX_LOOP_SECONDS + 120)
 
 
 def poll_all_instances() -> None:
