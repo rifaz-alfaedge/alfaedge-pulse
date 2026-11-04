@@ -31,6 +31,11 @@ from alfaedge_pulse.host_health import ssh_client
 from alfaedge_pulse.host_health.ingest import process_performance, process_resources, process_status
 
 POLLER_JOB_ID = "alfaedge_pulse_host_poller"
+#: A queue of its own, served by its own worker (``workers`` in
+#: common_site_config.json plus a supervisor program): the Proxmox and Uptime
+#: pollers keep both ``long`` workers busy around the clock, so a loop queued
+#: there only ever ran when a slot happened to free up.
+POLLER_QUEUE = "pulse"
 HEARTBEAT_CACHE_KEY = "alfaedge_pulse:host_poller_heartbeat"
 MAX_LOOP_SECONDS = 300
 STALE_JOB_SECONDS = MAX_LOOP_SECONDS + 300
@@ -55,7 +60,7 @@ def ensure_host_poller_running() -> None:
 	clear_stale_job(POLLER_JOB_ID, STALE_JOB_SECONDS, "host poller")
 	frappe.enqueue(
 		"alfaedge_pulse.tasks.host_poller.run_host_poll_loop",
-		queue="long",
+		queue=POLLER_QUEUE,
 		timeout=MAX_LOOP_SECONDS + 120,
 		job_id=POLLER_JOB_ID,
 		deduplicate=True,

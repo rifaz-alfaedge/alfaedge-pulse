@@ -12,6 +12,10 @@ All notable changes to this project are documented here.
 - **SSH Settings**: Warpgate or Direct mode, encrypted private key (generate or import; only the public key is shown), host-key pinning, Test connection.
 - Monitored Host: SSH target, port, user, bench path, last poll result.
 
+### Upgrade notes (needed on every bench that runs Pulse)
+- `pip install "paramiko>=4"` in the bench environment (or `bench setup requirements`).
+- The SSH poller runs on its **own queue and worker** (`pulse`), because the Proxmox and Uptime pollers keep both `long` workers busy. Add `"workers": {"pulse": {"timeout": 420, "background_workers": 1}}` to `sites/common_site_config.json`, add a `frappe-bench-frappe-pulse-worker` program (`bench worker --queue pulse`, `stopwaitsecs=420`, `numprocs=1`) to the supervisor config and to the `frappe-bench-workers` group, then `sudo supervisorctl reread && sudo supervisorctl update`. `bench setup supervisor` also generates it, but regenerates the whole file.
+
 ### Removed
 - The push endpoints (`push_status`, `push_resource_metrics`), agent API keys, the shared agent user and role. The separate `pulse_agent` app is no longer used and can be uninstalled from guests.
 
