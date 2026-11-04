@@ -12,6 +12,7 @@
   "server_host",
   "server_port",
   "warpgate_user",
+  "target_naming",
   "default_user",
   "default_bench_path",
   "server_host_key",
@@ -81,6 +82,15 @@
    "depends_on": "eval:doc.connection_mode=='Warpgate'",
    "mandatory_depends_on": "eval:doc.connection_mode=='Warpgate'",
    "description": "The Warpgate user that holds Pulse's public key, e.g. pulse-monitor."
+  },
+  {
+   "fieldname": "target_naming",
+   "fieldtype": "Select",
+   "label": "Warpgate Target Name",
+   "options": "Hostname\nCustom per host only",
+   "default": "Hostname",
+   "depends_on": "eval:doc.connection_mode=='Warpgate'",
+   "description": "Hostname: a host's Warpgate target is its hostname (for example erp.alfaedge.org), unless a different one is typed on that host. Custom per host only: every host needs its own target typed on it."
   },
   {
    "fieldname": "default_user",

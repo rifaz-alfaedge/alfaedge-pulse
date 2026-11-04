@@ -477,10 +477,22 @@ prints what it would do unless you pass `--yes`).
    bastion as `<user>:<target>`) or *Direct*. Click **Generate New Key Pair**
    and add the public key to the Warpgate user, or import an existing key.
    Use a Pulse-only Warpgate user and key, per environment.
-5. Add hosts: **Add Hosts from Proxmox Guests** creates a Monitored Host per
-   guest, switched off, with the Warpgate target name filled in. Create the
-   same targets in Warpgate, enable the host, use **Test Connection**, then
-   switch on *Polling Enabled*.
+5. Name the Warpgate targets. Each host's target is its **hostname** (for
+   example `erp.alfaedge.org`) by default: create the Warpgate target with that
+   name, or, for a server Warpgate calls something else, type the name in that
+   host's **SSH Target**. A typed name always wins. (SSH Settings > *Warpgate
+   Target Name* switches this to "Custom per host only" if you would rather
+   type every one.) **Add Hosts from Proxmox Guests** creates a Monitored Host
+   per guest, switched off; **Fill Missing Targets** writes targets onto existing
+   hosts if you want them stored.
+6. Test one host with **Test Connection**, then enable the rest and switch on
+   *Polling Enabled*.
+
+On a server that is **not** production (a dev or staging copy of it), add
+`"pulse_ssh_roles": ["Staging", "Development"]` to its `site_config.json`. It
+then refuses to poll hosts of any other role, so a restored copy of production,
+which carries production's hosts, settings and key, can never log in to a
+production guest.
 
 Each guest's login needs read access to the bench folder (to read the site
 config). Set *Default Bench Path* once if it is the same everywhere.

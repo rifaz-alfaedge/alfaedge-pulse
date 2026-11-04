@@ -16,7 +16,12 @@ def check(name, ok, detail=""):
 	results.append((name, bool(ok), detail))
 
 
-orig_commit = frappe.db.commit
+from alfaedge_pulse.host_health import ssh_client as _ssh
+
+orig_commit, orig_collect, orig_get_cached = frappe.db.commit, _ssh.collect, frappe.get_cached_doc
+orig_roles = frappe.conf.get("pulse_ssh_roles")
+contacted = []
+_ssh.collect = lambda *a, **k: contacted.append(a) or (_ for _ in ()).throw(AssertionError("Warpgate must not be contacted by a test"))
 frappe.db.commit = lambda: None
 frappe.set_user("Administrator")
 try:
@@ -31,8 +36,15 @@ try:
 	bare = frappe.get_doc({"doctype": "Monitored Host", "proxmox_guest": unmonitored[0], "enabled": 1}).insert(ignore_permissions=True).name
 	has = frappe.get_doc({"doctype": "Monitored Host", "proxmox_guest": unmonitored[1], "enabled": 0, "ssh_target": "Already-There"}).insert(ignore_permissions=True).name
 
-	# Test Connection on a host with no target answers; it does not crash
+	# Test Connection on a host with no target answers; it does not crash. (The hostname convention is
+	# switched off in memory for this check, because under it a host with a hostname has a target.)
+	real = orig_get_cached("SSH Settings")
+	fake = frappe._dict(real.as_dict())
+	fake.update({"target_naming": "Custom per host only", "connection_mode": "Warpgate", "server_host": "bastion.example", "warpgate_user": "pulse-monitor"})
+	frappe.get_cached_doc = lambda dt, *a, **k: fake if dt == "SSH Settings" else orig_get_cached(dt, *a, **k)
+	frappe.conf["pulse_ssh_roles"] = None
 	out = ss.test_connection(bare)
+	frappe.get_cached_doc = orig_get_cached
 	check("Test Connection with no target returns a message, not an error", out["ok"] is False and out["kind"] == "config" and "No Warpgate target" in out["message"], out)
 
 	said = []
@@ -62,8 +74,10 @@ try:
 	said.clear()
 	check("an unknown pattern changes nothing", fill_targets("nope", dry_run=False, say=said.append)["updated"] == 0 and "Unknown pattern" in said[0], said)
 	check("a second run has nothing to do", fill_targets("guest", dry_run=False, say=lambda m: None)["updated"] == 0 or True)
+	check("nothing in this test contacted Warpgate", contacted == [], contacted)
 finally:
-	frappe.db.commit = orig_commit
+	frappe.db.commit, _ssh.collect, frappe.get_cached_doc = orig_commit, orig_collect, orig_get_cached
+	frappe.conf["pulse_ssh_roles"] = orig_roles
 	frappe.db.rollback()
 
 width = max(len(n) for n, _, _ in results)

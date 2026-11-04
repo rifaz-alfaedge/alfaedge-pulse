@@ -123,19 +123,68 @@ def load_private_key() -> paramiko.PKey:
 		raise SSHPollError("auth", f"Could not read the SSH private key ({type(exc).__name__}).")
 
 
+def allowed_roles() -> list[str] | None:
+	"""The Proxmox server roles this server may poll, from ``pulse_ssh_roles`` in
+	its own site_config.json, or None for any. A restored copy of production
+	carries production's hosts, settings and key, but not this file, so a dev
+	server that lists only Staging and Development can never reach a production
+	guest, whatever else it was restored with."""
+	value = frappe.conf.get("pulse_ssh_roles")
+	if not value:
+		return None
+	if isinstance(value, str):
+		value = [part.strip() for part in value.split(",")]
+	return [r for r in value if r]
+
+
+def check_role_allowed(host_name: str) -> None:
+	allowed = allowed_roles()
+	if not allowed:
+		return
+	from alfaedge_pulse.host_health.doctype.monitored_host.monitored_host import get_host_role
+
+	role = get_host_role(host_name)
+	if role not in allowed:
+		raise SSHPollError(
+			"config",
+			f"This server only polls hosts of role {', '.join(allowed)}; this host is {role or 'unknown'} "
+			"(pulse_ssh_roles in this server's site_config.json).",
+		)
+
+
+def warpgate_target_name(host, settings) -> str:
+	"""The Warpgate target for a host. A name typed on the host wins (for a
+	server Warpgate calls something else); otherwise, with the *Hostname*
+	convention in SSH Settings, the host's own hostname. Empty if neither."""
+	custom = (host.ssh_target or "").strip()
+	if custom:
+		return custom
+	if (settings.target_naming or "Hostname") == "Hostname":
+		return (host.hostname or "").strip()
+	return ""
+
+
 def resolve_target(host_name: str) -> Target:
 	"""Builds the connection details for a Monitored Host. Run in the Frappe
 	context; the result is a plain object safe to use from worker threads."""
+	check_role_allowed(host_name)
 	settings = frappe.get_cached_doc("SSH Settings")
 	host = frappe.get_doc("Monitored Host", host_name)
 
 	# Through Warpgate the target is a name that someone created there on
-	# purpose, so it must be set explicitly: never guess it from the guest IP,
-	# or an unconfigured host would be sent to the bastion as a made-up target.
+	# purpose: either typed on the host, or the hostname by the convention the
+	# settings name. It is never guessed from the guest IP, or an unconfigured
+	# host would be sent to the bastion as a made-up target.
 	if (settings.connection_mode or "Warpgate") == "Warpgate":
-		target = (host.ssh_target or "").strip()
+		target = warpgate_target_name(host, settings)
 		if not target:
-			raise SSHPollError("config", "No Warpgate target set on this host (SSH Access section).")
+			raise SSHPollError(
+				"config",
+				"No Warpgate target for this host: type one in its SSH Access section, "
+				"or give it a hostname and use the Hostname naming in SSH Settings.",
+			)
+		if any(ch.isspace() for ch in target) or ":" in target:
+			raise SSHPollError("config", f"'{target}' cannot be a Warpgate target (no spaces or colons); set a different one on the host.")
 	else:
 		guest_ip = frappe.db.get_value("Proxmox Guest", host.proxmox_guest, "ip_address")
 		target = (host.ssh_target or "").strip() or (guest_ip or "").strip()

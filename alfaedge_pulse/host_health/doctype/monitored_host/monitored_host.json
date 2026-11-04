@@ -175,8 +175,8 @@
   {
    "fieldname": "ssh_target",
    "fieldtype": "Data",
-   "label": "SSH Target",
-   "description": "Warpgate target name, or hostname/IP in Direct mode. Leave empty to use the guest's IP address."
+   "label": "SSH Target (custom)",
+   "description": "Leave empty to use this host's hostname as its Warpgate target (SSH Settings > Warpgate Target Name). Type a name only when Warpgate calls this server something else. In Direct mode: the hostname or IP to connect to; empty uses the guest's IP."
   },
   {
    "fieldname": "ssh_port",
