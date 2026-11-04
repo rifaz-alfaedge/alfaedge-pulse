@@ -302,14 +302,16 @@ def diagnose_host(monitored_host: str) -> dict:
 
 	io_latest = [rows[0] for rows in io_by_device.values() if rows]
 	mariadb = diagnose_mariadb(monitored_host, memory_rows[0] if memory_rows else None, io_latest)
-	findings = evaluate(memory_rows, io_by_device, int(kills or 0)) + mariadb["findings"]
+	redis = diagnose_redis(monitored_host, memory_rows[0] if memory_rows else None)
+	findings = evaluate(memory_rows, io_by_device, int(kills or 0)) + mariadb["findings"] + redis["findings"]
 	findings.sort(key=lambda f: SEVERITY_ORDER[f["severity"]])
 	return {
 		"findings": findings,
 		"latest": memory_rows[0] if memory_rows else None,
 		"io_latest": io_latest,
-		"has_data": bool(memory_rows) or mariadb["has_data"],
+		"has_data": bool(memory_rows) or mariadb["has_data"] or redis["has_data"],
 		"mariadb": {k: v for k, v in mariadb.items() if k != "findings"},
+		"redis": {k: v for k, v in redis.items() if k != "findings"},
 	}
 
 
@@ -361,6 +363,13 @@ def _min_over(rows, field):
 	only when every recent sample shows it."""
 	values = [flt(r.get(field)) for r in rows if r.get(field) is not None]
 	return min(values) if len(values) == len(rows) and values else None
+
+
+def _max_over(rows, field):
+	"""The highest value across the rows (all must have it). A ratio that is
+	LOW in every recent sample is one whose best sample is still low."""
+	values = [flt(r.get(field)) for r in rows if r.get(field) is not None]
+	return max(values) if len(values) == len(rows) and values else None
 
 
 def evaluate_mariadb(
@@ -670,5 +679,201 @@ def diagnose_mariadb(monitored_host: str, memory_latest: dict | None, io_latest:
 		"config": config,
 		"sizes": sizes,
 		"limited": [x.strip() for x in (snapshots[0].get("limited") or "").split(",") if x.strip()] if snapshots else [],
+		"has_data": bool(rows),
+	}
+
+
+# ---------------------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------------------
+
+REDIS_MEMORY_WARN_RATIO = 0.90
+REDIS_MEMORY_CRIT_RATIO = 0.97
+REDIS_UNBOUNDED_WARN_RAM_SHARE = 0.40
+REDIS_UNBOUNDED_CRIT_RAM_SHARE = 0.60
+REDIS_FRAGMENTATION_WARN = 1.5
+REDIS_FRAGMENTATION_MIN_RSS_MB = 200  # a ratio on a tiny instance means nothing
+REDIS_SWAPPED_MIN_USED_MB = 50
+REDIS_CACHE_HIT_WARN_PERCENT = 80
+REDIS_CACHE_MIN_OPS_PER_S = 5
+REDIS_CLIENTS_WARN_RATIO = 0.8
+REDIS_FORK_WARN_MS = 1000
+REDIS_SLOW_COMMAND_WARN_MS = 100
+
+REDIS_LOG_FIELDS = [
+	"collected_at", "rates_valid", "instance", "roles", "uptime_s", "maxmemory_policy", "used_mb", "rss_mb",
+	"maxmemory_mb", "memory_percent", "fragmentation_ratio", "keys", "ops_per_s", "hit_percent", "evicted",
+	"evicted_per_s", "expired_per_s", "connected_clients", "max_clients", "blocked_clients", "rejected",
+	"persistence_ok", "fork_ms", "slowlog_len", "slowlog_recent_count", "slowlog_recent_max_ms", "slowlog_recent_commands",
+]
+
+
+def _redis_name(rows):
+	latest = rows[0]
+	roles = (latest.get("roles") or "").replace("+", " and ")
+	return f"Redis {latest.get('instance')}" + (f" ({roles})" if roles else "")
+
+
+def evaluate_redis(rows_by_instance: dict[str, list[dict]], memory: dict | None = None) -> list[dict]:
+	"""``rows_by_instance`` maps an instance label to its Redis Metric Log rows,
+	newest first. ``memory`` is the host's latest Memory Metric Log row, used to
+	judge a Redis that has no memory limit against the guest's memory."""
+	findings: list[dict] = []
+	ram_mb = flt((memory or {}).get("mem_total_mb"))
+	for label, rows in rows_by_instance.items():
+		if not rows:
+			continue
+		latest = rows[0]
+		name = _redis_name(rows)
+		roles = set((latest.get("roles") or "").split("+"))
+		is_queue = "queue" in roles
+		valid = [r for r in rows if r.get("rates_valid")][:SUSTAINED_SAMPLES]
+		sustained = len(valid) >= SUSTAINED_SAMPLES
+		policy = latest.get("maxmemory_policy") or "unknown"
+		limit_mb, used_mb, rss_mb = flt(latest.get("maxmemory_mb")), flt(latest.get("used_mb")), flt(latest.get("rss_mb"))
+		key = label.replace(":", "_")
+
+		evicted = sum(flt(r.get("evicted")) for r in valid) if sustained else 0
+		hit = _max_over(valid, "hit_percent") if sustained else None  # low in EVERY sample
+		ops = _min_over(valid, "ops_per_s") if sustained else None
+		if evicted > 0 and is_queue:
+			findings.append(
+				_finding(
+					f"redis_evict_queue_{key}",
+					"critical",
+					f"{name} is deleting queued data to free memory",
+					f"{int(evicted)} key(s) were evicted in the last {len(valid)} samples on the instance that holds the job queue (policy {policy}, limit {_mb(limit_mb)}, in use {_mb(used_mb)}). Queued background jobs can be lost.",
+					"Set maxmemory-policy to noeviction on this instance and raise its memory limit (or remove the limit), so a full queue refuses new jobs instead of dropping existing ones.",
+				)
+			)
+		elif evicted > 0 and hit is not None and hit < REDIS_CACHE_HIT_WARN_PERCENT and flt(ops) >= REDIS_CACHE_MIN_OPS_PER_S:
+			findings.append(
+				_finding(
+					f"redis_cache_small_{key}",
+					"warning",
+					f"{name} is too small for what it caches",
+					f"It evicted {int(evicted)} key(s) in the last {len(valid)} samples and even the best of those samples found only {hit:.0f}% of the keys it was asked for. The limit is {_mb(limit_mb)}.",
+					f"Raise maxmemory (try {_mb(limit_mb * 2) if limit_mb else 'a higher value'}) so hot keys stay cached.",
+				)
+			)
+		elif hit is not None and hit < REDIS_CACHE_HIT_WARN_PERCENT and flt(ops) >= REDIS_CACHE_MIN_OPS_PER_S and not is_queue and flt(latest.get("uptime_s")) >= DB_MIN_UPTIME_SECONDS:
+			findings.append(
+				_finding(
+					f"redis_cache_hits_{key}",
+					"warning",
+					f"{name} finds few of the keys it is asked for",
+					f"At best {hit:.0f}% of lookups found their key in each of the last {len(valid)} samples, at about {flt(ops):.0f} commands per second.",
+					"Expect this after a restart or a cache clear. If it persists, the application is asking for keys that are not being stored or that expire too soon.",
+				)
+			)
+
+		if limit_mb:
+			ratio = used_mb / limit_mb
+			if ratio >= REDIS_MEMORY_WARN_RATIO:
+				full_hurts = policy == "noeviction"
+				findings.append(
+					_finding(
+						f"redis_memory_full_{key}",
+						"critical" if ratio >= REDIS_MEMORY_CRIT_RATIO and full_hurts else "warning",
+						f"{name} is nearly at its memory limit",
+						f"{_mb(used_mb)} of {_mb(limit_mb)} is in use ({ratio * 100:.0f}%), policy {policy}.",
+						"With noeviction, writes start failing when it is full; raise maxmemory now." if full_hurts else "It will start evicting keys; raise maxmemory if the data should stay cached.",
+					)
+				)
+		elif ram_mb and rss_mb / ram_mb >= REDIS_UNBOUNDED_WARN_RAM_SHARE:
+			share = rss_mb / ram_mb
+			findings.append(
+				_finding(
+					f"redis_unbounded_{key}",
+					"critical" if share >= REDIS_UNBOUNDED_CRIT_RAM_SHARE else "warning",
+					f"{name} has no memory limit and is using a lot of the guest's memory",
+					f"It holds {_mb(rss_mb)}, {share * 100:.0f}% of the guest's {_mb(ram_mb)}, and nothing stops it growing.",
+					"Set maxmemory to a value that leaves room for MariaDB and the web workers (for a cache, also a policy such as allkeys-lru).",
+				)
+			)
+
+		frag = flt(latest.get("fragmentation_ratio"))
+		if frag and rss_mb >= REDIS_FRAGMENTATION_MIN_RSS_MB and frag >= REDIS_FRAGMENTATION_WARN:
+			findings.append(
+				_finding(
+					f"redis_fragmentation_{key}",
+					"warning",
+					f"{name} wastes memory to fragmentation",
+					f"The OS holds {_mb(rss_mb)} for {_mb(used_mb)} of data (ratio {frag:.1f}).",
+					"A restart in a quiet period gives the memory back; enabling activedefrag does it gradually.",
+				)
+			)
+		elif frag and 0 < frag < 1 and used_mb >= REDIS_SWAPPED_MIN_USED_MB:
+			findings.append(
+				_finding(
+					f"redis_swapped_{key}",
+					"critical",
+					f"Part of {name} is in swap",
+					f"Redis holds {_mb(used_mb)} but only {_mb(rss_mb)} is in memory (ratio {frag:.2f}); the rest was pushed to disk.",
+					"Free memory on the guest or lower Redis's limit. Redis in swap is very slow.",
+				)
+			)
+
+		if not latest.get("persistence_ok"):
+			findings.append(
+				_finding(
+					f"redis_persistence_{key}",
+					"critical",
+					f"{name} cannot save to disk",
+					"The last background save (or append-only write) failed, so a restart would lose recent data and Redis may refuse writes.",
+					"Check the disk space and the permissions of Redis's data folder, and its log.",
+				)
+			)
+
+		refused = sum(flt(r.get("rejected")) for r in rows[:SUSTAINED_SAMPLES])
+		clients, max_clients = flt(latest.get("connected_clients")), flt(latest.get("max_clients"))
+		if refused > 0:
+			findings.append(_finding(f"redis_refused_{key}", "critical", f"{name} refused connections", f"{int(refused)} connection(s) were refused in the last samples.", "Raise maxclients and the system's open-files limit, or find what opens so many connections."))
+		elif max_clients and clients / max_clients >= REDIS_CLIENTS_WARN_RATIO:
+			findings.append(_finding(f"redis_clients_{key}", "warning", f"{name} is close to its client limit", f"{clients:.0f} of {max_clients:.0f} connections are in use.", "Raise maxclients or find what holds connections open."))
+
+		if flt(latest.get("fork_ms")) >= REDIS_FORK_WARN_MS:
+			findings.append(
+				_finding(
+					f"redis_fork_{key}",
+					"warning",
+					f"{name} stalls while it saves to disk",
+					f"The last background save paused Redis for {flt(latest.get('fork_ms')):.0f} ms while it forked, and a large instance on a busy guest does this each time.",
+					"Save less often (the save setting), or move to append-only mode. Make sure the guest has memory to spare for the fork.",
+				)
+			)
+
+		slow = flt(latest.get("slowlog_recent_max_ms"))
+		if slow >= REDIS_SLOW_COMMAND_WARN_MS:
+			findings.append(
+				_finding(
+					f"redis_slow_{key}",
+					"warning",
+					f"{name} ran a slow command",
+					f"A command took {slow:.0f} ms in the last two minutes ({latest.get('slowlog_recent_commands') or 'unknown'}). Redis handles one command at a time, so everything waited.",
+					"Look for commands that scan large collections (KEYS, large SMEMBERS or LRANGE) and replace them with incremental ones.",
+				)
+			)
+	findings.sort(key=lambda f: SEVERITY_ORDER[f["severity"]])
+	return findings
+
+
+def diagnose_redis(monitored_host: str, memory_latest: dict | None) -> dict:
+	rows = frappe.get_all(
+		"Redis Metric Log",
+		filters={"monitored_host": monitored_host},
+		fields=REDIS_LOG_FIELDS,
+		order_by="collected_at desc",
+		limit_page_length=40,
+		ignore_permissions=True,
+	)
+	by_instance: dict[str, list[dict]] = {}
+	for row in rows:
+		bucket = by_instance.setdefault(row["instance"], [])
+		if len(bucket) < SUSTAINED_SAMPLES + 2:
+			bucket.append(row)
+	return {
+		"findings": evaluate_redis(by_instance, memory_latest),
+		"instances": {label: r[0] for label, r in by_instance.items() if r},
 		"has_data": bool(rows),
 	}

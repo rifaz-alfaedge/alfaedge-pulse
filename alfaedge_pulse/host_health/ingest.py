@@ -1215,3 +1215,98 @@ def _store_mariadb_snapshot(host_name, now, variables, data, limited, sites_tota
 		)
 	doc.insert(ignore_permissions=True)
 	return 1
+
+
+# ---------------------------------------------------------------------------
+# Redis: counters into rates, one row per instance per sample
+# ---------------------------------------------------------------------------
+
+REDIS_COUNTER_KEYS = (
+	"evicted_keys", "expired_keys", "keyspace_hits", "keyspace_misses", "rejected_connections",
+	"total_commands_processed", "total_connections_received",
+)
+
+
+def process_redis(host_name: str, reported_at: str, instances: list | None = None) -> dict:
+	"""Stores one Redis report for ``host_name``: a Redis Metric Log row for
+	every instance that answered (instances that did not are left out; the
+	service check already covers Redis being down). Counters become rates
+	against that instance's previous sample; a restart (uptime going back) or
+	a long gap marks the row's rates invalid instead of showing a spike."""
+	warnings: list[str] = []
+	logged = 0
+	now = now_datetime()
+	for entry in instances or []:
+		if not entry.get("info"):
+			continue
+		try:
+			_store_redis_sample(host_name, now, entry)
+			logged += 1
+		except Exception:
+			frappe.log_error(title=f"Host Health: malformed Redis payload from {host_name}", message=frappe.get_traceback())
+			warnings.append(f"skipped malformed Redis entry {entry.get('label')}")
+	frappe.db.commit()
+	return {"status": "ok", "monitored_host": host_name, "logged": logged, "warnings": warnings}
+
+
+def _store_redis_sample(host_name, now, entry) -> None:
+	info, config, slow = entry["info"], entry.get("config") or {}, entry.get("slowlog") or {}
+	label = entry["label"]
+	previous = frappe.db.get_value(
+		"Redis Metric Log",
+		{"monitored_host": host_name, "instance": label},
+		["collected_at", "uptime_s", "raw_counters"],
+		order_by="collected_at desc",
+		as_dict=True,
+	)
+	gap = _gap_seconds(previous.collected_at, now) if previous else None
+	uptime = cint(info.get("uptime_in_seconds"))
+	restarted = bool(previous and previous.uptime_s and uptime < previous.uptime_s)
+	usable = bool(gap) and not restarted
+	prev_raw = {}
+	if usable and previous.raw_counters:
+		try:
+			prev_raw = json.loads(previous.raw_counters)
+		except ValueError:
+			usable = False
+
+	def delta(key):
+		return _counter_delta(info.get(key), prev_raw.get(key)) if usable else None
+
+	hits_d, misses_d = delta("keyspace_hits"), delta("keyspace_misses")
+	evicted_d = delta("evicted_keys")
+	used, rss, limit = flt(info.get("used_memory")) / MB, flt(info.get("used_memory_rss")) / MB, flt(info.get("maxmemory")) / MB
+	values = {
+		"monitored_host": host_name,
+		"collected_at": now,
+		"instance": label,
+		"roles": "+".join(entry.get("roles") or []),
+		"rates_valid": 1 if usable else 0,
+		"uptime_s": uptime,
+		"maxmemory_policy": info.get("maxmemory_policy"),
+		"used_mb": round(used, 1),
+		"rss_mb": round(rss, 1),
+		"maxmemory_mb": round(limit, 1),
+		"memory_percent": round(used / limit * 100, 1) if limit else None,
+		"fragmentation_ratio": flt(info.get("mem_fragmentation_ratio")) or None,
+		"keys": cint(info.get("keys")),
+		"ops_per_s": _per_second(delta("total_commands_processed"), gap),
+		"hit_percent": round(hits_d / (hits_d + misses_d) * 100, 2) if hits_d is not None and misses_d is not None and (hits_d + misses_d) else None,
+		"evicted": evicted_d or 0,
+		"evicted_per_s": _per_second(evicted_d, gap),
+		"expired_per_s": _per_second(delta("expired_keys"), gap),
+		"connected_clients": cint(info.get("connected_clients")),
+		"max_clients": cint(config.get("maxclients")),
+		"blocked_clients": cint(info.get("blocked_clients")),
+		"rejected": delta("rejected_connections") or 0,
+		"persistence_ok": 1 if info.get("rdb_last_bgsave_status", "ok") == "ok" and info.get("aof_last_write_status", "ok") == "ok" else 0,
+		"fork_ms": round(flt(info.get("latest_fork_usec")) / 1000, 1),
+		"slowlog_len": cint(slow.get("len")),
+		"slowlog_recent_count": cint(slow.get("recent_count")),
+		"slowlog_recent_max_ms": flt(slow.get("recent_max_ms")),
+		"slowlog_recent_commands": ", ".join(slow.get("recent_commands") or [])[:140],
+		"raw_counters": json.dumps({k: info[k] for k in REDIS_COUNTER_KEYS if k in info}),
+	}
+	doc = frappe.new_doc("Redis Metric Log")
+	doc.update({k: v for k, v in values.items() if v is not None})
+	doc.insert(ignore_permissions=True)

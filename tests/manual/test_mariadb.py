@@ -193,7 +193,7 @@ try:
 		 json.dumps({"services": [], "bench_path": "/home/ubuntu/frappe-bench", "slow": True})],
 		capture_output=True, text=True, timeout=90)
 	rep = json.loads(proc.stdout)
-	check("collector reports MariaDB", rep["collector_version"] == 3 and rep.get("mariadb", {}).get("status"), rep["errors"])
+	check("collector reports MariaDB", rep["collector_version"] >= 3 and rep.get("mariadb", {}).get("status"), rep["errors"])
 	check("collector read the settings and the data size", len(rep["mariadb"]["variables"]) > 20 and rep["mariadb"]["data"]["sites_counted"] >= 1)
 	check("output never contains the database password", site_cfg["db_password"] not in proc.stdout and site_cfg["db_password"] not in proc.stderr)
 	check("without PROCESS it is reported, not raised as an error", "transactions" in rep["mariadb"]["limited"] and not any("transactions" in e for e in rep["errors"]), rep["errors"])

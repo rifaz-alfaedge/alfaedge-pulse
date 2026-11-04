@@ -22,7 +22,8 @@ Output (stdout, one JSON object):
 	 "performance": {"reported_at", "memory", "pressure", "cgroup", "counters",
 	                 "top_processes", "io"},
 	 "mariadb": {"reported_at", "via", "status", "variables", "data", "process",
-	             "oldest_trx_s", "trx_count", "limited", "sites_total"}}
+	             "oldest_trx_s", "trx_count", "limited", "sites_total"},
+	 "redis": {"reported_at", "instances": [{"label", "roles", "info", "config", "slowlog"}]}}
 
 ``status`` and ``resources`` use exactly the shapes that
 ``host_health/ingest.py`` processes, so a section that cannot be collected
@@ -37,7 +38,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-COLLECTOR_VERSION = 3
+COLLECTOR_VERSION = 4
 MAX_FAILED_JOBS_PER_QUEUE = 50
 EXC_INFO_LIMIT = 4000
 REAL_FS = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "vfat", "ntfs", "exfat", "jfs", "reiserfs"}
@@ -711,6 +712,68 @@ def mariadb_data_sizes(pymysql, sites, common):
 		"top_tables": tables[:TOP_TABLES],
 	}
 
+
+# --------------------------------------------------------------------------
+# Redis: the cache, queue and socketio instances named in common_site_config.json
+# --------------------------------------------------------------------------
+
+REDIS_INFO_KEYS = (
+	"redis_version", "role", "uptime_in_seconds", "used_memory", "used_memory_rss", "used_memory_peak",
+	"maxmemory", "maxmemory_policy", "mem_fragmentation_ratio", "evicted_keys", "expired_keys",
+	"keyspace_hits", "keyspace_misses", "connected_clients", "blocked_clients", "rejected_connections",
+	"instantaneous_ops_per_sec", "total_commands_processed", "total_connections_received",
+	"latest_fork_usec", "rdb_last_bgsave_status", "rdb_changes_since_last_save", "aof_enabled",
+	"aof_last_write_status", "loading",
+)
+REDIS_TIMEOUT = 3
+SLOWLOG_WINDOW_SECONDS = 120
+
+
+def collect_redis(bench_path):
+	"""Read-only INFO, CONFIG GET maxclients and SLOWLOG of each distinct Redis
+	instance. Only the command NAME of a slow command is reported, never its
+	arguments, and connection URLs (which may carry a password) are never
+	printed: an instance is labelled host:port."""
+	import redis
+
+	common = read_json(os.path.join(bench_path, "sites", "common_site_config.json"))
+	groups = {}
+	for key, role in (("redis_cache", "cache"), ("redis_queue", "queue"), ("redis_socketio", "socketio")):
+		if common.get(key):
+			groups.setdefault(common[key], []).append(role)
+	instances = []
+	now = time.time()
+	for url, roles in groups.items():
+		hostport = url.split("@")[-1].split("//")[-1].rstrip("/")
+		entry = {"label": hostport, "roles": sorted(roles)}
+		try:
+			client = redis.from_url(url, socket_timeout=REDIS_TIMEOUT, socket_connect_timeout=REDIS_TIMEOUT)
+			info = client.info()
+			entry["info"] = {k: info[k] for k in REDIS_INFO_KEYS if k in info}
+			entry["info"]["keys"] = sum(v.get("keys", 0) for k, v in info.items() if k.startswith("db") and isinstance(v, dict))
+			try:
+				entry["config"] = {"maxclients": int(client.config_get("maxclients").get("maxclients", 0))}
+			except Exception:
+				entry["config"] = {}
+			try:
+				recent = [
+					e for e in client.slowlog_get(10)
+					if now - int(e.get("start_time", 0)) <= SLOWLOG_WINDOW_SECONDS
+				]
+				entry["slowlog"] = {
+					"len": client.slowlog_len(),
+					"recent_count": len(recent),
+					"recent_max_ms": round(max((e["duration"] for e in recent), default=0) / 1000, 1),
+					"recent_commands": sorted({(e.get("command") or b"?").split(b" ")[0].decode("ascii", "replace")[:20] for e in recent}),
+				}
+			except Exception:
+				entry["slowlog"] = None
+		except Exception as exc:
+			entry["error"] = type(exc).__name__
+			errors.append(f"redis {hostport}: {type(exc).__name__}")
+		instances.append(entry)
+	return {"instances": instances} if instances else None
+
 # --------------------------------------------------------------------------
 
 
@@ -751,6 +814,12 @@ def main():
 	else:
 		mariadb_report = None
 
+	redis_report = None
+	if bench_path and os.path.isdir(os.path.join(bench_path, "sites")):
+		redis_report = attempt("redis", lambda: collect_redis(bench_path))
+		if redis_report is not None:
+			redis_report["reported_at"] = now
+
 	load = attempt("load", collect_load)
 	if load is not None:
 		resources["load"] = load
@@ -783,6 +852,7 @@ def main():
 			"resources": resources,
 			"performance": performance,
 			**({"mariadb": mariadb_report} if mariadb_report else {}),
+			**({"redis": redis_report} if redis_report else {}),
 		},
 		sys.stdout,
 	)

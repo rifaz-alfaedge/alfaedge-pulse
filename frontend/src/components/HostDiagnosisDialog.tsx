@@ -6,7 +6,7 @@ import { getErrorMessage } from '../lib/errors'
 import { timeAgo } from '../lib/format'
 import { Tabs } from './Tabs'
 import { TrendChart } from './TrendChart'
-import { Card, Empty, Segmented, StatTile, type Tone } from './ui'
+import { Card, Empty, Pill, Segmented, StatTile, type Tone } from './ui'
 
 const RANGE_OPTIONS = [
   { label: '1h', value: 1 },
@@ -14,7 +14,7 @@ const RANGE_OPTIONS = [
   { label: '24h', value: 24 },
   { label: '7d', value: 168 },
 ]
-const TABS = ['Summary', 'MariaDB', 'Memory', 'Disk I/O'] as const
+const TABS = ['Summary', 'MariaDB', 'Redis', 'Memory', 'Disk I/O'] as const
 type TabName = (typeof TABS)[number]
 
 /** A stored number, or null when it is missing or not a number. */
@@ -110,6 +110,8 @@ export function HostDiagnosisDialog({ hostName, label, onClose }: { hostName: st
           <SummaryTab data={data} />
         ) : tab === 'MariaDB' ? (
           <MariadbTab data={data} />
+        ) : tab === 'Redis' ? (
+          <RedisTab data={data} />
         ) : tab === 'Memory' ? (
           <MemoryTab data={data} />
         ) : (
@@ -308,6 +310,74 @@ function MariadbTab({ data }: { data: HostDiagnosis }) {
         </p>
       )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Redis
+// ---------------------------------------------------------------------------
+
+function RedisTab({ data }: { data: HostDiagnosis }) {
+  const labels = Object.keys(data.redis?.instances ?? {})
+  if (!data.redis?.has_data || labels.length === 0) {
+    return <Empty text="No Redis data for this host. It needs a bench path set, and the bench's Redis servers must be reachable from the host itself." />
+  }
+  return (
+    <div className="flex flex-col gap-6">
+      {labels.map((label) => (
+        <RedisInstance key={label} label={label} latest={data.redis.instances[label]} trend={data.redis.trend?.[label] ?? []} />
+      ))}
+    </div>
+  )
+}
+
+function RedisInstance({ label, latest, trend }: { label: string; latest: DiagnosisSample; trend: DiagnosisSample[] }) {
+  const used = sampleNumber(latest, 'used_mb')
+  const limit = sampleNumber(latest, 'maxmemory_mb')
+  const pct = limit ? ((used ?? 0) / limit) * 100 : null
+  const hit = sampleNumber(latest, 'hit_percent')
+  const roles = String(latest.roles ?? '').split('+').filter(Boolean)
+  const isQueue = roles.includes('queue')
+  const persistenceOk = Boolean(sampleNumber(latest, 'persistence_ok'))
+  // Draw the limit as a flat line only when there is one.
+  const rows = trend.map((r) => ({ ...r, limit_mb: sampleNumber(r, 'maxmemory_mb') || null }))
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold text-ink-primary">{label}</h3>
+        {roles.map((r) => (
+          <Pill key={r} tone="info">
+            {r}
+          </Pill>
+        ))}
+        {!persistenceOk && <Pill tone="critical">cannot save to disk</Pill>}
+        <span className="text-xs text-ink-muted">
+          policy {String(latest.maxmemory_policy ?? '—')} · {fmtNum(sampleNumber(latest, 'keys'))} keys · last seen {timeAgo(latest.collected_at)}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Memory" value={fmtMb(used)} sub={limit ? `${fmtPct(pct)} of ${fmtMb(limit)} limit` : 'no memory limit'} tone={pct == null ? (isQueue ? 'ok' : 'muted') : pct >= 97 ? 'critical' : pct >= 90 ? 'warning' : 'ok'} />
+        <StatTile label={isQueue ? 'Commands' : 'Cache hit ratio'} value={isQueue ? `${fmtNum(sampleNumber(latest, 'ops_per_s'), 0)}/s` : hit == null ? '—' : fmtPct(hit, 1)} sub={isQueue ? 'job queue traffic' : `${fmtNum(sampleNumber(latest, 'ops_per_s'), 0)} commands/s`} tone={!isQueue && hit != null && hit < 80 ? 'warning' : 'ok'} />
+        <StatTile label="Clients" value={fmtNum(sampleNumber(latest, 'connected_clients'))} sub={`${fmtNum(sampleNumber(latest, 'blocked_clients'))} waiting for work · limit ${fmtNum(sampleNumber(latest, 'max_clients'))}`} />
+        <StatTile label="Evicted" value={fmtNum(sampleNumber(latest, 'evicted'))} sub={isQueue ? 'must stay 0 for a queue' : 'keys dropped to free memory'} tone={(sampleNumber(latest, 'evicted') ?? 0) > 0 && isQueue ? 'critical' : 'ok'} />
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SampleChart title="Memory in use" rows={rows} fields={[
+          { key: 'used_mb', label: 'In use (MB)', colorVar: '--color-accent', fill: true },
+          { key: 'limit_mb', label: 'Limit (MB)', colorVar: '--color-status-critical' },
+        ]} formatter={(v) => fmtMb(v)} />
+        <SampleChart title="Commands per second" rows={rows} fields={[{ key: 'ops_per_s', label: 'Commands/s', colorVar: '--color-accent', fill: true }]} />
+        {!isQueue && (
+          <SampleChart title="Cache hit ratio" rows={rows} fields={[{ key: 'hit_percent', label: 'Hit ratio %', colorVar: '--color-status-good', fill: true }]} formatter={(v) => `${Math.round(v)}%`} note="Share of key lookups that found their key. Low just after a restart is normal." />
+        )}
+        <SampleChart title="Clients" rows={rows} fields={[
+          { key: 'connected_clients', label: 'Connected', colorVar: '--color-accent' },
+          { key: 'blocked_clients', label: 'Waiting for work', colorVar: '--color-status-warning' },
+        ]} note={isQueue ? 'Background workers wait on the queue, so a few waiting clients are normal.' : undefined} />
+        <SampleChart title="Keys evicted per second" rows={rows} fields={[{ key: 'evicted_per_s', label: 'Evicted/s', colorVar: '--color-status-critical', fill: true }]} />
+        <SampleChart title="Pause while saving to disk (ms)" rows={rows} fields={[{ key: 'fork_ms', label: 'Last fork (ms)', colorVar: '--color-status-warning' }]} />
+      </div>
+    </section>
   )
 }
 

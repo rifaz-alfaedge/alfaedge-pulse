@@ -39,6 +39,8 @@ INDEXES: list[tuple[str, list[str], str]] = [
 	("MariaDB Metric Log", ["collected_at"], "daily retention purge"),
 	("MariaDB Config Snapshot", ["monitored_host", "collected_at"], "latest settings and sizes"),
 	("MariaDB Config Snapshot", ["collected_at"], "daily retention purge"),
+	("Redis Metric Log", ["monitored_host", "instance", "collected_at"], "latest sample per instance and trends"),
+	("Redis Metric Log", ["collected_at"], "daily retention purge"),
 	("Uptime Check Log", ["site", "checked_at"], "uptime history per site"),
 	("LLM Usage Log", ["source", "request_timestamp"], "AI Usage filters"),
 	("LLM Usage Log", ["provider", "request_timestamp"], "AI Usage filters"),

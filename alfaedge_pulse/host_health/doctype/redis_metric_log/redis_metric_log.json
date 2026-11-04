@@ -1,0 +1,273 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-11-04 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "monitored_host",
+  "instance",
+  "roles",
+  "collected_at",
+  "rates_valid",
+  "uptime_s",
+  "maxmemory_policy",
+  "mem_section",
+  "used_mb",
+  "rss_mb",
+  "maxmemory_mb",
+  "memory_percent",
+  "fragmentation_ratio",
+  "keys",
+  "traffic_section",
+  "ops_per_s",
+  "hit_percent",
+  "evicted",
+  "evicted_per_s",
+  "expired_per_s",
+  "connected_clients",
+  "max_clients",
+  "blocked_clients",
+  "rejected",
+  "health_section",
+  "persistence_ok",
+  "fork_ms",
+  "slowlog_len",
+  "slowlog_recent_count",
+  "slowlog_recent_max_ms",
+  "slowlog_recent_commands",
+  "raw_section",
+  "raw_counters"
+ ],
+ "fields": [
+  {
+   "fieldname": "monitored_host",
+   "fieldtype": "Link",
+   "label": "Monitored Host",
+   "options": "Monitored Host",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "instance",
+   "fieldtype": "Data",
+   "label": "Instance",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "host:port of this Redis server."
+  },
+  {
+   "fieldname": "roles",
+   "fieldtype": "Data",
+   "label": "Used For",
+   "description": "cache, queue and/or socketio: what Frappe uses this server for."
+  },
+  {
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "label": "Collected At",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "rates_valid",
+   "fieldtype": "Check",
+   "label": "Rates Valid",
+   "read_only": 1,
+   "description": "0 for the first sample, after a Redis restart or after a long gap: the per-second figures on this row are then 0 because nothing could be computed."
+  },
+  {
+   "fieldname": "uptime_s",
+   "fieldtype": "Long Int",
+   "label": "Uptime (s)"
+  },
+  {
+   "fieldname": "maxmemory_policy",
+   "fieldtype": "Data",
+   "label": "Eviction Policy"
+  },
+  {
+   "fieldname": "mem_section",
+   "fieldtype": "Section Break",
+   "label": "Memory"
+  },
+  {
+   "fieldname": "used_mb",
+   "fieldtype": "Float",
+   "label": "In Use (MB)"
+  },
+  {
+   "fieldname": "rss_mb",
+   "fieldtype": "Float",
+   "label": "Held by the OS (MB)"
+  },
+  {
+   "fieldname": "maxmemory_mb",
+   "fieldtype": "Float",
+   "label": "Limit (MB)",
+   "description": "0 means no limit."
+  },
+  {
+   "fieldname": "memory_percent",
+   "fieldtype": "Percent",
+   "label": "Of Limit %"
+  },
+  {
+   "fieldname": "fragmentation_ratio",
+   "fieldtype": "Float",
+   "label": "Fragmentation Ratio"
+  },
+  {
+   "fieldname": "keys",
+   "fieldtype": "Long Int",
+   "label": "Keys"
+  },
+  {
+   "fieldname": "traffic_section",
+   "fieldtype": "Section Break",
+   "label": "Traffic"
+  },
+  {
+   "fieldname": "ops_per_s",
+   "fieldtype": "Float",
+   "label": "Commands/s"
+  },
+  {
+   "fieldname": "hit_percent",
+   "fieldtype": "Percent",
+   "label": "Cache Hit Ratio %",
+   "description": "Share of key lookups that found the key, since the last sample."
+  },
+  {
+   "fieldname": "evicted",
+   "fieldtype": "Int",
+   "label": "Keys Evicted (since last)"
+  },
+  {
+   "fieldname": "evicted_per_s",
+   "fieldtype": "Float",
+   "label": "Evicted/s"
+  },
+  {
+   "fieldname": "expired_per_s",
+   "fieldtype": "Float",
+   "label": "Expired/s"
+  },
+  {
+   "fieldname": "connected_clients",
+   "fieldtype": "Int",
+   "label": "Clients"
+  },
+  {
+   "fieldname": "max_clients",
+   "fieldtype": "Int",
+   "label": "Client Limit"
+  },
+  {
+   "fieldname": "blocked_clients",
+   "fieldtype": "Int",
+   "label": "Blocked Clients"
+  },
+  {
+   "fieldname": "rejected",
+   "fieldtype": "Int",
+   "label": "Connections Refused (since last)"
+  },
+  {
+   "fieldname": "health_section",
+   "fieldtype": "Section Break",
+   "label": "Health"
+  },
+  {
+   "fieldname": "persistence_ok",
+   "fieldtype": "Check",
+   "label": "Saving to Disk Works"
+  },
+  {
+   "fieldname": "fork_ms",
+   "fieldtype": "Float",
+   "label": "Last Background Save Fork (ms)"
+  },
+  {
+   "fieldname": "slowlog_len",
+   "fieldtype": "Int",
+   "label": "Slow Log Entries"
+  },
+  {
+   "fieldname": "slowlog_recent_count",
+   "fieldtype": "Int",
+   "label": "Recent Slow Commands"
+  },
+  {
+   "fieldname": "slowlog_recent_max_ms",
+   "fieldtype": "Float",
+   "label": "Slowest Recent (ms)"
+  },
+  {
+   "fieldname": "slowlog_recent_commands",
+   "fieldtype": "Data",
+   "label": "Slow Command Names"
+  },
+  {
+   "fieldname": "raw_section",
+   "fieldtype": "Section Break",
+   "label": "Raw counters"
+  },
+  {
+   "fieldname": "raw_counters",
+   "fieldtype": "Long Text",
+   "label": "Counters"
+  }
+ ],
+ "icon": "fa fa-bolt",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Host Health",
+ "name": "Redis Metric Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "collected_at",
+ "sort_order": "DESC",
+ "states": []
+}

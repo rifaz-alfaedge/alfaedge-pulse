@@ -29,7 +29,13 @@ import frappe
 from frappe.utils import cint
 
 from alfaedge_pulse.host_health import ssh_client
-from alfaedge_pulse.host_health.ingest import process_mariadb, process_performance, process_resources, process_status
+from alfaedge_pulse.host_health.ingest import (
+	process_mariadb,
+	process_performance,
+	process_redis,
+	process_resources,
+	process_status,
+)
 from alfaedge_pulse.tasks.jobs import hand_off_loop, start_loop_if_needed
 
 POLLER_JOB_ID = "alfaedge_pulse_host_poller"
@@ -221,6 +227,13 @@ def _store_report(name: str, target, report: dict, new_key: str | None, duration
 			except Exception:
 				frappe.db.rollback()
 				frappe.log_error(title=f"Host Health: MariaDB report from {name} failed", message=frappe.get_traceback())
+		redis_report = report.get("redis")
+		if redis_report:
+			try:
+				process_redis(name, **redis_report)
+			except Exception:
+				frappe.db.rollback()
+				frappe.log_error(title=f"Host Health: Redis report from {name} failed", message=frappe.get_traceback())
 		performance = report.get("performance")
 		if performance:
 			try:

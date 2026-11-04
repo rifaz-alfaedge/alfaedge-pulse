@@ -538,6 +538,8 @@ TREND_MARIADB_FIELDS = [
 	"checkpoint_age_percent", "bp_dirty_percent", "queries_per_s", "slow_queries_per_s", "threads_connected",
 	"threads_running", "row_lock_waits_per_s", "row_lock_avg_wait_ms", "tmp_disk_percent",
 ]
+TREND_REDIS_FIELDS = ["instance", "used_mb", "maxmemory_mb", "ops_per_s", "hit_percent", "evicted_per_s", "connected_clients", "blocked_clients", "fork_ms"]
+REDIS_RATE_FIELDS = ("ops_per_s", "hit_percent", "evicted_per_s", "expired_per_s")
 IO_RATE_FIELDS = ("read_iops", "write_iops", "read_mb_s", "write_mb_s", "await_ms", "util_percent", "avg_queue")
 MAX_TREND_POINTS = 120
 MAX_TREND_DEVICES = 3
@@ -559,6 +561,7 @@ def _bucketed(
 	since,
 	bucket_seconds: int,
 	by_device: bool = False,
+	group_column: str | None = None,
 ) -> list[dict]:
 	"""Samples of one host since ``since``, averaged into time buckets in the
 	database, so a 7-day chart reads ~120 rows instead of ~20,000.
@@ -568,10 +571,11 @@ def _bucketed(
 	restart, gap) never drags an average down with a false zero; a bucket with
 	none comes back as null, which charts draw as a gap. ``doctype``, ``fields``
 	and ``rate_fields`` are fixed lists in this app, never request input."""
-	skip = {"collected_at", "rates_valid", "top_processes", "device"}
+	group_column = group_column or ("device" if by_device else None)
+	skip = {"collected_at", "rates_valid", "top_processes", "device", "instance", "roles"}
 	parts = ["MAX(collected_at) AS collected_at", "MAX(rates_valid) AS rates_valid"]
-	if by_device:
-		parts.append("device")
+	if group_column:
+		parts.append(group_column)
 	for field in fields:
 		if field in skip:
 			continue
@@ -579,7 +583,7 @@ def _bucketed(
 			parts.append(f"ROUND(AVG(CASE WHEN rates_valid = 1 THEN `{field}` END), 2) AS `{field}`")
 		else:
 			parts.append(f"ROUND(AVG(`{field}`), 2) AS `{field}`")
-	group = "FLOOR(UNIX_TIMESTAMP(collected_at) / %(bucket)s)" + (", device" if by_device else "")
+	group = "FLOOR(UNIX_TIMESTAMP(collected_at) / %(bucket)s)" + (f", {group_column}" if group_column else "")
 	where = "monitored_host = %(host)s AND collected_at >= %(since)s" + (" AND rates_valid = 1" if by_device else "")
 	return frappe.db.sql(
 		f"SELECT {', '.join(parts)} FROM `tab{doctype}` WHERE {where} GROUP BY {group} ORDER BY MAX(collected_at) ASC",
@@ -612,5 +616,10 @@ def get_host_diagnosis(monitored_host: str, hours: int = 6) -> dict:
 	result["io_trend"] = {d: by_device[d] for d in busiest}
 
 	result["mariadb"]["trend"] = _bucketed("MariaDB Metric Log", TREND_MARIADB_FIELDS, MARIADB_RATE_FIELDS, monitored_host, since, bucket)
+	redis_rows = _bucketed("Redis Metric Log", TREND_REDIS_FIELDS, REDIS_RATE_FIELDS, monitored_host, since, bucket, group_column="instance")
+	trend: dict[str, list[dict]] = {}
+	for row in redis_rows:
+		trend.setdefault(row["instance"], []).append(row)
+	result["redis"]["trend"] = trend
 	result["hours"] = hours
 	return result

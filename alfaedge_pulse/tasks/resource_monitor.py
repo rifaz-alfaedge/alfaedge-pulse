@@ -49,6 +49,7 @@ def purge_old_resource_logs() -> None:
 		("Disk IO Sample", {"collected_at": ["<", io_cutoff]}),
 		("Memory Metric Log", {"collected_at": ["<", cutoff]}),
 		("MariaDB Metric Log", {"collected_at": ["<", cutoff]}),
+		("Redis Metric Log", {"collected_at": ["<", cutoff]}),
 		("MariaDB Config Snapshot", {"collected_at": ["<", snapshot_cutoff]}),
 		("Resource Disk Sample", {"collected_at": ["<", cutoff]}),
 		("Resource Metric Log", {"collected_at": ["<", cutoff]}),

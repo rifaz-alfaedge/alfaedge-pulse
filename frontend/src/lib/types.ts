@@ -829,6 +829,12 @@ export interface HostDiagnosis {
   hours: number
   memory_trend: DiagnosisSample[]
   io_trend: Record<string, DiagnosisSample[]>
+  redis: {
+    has_data: boolean
+    /** The latest reading of each Redis instance, keyed by host:port. */
+    instances: Record<string, DiagnosisSample>
+    trend: Record<string, DiagnosisSample[]>
+  }
   mariadb: {
     latest: DiagnosisSample | null
     config: Record<string, string | number>
