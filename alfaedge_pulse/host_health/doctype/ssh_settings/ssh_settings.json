@@ -33,6 +33,7 @@
   "bastion_failure_streak",
   "hosts_section",
   "add_hosts",
+  "fill_targets",
   "test_section",
   "test_host",
   "test_connection"
@@ -207,6 +208,12 @@
    "fieldtype": "Button",
    "label": "Add Hosts from Proxmox Guests",
    "description": "Creates a Monitored Host per guest, switched off, with the Warpgate target name filled in from the guest name."
+  },
+  {
+   "fieldname": "fill_targets",
+   "fieldtype": "Button",
+   "label": "Fill Missing Targets",
+   "description": "Sets the Warpgate target on hosts that already exist but have none, from the guest name."
   },
   {
    "fieldname": "test_section",

@@ -79,10 +79,11 @@ def test_connection(monitored_host: str) -> dict:
 	frappe.only_for(MANAGE_ROLES)
 	from alfaedge_pulse.host_health import ssh_client
 
-	target = ssh_client.resolve_target(monitored_host)
 	try:
+		target = ssh_client.resolve_target(monitored_host)
 		report, _ = ssh_client.collect(target, ssh_client.load_private_key())
 	except ssh_client.SSHPollError as exc:
+		# Includes "no Warpgate target set on this host": an answer to show, not a crash.
 		return {"ok": False, "kind": exc.kind, "message": str(exc)}
 	status = report.get("status", {})
 	return {
@@ -111,9 +112,11 @@ def get_polling_state() -> dict:
 
 TARGET_PATTERNS = {
 	# altaza-staging.alfaedge.in -> Altaza-Staging (the usual Warpgate target naming)
-	"title": lambda guest_name: "-".join(part.capitalize() for part in guest_name.split(".")[0].split("-")),
-	"short": lambda guest_name: guest_name.split(".")[0],
-	"full": lambda guest_name: guest_name,
+	"title": lambda guest_name, guest_id=None: "-".join(part.capitalize() for part in guest_name.split(".")[0].split("-")),
+	"short": lambda guest_name, guest_id=None: guest_name.split(".")[0],
+	"full": lambda guest_name, guest_id=None: guest_name,
+	# the Proxmox guest id, e.g. Sarbath-1100
+	"guest": lambda guest_name, guest_id=None: guest_id or guest_name,
 }
 MAX_BULK_HOSTS = 200
 
@@ -139,7 +142,7 @@ def _candidate_guests(role: str, only_running: bool, pattern: str) -> list[dict]
 				"guest": guest.name,
 				"guest_name": guest.guest_name,
 				"status": guest.status,
-				"target": TARGET_PATTERNS[pattern](guest.guest_name),
+				"target": TARGET_PATTERNS[pattern](guest.guest_name, guest.name),
 			}
 		)
 	return rows[:MAX_BULK_HOSTS]
@@ -172,3 +175,48 @@ def create_hosts_from_guests(guests: str, role: str = "Staging", only_running: i
 		).insert()
 		created.append(doc.name)
 	return {"created": len(created), "skipped": len(chosen) - len(created)}
+
+
+# ---------------------------------------------------------------------------
+# Filling in targets on hosts that already exist
+# ---------------------------------------------------------------------------
+
+
+def _hosts_missing_target(pattern: str) -> list[dict]:
+	if pattern not in TARGET_PATTERNS:
+		frappe.throw("Unknown target name pattern.")
+	rows = frappe.db.sql(
+		"""SELECT h.name AS host, h.enabled, h.proxmox_guest AS guest, g.guest_name
+		FROM `tabMonitored Host` h LEFT JOIN `tabProxmox Guest` g ON g.name = h.proxmox_guest
+		WHERE COALESCE(h.ssh_target, '') = '' ORDER BY g.guest_name""",
+		as_dict=True,
+	)
+	return [
+		{**r, "target": TARGET_PATTERNS[pattern](r.guest_name or r.host, r.guest)}
+		for r in rows
+		if r.guest_name or r.host
+	][:MAX_BULK_HOSTS]
+
+
+@frappe.whitelist()
+def preview_missing_targets(pattern: str = "title") -> list[dict]:
+	"""Existing hosts with no Warpgate target, and the name each would get."""
+	frappe.only_for(MANAGE_ROLES)
+	return _hosts_missing_target(pattern)
+
+
+@frappe.whitelist()
+def fill_missing_targets(hosts: str, pattern: str = "title") -> dict:
+	"""Sets the Warpgate target of the chosen hosts that have none. Names are
+	recomputed here, never taken from the browser; hosts keep their enabled
+	switch, and a host that already has a target is never changed."""
+	frappe.only_for(MANAGE_ROLES)
+	chosen = set(frappe.parse_json(hosts) or [])
+	by_host = {r["host"]: r for r in _hosts_missing_target(pattern)}
+	done = 0
+	for host in chosen:
+		row = by_host.get(host)
+		if row:
+			frappe.db.set_value("Monitored Host", host, "ssh_target", row["target"])
+			done += 1
+	return {"updated": done, "skipped": len(chosen) - done}

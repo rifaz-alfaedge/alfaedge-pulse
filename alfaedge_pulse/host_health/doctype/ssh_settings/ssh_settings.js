@@ -25,8 +25,8 @@ frappe.ui.form.on("SSH Settings", {
 			title: __("Add Hosts from Proxmox Guests"),
 			fields: [
 				{ fieldname: "role", fieldtype: "Select", label: __("Server role"), options: "Staging\nDevelopment\nProduction\nBackup", default: "Staging" },
-				{ fieldname: "pattern", fieldtype: "Select", label: __("Warpgate target name"), options: "title\nshort\nfull", default: "title",
-					description: __("title: altaza-staging.alfaedge.in becomes Altaza-Staging. short: altaza-staging. full: the whole guest name.") },
+				{ fieldname: "pattern", fieldtype: "Select", label: __("Warpgate target name"), options: "title\nshort\nfull\nguest", default: "title",
+					description: __("title: altaza-staging.alfaedge.in becomes Altaza-Staging. short: altaza-staging. full: the whole guest name. guest: the Proxmox guest id, e.g. Sarbath-1100.") },
 				{ fieldname: "only_running", fieldtype: "Check", label: __("Only running guests"), default: 1 },
 				{ fieldname: "preview_button", fieldtype: "Button", label: __("Preview") },
 				{ fieldname: "preview", fieldtype: "HTML" },
@@ -61,6 +61,51 @@ frappe.ui.form.on("SSH Settings", {
 						candidates.length
 							? `<table class="table table-bordered"><thead><tr><th>${__("Guest")}</th><th>${__("Warpgate target")}</th></tr></thead><tbody>${rows}</tbody></table>`
 							: `<p class="text-muted">${__("No guests without a Monitored Host.")}</p>`
+					);
+				},
+			});
+		};
+		d.show();
+	},
+
+	fill_targets(frm) {
+		let candidates = [];
+		const d = new frappe.ui.Dialog({
+			title: __("Fill Missing Warpgate Targets"),
+			fields: [
+				{ fieldname: "pattern", fieldtype: "Select", label: __("Warpgate target name"), options: "title\nshort\nfull\nguest", default: "title",
+					description: __("title: erp.alfaedge.org becomes Erp. short: erp. full: the whole guest name. guest: the Proxmox guest id, e.g. Sarbath-1100.") },
+				{ fieldname: "preview_button", fieldtype: "Button", label: __("Preview") },
+				{ fieldname: "preview", fieldtype: "HTML" },
+			],
+			primary_action_label: __("Set these targets"),
+			primary_action(values) {
+				if (!candidates.length) {
+					frappe.msgprint(__("Preview first."));
+					return;
+				}
+				frappe.call({
+					method: `${SSH}.fill_missing_targets`,
+					args: { hosts: candidates.map((c) => c.host), pattern: values.pattern },
+					freeze: true,
+					callback(r) {
+						d.hide();
+						frappe.msgprint(__("Set the target on {0} host(s). Make sure each target exists in Warpgate, then use Test Connection.", [(r.message || {}).updated]));
+					},
+				});
+			},
+		});
+		d.fields_dict.preview_button.input.onclick = () => {
+			frappe.call({
+				method: `${SSH}.preview_missing_targets`,
+				args: { pattern: d.get_value("pattern") },
+				callback(r) {
+					candidates = r.message || [];
+					const rows = candidates.map((c) => `<tr><td>${frappe.utils.escape_html(c.guest_name || c.host)}</td><td>${frappe.utils.escape_html(c.target)}</td><td>${c.enabled ? __("enabled") : __("off")}</td></tr>`).join("");
+					d.fields_dict.preview.$wrapper.html(
+						candidates.length
+							? `<table class="table table-bordered"><thead><tr><th>${__("Host")}</th><th>${__("Warpgate target")}</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+							: `<p class="text-muted">${__("Every host already has a target.")}</p>`
 					);
 				},
 			});
