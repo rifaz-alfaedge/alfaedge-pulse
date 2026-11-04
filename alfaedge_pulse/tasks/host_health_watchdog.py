@@ -31,6 +31,14 @@ DEFAULT_SCHEDULER_HEARTBEAT_TIMEOUT_MINUTES = 15
 
 
 def check_host_heartbeats() -> None:
+	from alfaedge_pulse.host_health.ssh_client import polling_allowed
+
+	if not (polling_allowed() and cint(frappe.db.get_single_value("SSH Settings", "enabled"))):
+		# Nothing is polling, so no host can be said to be unreachable: its
+		# last_seen is simply not being refreshed. Without this, the day the
+		# push agents are retired every host would raise Host Unreachable
+		# within a minute, before SSH polling is even set up.
+		return
 	if cint(frappe.db.get_single_value("SSH Settings", "bastion_unreachable")):
 		# Warpgate itself is down, so every host looks stale for the same one
 		# reason, which has its own alert (see host_poller.update_bastion_state).
@@ -47,9 +55,13 @@ def check_host_heartbeats() -> None:
 	hosts = frappe.get_all(
 		"Monitored Host",
 		filters={"enabled": 1},
-		fields=["name", "hostname", "last_seen", "is_online", "scheduler_last_run", "scheduler_overdue"],
+		fields=["name", "hostname", "last_seen", "is_online", "scheduler_last_run", "scheduler_overdue", "last_poll_kind"],
 	)
 	for host in hosts:
+		if host.last_poll_kind == "config":
+			# Not set up for polling yet (no Warpgate target, no key): not
+			# reachable or unreachable, just not polled.
+			continue
 		try:
 			_check_one_host(host, heartbeat_cutoff, scheduler_cutoff, heartbeat_timeout, scheduler_timeout_minutes)
 			frappe.db.commit()

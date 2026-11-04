@@ -59,7 +59,7 @@ try:
 	frappe.conf["workers"] = orig_workers
 
 	# ---- 3. Warpgate outage ----
-	frappe.db.set_single_value("SSH Settings", {"bastion_unreachable": 0, "bastion_failure_streak": 0})
+	frappe.db.set_single_value("SSH Settings", {"enabled": 1, "bastion_unreachable": 0, "bastion_failure_streak": 0})
 	state = lambda: frappe.db.get_value("SSH Settings", None, ["bastion_unreachable", "bastion_failure_streak"], as_dict=True)
 	host_poller.update_bastion_state(3, 0, 3)
 	host_poller.update_bastion_state(3, 0, 3)
@@ -89,6 +89,28 @@ try:
 	for _ in range(5):
 		host_poller.update_bastion_state(0, 0, 0)
 	check("an empty cycle never counts", not state().bastion_unreachable)
+
+	# ---- 3b. heartbeat check only judges hosts that are polled ----
+	frappe.db.set_single_value("SSH Settings", {"enabled": 1, "bastion_unreachable": 0})
+	stale = add_to_date(now_datetime(), hours=-3)
+	sample = frappe.get_all("Monitored Host", fields=["name", "last_poll_kind"], limit=3)
+	h1, h2 = sample[0].name, sample[1].name
+	frappe.db.set_value("Monitored Host", h1, {"enabled": 1, "last_seen": stale, "is_online": 1, "last_poll_kind": "ok"})
+	frappe.db.set_value("Monitored Host", h2, {"enabled": 1, "last_seen": stale, "is_online": 1, "last_poll_kind": "config"})
+	sent.clear()
+	frappe.db.set_single_value("SSH Settings", "enabled", 0)
+	host_health_watchdog.check_host_heartbeats()
+	check("polling switched off: nobody is called unreachable", frappe.db.get_value("Monitored Host", h1, "is_online") == 1 and sent == [], list(sent))
+	frappe.db.set_single_value("SSH Settings", "enabled", 1)
+	frappe.conf["pulse_ssh_polling"] = False
+	host_health_watchdog.check_host_heartbeats()
+	check("no site_config flag: nobody is called unreachable", frappe.db.get_value("Monitored Host", h1, "is_online") == 1 and sent == [], list(sent))
+	frappe.conf["pulse_ssh_polling"] = True
+	host_health_watchdog.check_host_heartbeats()
+	check("polled host gone stale is called unreachable", frappe.db.get_value("Monitored Host", h1, "is_online") == 0)
+	check("a host that is not set up yet is left alone", frappe.db.get_value("Monitored Host", h2, "is_online") == 1)
+	sent.clear()
+	open_alerts.clear()
 
 	# ---- 4. bulk host creation ----
 	for name, expected in (("altaza-staging.alfaedge.in", "Altaza-Staging"), ("docker", "Docker"), ("lx-anson", "Lx-Anson")):

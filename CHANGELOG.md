@@ -2,26 +2,34 @@
 
 All notable changes to this project are documented here.
 
-## Unreleased (6.0.0, in progress)
+## [6.0.0] - 2026-11-04
+
+This is a breaking release for Host Health: the push agent is gone and hosts are read over SSH.
 
 ### Changed
-- **Host Health is polled over SSH.** Pulse logs in to each Monitored Host (through your Warpgate bastion, or directly), runs a read-only collector that it sends on stdin, and stores the result exactly as the push agent's reports were stored. Nothing is installed on the hosts. Polling is **off** until *SSH Settings → Polling Enabled* is switched on.
-- Host Unreachable now means "could not be polled over SSH"; the last failure reason is shown on the host.
+- **Host Health is polled over SSH.** Pulse logs in to each Monitored Host (through your Warpgate bastion, or directly), runs a read-only collector that it sends on stdin, and stores the result exactly as the push agent's reports were stored. Nothing is installed on the hosts. Polling is **off** until *SSH Settings → Polling Enabled* is switched on and the server allows it (see Upgrade notes).
+- Host Unreachable now means "could not be polled over SSH"; the last failure reason is shown on the host. The heartbeat check does not judge any host while polling is off, so retiring the agents does not raise a wave of Host Unreachable alerts before SSH polling is set up. Hosts that have no Warpgate target yet are skipped.
+- "No agent" in Usage Metrics is now "Not polled".
 
 ### Added
-- **SSH Settings**: Warpgate or Direct mode, encrypted private key (generate or import; only the public key is shown), host-key pinning, Test connection.
+- **SSH Settings**: Warpgate or Direct mode, encrypted private key (generate or import; only the public key is shown), host-key pinning, Default Bench Path, Test connection.
+- **Add Hosts from Proxmox Guests** (SSH Settings): creates a Monitored Host per guest, switched off, with the Warpgate target name filled in from the guest name.
 - Monitored Host: SSH target, port, user, bench path, last poll result.
-
+- **Memory, swap, pressure and disk I/O.** The collector now also reads available memory, swap activity, out-of-memory kills (including inside a container's limit), the largest processes, container memory and CPU limits and throttling, CPU/memory/disk pressure (PSI) and per-disk reads, writes, wait time and busy percentage. Pulse turns the counters into per-second rates and marks samples whose rates could not be computed instead of storing false zeros. New Memory Metric Log and Disk IO Sample (disk I/O kept 7 days).
+- `host_health/diagnosis.py` and `get_host_diagnosis`: plain-language findings with the numbers behind them. The Diagnose view that shows them is not in this release.
 - **Safeguards.** Polling also needs `"pulse_ssh_polling": true` in the server's own `site_config.json` (not in database backups, so a restored copy of production stays silent). If the Warpgate server cannot be reached, one *Warpgate Unreachable* alert replaces a *Host Unreachable* alert per host. The poll loops fall back to the `long` queue, with a log warning, when the `pulse` queue has no worker.
-- **Add Hosts from Proxmox Guests** (SSH Settings) creates a Monitored Host per guest, switched off, with the Warpgate target name filled in from the guest name.
 - Retention now also covers Frappe Worker Health Log (30 days) and resolved Frappe Failed Job Log rows (90 days).
 - `scripts/remove-pulse-agent.sh` removes the old agent from a guest (dry run unless `--yes`); manual test scripts are in `tests/manual/`.
 
+### Fixed
+- The Proxmox, Uptime Kuma and SSH poll loops no longer pin both `long` queue workers. They run on their own `pulse` queue, so Bifrost sync, site discovery, AI reports and other scheduled long jobs are no longer starved.
+- The Uptime loop no longer runs while every Uptime Kuma instance is disabled.
+
 ### Upgrade notes (needed on every bench that runs Pulse)
+The deploy script for production does all of this: `deploy-pulse-v6.0.0.sh`, given with the release.
 - Add `"pulse_ssh_polling": true` to `sites/<site>/site_config.json` on the server that should poll.
 - `pip install "paramiko>=4"` in the bench environment (or `bench setup requirements`).
-- The three always-on poll loops (Proxmox, Uptime Kuma, SSH hosts) run on their **own queue and workers** (`pulse`), one worker process per loop. Left on `long`, they pinned both long workers around the clock and starved every real long job (Bifrost sync, site discovery, AI reports, ERPNext/Helpdesk scheduled jobs). Add `"workers": {"pulse": {"timeout": 420, "background_workers": 3}}` to `sites/common_site_config.json`, add a `frappe-bench-frappe-pulse-worker` program (`bench worker --queue pulse`, `stopwaitsecs=420`, `numprocs=3`) to the supervisor config and to the `frappe-bench-workers` group, then `sudo supervisorctl reread && sudo supervisorctl update`. `bench setup supervisor` also generates it, but regenerates the whole file. A fourth loop would need a fourth process.
-- The Uptime loop no longer runs while every Uptime Kuma instance is disabled.
+- Add `"workers": {"pulse": {"timeout": 420, "background_workers": 3}}` to `sites/common_site_config.json`, add a `frappe-bench-frappe-pulse-worker` program (`bench worker --queue pulse`, `stopwaitsecs=420`, `numprocs=3`) to the supervisor config and to the `frappe-bench-workers` group, then `sudo supervisorctl reread && sudo supervisorctl update`. `bench setup supervisor` also generates it, but regenerates the whole file. A fourth always-on loop would need a fourth process.
 
 ### Removed
 - The push endpoints (`push_status`, `push_resource_metrics`), agent API keys, the shared agent user and role. The separate `pulse_agent` app is no longer used and can be uninstalled from guests.
