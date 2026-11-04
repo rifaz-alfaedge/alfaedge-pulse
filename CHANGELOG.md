@@ -15,6 +15,9 @@ All notable changes to this project are documented here.
 - Trends are averaged in the database into about 120 points per chart (a week of 30-second samples answers in under a second), and a sample whose rates could not be computed never drags an average down.
 
 
+### Fixed
+- Enabling an Uptime Kuma Instance now starts the Uptime poll loop straight away. Since 6.0.0 the loop ends while no instance is enabled and was restarted only by the scheduler's once-a-minute check, so after removing and re-adding instances heartbeats could stay missing ("Pending · stale never") until that check ran.
+
 ## [6.0.0] - 2026-11-04
 
 This is a breaking release for Host Health: the push agent is gone and hosts are read over SSH.
