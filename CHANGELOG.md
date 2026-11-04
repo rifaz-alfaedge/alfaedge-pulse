@@ -14,7 +14,8 @@ All notable changes to this project are documented here.
 
 ### Upgrade notes (needed on every bench that runs Pulse)
 - `pip install "paramiko>=4"` in the bench environment (or `bench setup requirements`).
-- The SSH poller runs on its **own queue and worker** (`pulse`), because the Proxmox and Uptime pollers keep both `long` workers busy. Add `"workers": {"pulse": {"timeout": 420, "background_workers": 1}}` to `sites/common_site_config.json`, add a `frappe-bench-frappe-pulse-worker` program (`bench worker --queue pulse`, `stopwaitsecs=420`, `numprocs=1`) to the supervisor config and to the `frappe-bench-workers` group, then `sudo supervisorctl reread && sudo supervisorctl update`. `bench setup supervisor` also generates it, but regenerates the whole file.
+- The three always-on poll loops (Proxmox, Uptime Kuma, SSH hosts) run on their **own queue and workers** (`pulse`), one worker process per loop. Left on `long`, they pinned both long workers around the clock and starved every real long job (Bifrost sync, site discovery, AI reports, ERPNext/Helpdesk scheduled jobs). Add `"workers": {"pulse": {"timeout": 420, "background_workers": 3}}` to `sites/common_site_config.json`, add a `frappe-bench-frappe-pulse-worker` program (`bench worker --queue pulse`, `stopwaitsecs=420`, `numprocs=3`) to the supervisor config and to the `frappe-bench-workers` group, then `sudo supervisorctl reread && sudo supervisorctl update`. `bench setup supervisor` also generates it, but regenerates the whole file. A fourth loop would need a fourth process.
+- The Uptime loop no longer runs while every Uptime Kuma instance is disabled.
 
 ### Removed
 - The push endpoints (`push_status`, `push_resource_metrics`), agent API keys, the shared agent user and role. The separate `pulse_agent` app is no longer used and can be uninstalled from guests.

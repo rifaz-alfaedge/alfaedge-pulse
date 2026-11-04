@@ -9,6 +9,15 @@ from datetime import datetime, timezone
 
 import frappe
 
+#: The queue for this app's three always-on poll loops (Proxmox, Uptime Kuma,
+#: SSH hosts). Each loop holds a worker for its whole bounded run and is
+#: restarted straight away, so they get workers of their own (``workers`` in
+#: common_site_config.json plus a supervisor program, one process per loop);
+#: left on ``long`` they would pin its workers and starve every real long job
+#: (Bifrost sync, site discovery, AI reports, ERPNext/Helpdesk scheduled jobs).
+#: Adding a fourth loop means adding one worker process here.
+POLLER_QUEUE = "pulse"
+
 
 def clear_stale_job(job_id: str, max_age_seconds: int, label: str) -> bool:
 	"""Delete a job RQ still reports as queued/started after ``max_age_seconds``.

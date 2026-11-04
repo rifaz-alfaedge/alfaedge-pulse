@@ -86,6 +86,7 @@ import frappe
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 from frappe.utils.password import get_decrypted_password
 
+from alfaedge_pulse.tasks.jobs import POLLER_QUEUE
 from alfaedge_pulse.tasks.poller import _handle_transition
 from alfaedge_pulse.uptime_kuma_client.base import UptimeKumaAPIError
 from alfaedge_pulse.uptime_kuma_client.metrics_client import fetch_metrics
@@ -141,7 +142,7 @@ def ensure_uptime_poller_running() -> None:
 
 	frappe.enqueue(
 		"alfaedge_pulse.tasks.uptime_kuma_poller.run_uptime_poll_loop",
-		queue="long",
+		queue=POLLER_QUEUE,
 		# A little headroom over MAX_LOOP_SECONDS for the final cycle to
 		# finish; RQ force-kills the job if it ever runs past this, as a
 		# hard backstop behind the loop's own bound.
