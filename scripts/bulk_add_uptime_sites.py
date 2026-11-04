@@ -24,7 +24,8 @@ starting with # are ignored):
           host:port                  -> a TCP check
           host or IP                 -> a ping check
   type    HTTP(s), TCP or Ping; leave empty to follow the target
-  interval  check interval in seconds (20 to 86400); empty = 60
+  interval  check interval in seconds (1 to 86400); empty = the fleet setting,
+            Uptime Monitor Settings > Heartbeat Interval (15 on production)
 
 Kuma only allows about 20 logins a minute, and every add logs in once per
 instance, so the script paces itself (about 3 seconds per instance per site)
@@ -43,7 +44,7 @@ from urllib.parse import urlparse
 import frappe
 
 MAX_ROWS = 500
-MIN_INTERVAL, MAX_INTERVAL, DEFAULT_INTERVAL = 20, 86400, 60
+MIN_INTERVAL, MAX_INTERVAL, FALLBACK_INTERVAL = 1, 86400, 60  # Kuma itself refuses an interval it does not allow
 SECONDS_PER_LOGIN = 3.2  # Kuma allows 20 logins a minute
 RATE_LIMIT_WAIT = 65
 HOST_RE = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
@@ -56,7 +57,13 @@ def _is_host(value):
 	return bool(HOST_RE.match(value))
 
 
-def parse_line(fields):
+def fleet_interval():
+	"""The fleet-wide heartbeat interval (Uptime Monitor Settings). New sites use it so
+	they match every other site and are not changed by the settings sync."""
+	return int(frappe.db.get_single_value("Uptime Monitor Settings", "heartbeat_interval_seconds") or 0) or FALLBACK_INTERVAL
+
+
+def parse_line(fields, default_interval=FALLBACK_INTERVAL):
 	"""One row -> (row dict, None) or (None, why it was rejected)."""
 	fields = [f.strip() for f in fields]
 	if len(fields) >= 2 and fields[0] and not fields[1]:
@@ -108,12 +115,12 @@ def parse_line(fields):
 			return None, f"interval must be {MIN_INTERVAL} to {MAX_INTERVAL} seconds"
 		row["check_interval_seconds"] = int(interval)
 	else:
-		row["check_interval_seconds"] = DEFAULT_INTERVAL
+		row["check_interval_seconds"] = default_interval
 	row["site_name"] = name or host
 	return row, None
 
 
-def parse_file(text):
+def parse_file(text, default_interval=FALLBACK_INTERVAL):
 	"""All rows of the file: a list of (line number, row or None, problem or None)."""
 	out = []
 	for number, fields in enumerate(csv.reader(io.StringIO(text)), start=1):
@@ -121,16 +128,16 @@ def parse_file(text):
 			continue
 		if number == 1 and fields[0].strip().lower() in ("name", "site", "site_name"):
 			continue
-		row, problem = parse_line(fields)
+		row, problem = parse_line(fields, default_interval)
 		out.append((number, row, problem))
 	return out
 
 
-def plan(text, existing=None):
+def plan(text, existing=None, default_interval=None):
 	"""Sort the file's rows into: to add, already there, repeated, rejected."""
 	existing = {n.lower() for n in (existing if existing is not None else frappe.get_all("Uptime Site", pluck="site_name"))}
 	seen, add, skipped, rejected = set(), [], [], []
-	for number, row, problem in parse_file(text):
+	for number, row, problem in parse_file(text, default_interval if default_interval is not None else fleet_interval()):
 		if problem:
 			rejected.append((number, problem))
 		elif row["site_name"].lower() in existing:
@@ -155,7 +162,7 @@ def _add_one(row):
 def bulk_add(text, dry_run=True, say=print, pause=time.sleep, add=_add_one) -> dict:
 	instances = frappe.get_all("Uptime Kuma Instance", filters={"enabled": 1}, pluck="name")
 	to_add, skipped, rejected = plan(text)
-	say(f"Enabled Kuma instances: {', '.join(instances) or 'NONE'}")
+	say(f"Enabled Kuma instances: {', '.join(instances) or 'NONE'} | default check interval: {fleet_interval()}s (from Uptime Monitor Settings)")
 	say(f"To add: {len(to_add)} | skipped: {len(skipped)} | rejected: {len(rejected)}")
 	for number, row in to_add:
 		target = row["url"] or (f"{row['hostname']}:{row['port']}" if row["port"] else row["hostname"])

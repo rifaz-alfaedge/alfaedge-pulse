@@ -24,7 +24,7 @@ def one(*fields):
 row, why = one("https://shop.example.com/path")
 check("a lone URL is a web check named after its host", row and row["monitor_type"] == "HTTP(s)" and row["site_name"] == "shop.example.com" and row["url"] == "https://shop.example.com/path", (row, why))
 row, _ = one("Example Shop", "https://shop.example.com")
-check("name and URL", row["site_name"] == "Example Shop" and row["check_interval_seconds"] == 60)
+check("name and URL", row["site_name"] == "Example Shop" and row["check_interval_seconds"] == 60)  # no fleet value passed: the fallback
 row, _ = one("API", "https://api.example.com/health", "", "30")
 check("an interval column", row["check_interval_seconds"] == 30)
 row, _ = one("Database", "db.example.com:3306")
@@ -45,13 +45,34 @@ for label, fields, fragment in (
 	("port out of range", ["x", "db.example.com:99999"], "host:port"),
 	("a non-numeric port", ["x", "db.example.com:abc"], "host:port"),
 	("an impossible IP", ["x", "999.1.1.1", "ping"], "valid host"),
-	("an interval below Kuma's minimum", ["x", "https://a.example.com", "", "5"], "interval"),
+	("an interval of zero", ["x", "https://a.example.com", "", "0"], "interval"),
+	("an interval beyond a day", ["x", "https://a.example.com", "", "86401"], "interval"),
 	("an interval that is not a number", ["x", "https://a.example.com", "", "fast"], "interval"),
 	("an unknown type", ["x", "https://a.example.com", "dns"], "unknown type"),
 	("a name with no target", ["Name only", ""], "no target"),
 ):
 	row, why = parse_line(fields)
 	check(f"rejects {label}", row is None and fragment in (why or ""), why)
+
+row, _ = one("Fast", "https://a.example.com", "", "15")
+check("a 15 second interval is accepted", row and row["check_interval_seconds"] == 15, row)
+row, _ = parse_line(["Fleet", "https://a.example.com"], default_interval=15)
+check("a line with no interval takes the default it is given", row["check_interval_seconds"] == 15, row)
+row, _ = parse_line(["Own", "https://a.example.com", "", "30"], default_interval=15)
+check("an interval on the line still wins", row["check_interval_seconds"] == 30, row)
+
+# the default comes from Uptime Monitor Settings
+orig_get_single = frappe.db.get_single_value
+frappe.db.get_single_value = lambda dt, field, *a, **k: 15 if (dt, field) == ("Uptime Monitor Settings", "heartbeat_interval_seconds") else orig_get_single(dt, field, *a, **k)
+try:
+	check("fleet_interval reads the setting", ns["fleet_interval"]() == 15)
+	add15, _, _ = plan("A,https://a.example.com\nB,https://b.example.com,,45\n", existing=[])
+	check("plan gives lines without an interval the fleet value", [r["check_interval_seconds"] for _, r in add15] == [15, 45], [r["check_interval_seconds"] for _, r in add15])
+	frappe.db.get_single_value = lambda dt, field, *a, **k: None
+	addf, _, _ = plan("A,https://a.example.com\n", existing=[])
+	check("with no setting the fallback is 60", addf[0][1]["check_interval_seconds"] == 60)
+finally:
+	frappe.db.get_single_value = orig_get_single
 
 # ---- whole files ----
 text = '﻿name,target,type,interval\n# a comment\n\n"Shop, Main",https://shop.example.com\nDB,db.example.com:3306\nBad,https://bad host\n'.lstrip("﻿")
@@ -155,7 +176,7 @@ try:
 	check("three real Uptime Site records were created", set(made) == {"ZZ Shop", "ZZ DB", "ZZ Gate"}, list(made))
 	check("web check fields", made["ZZ Shop"].monitor_type == "HTTP(s)" and made["ZZ Shop"].url == "https://zz-shop.example.com" and made["ZZ Shop"].check_interval_seconds == 45, made["ZZ Shop"])
 	check("TCP check fields", made["ZZ DB"].monitor_type == "TCP" and made["ZZ DB"].hostname == "zz-db.example.com" and made["ZZ DB"].port == 3306, made["ZZ DB"])
-	check("ping check fields, active, default interval", made["ZZ Gate"].monitor_type == "Ping" and made["ZZ Gate"].is_active == 1 and made["ZZ Gate"].check_interval_seconds == 60, made["ZZ Gate"])
+	check("ping check fields, active, the fleet interval by default", made["ZZ Gate"].monitor_type == "Ping" and made["ZZ Gate"].is_active == 1 and made["ZZ Gate"].check_interval_seconds == (int(frappe.db.get_single_value("Uptime Monitor Settings", "heartbeat_interval_seconds") or 0) or 60), made["ZZ Gate"])
 	again, skipped, _ = plan("ZZ Shop,https://zz-shop.example.com\n", existing=orig_get_all("Uptime Site", pluck="site_name"))
 	check("running the same file again skips what exists", again == [] and skipped and skipped[0][2] == "already exists", skipped)
 finally:
