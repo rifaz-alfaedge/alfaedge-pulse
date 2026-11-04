@@ -181,11 +181,13 @@ def _store_report(name: str, target, report: dict, new_key: str | None, duration
 def _record_failure(name: str, kind: str, message: str, duration_ms: int) -> None:
 	"""A failed poll leaves last_seen alone; the heartbeat watchdog turns a
 	run of failures into Host Unreachable once the timeout passes."""
-	frappe.db.set_value(
-		"Monitored Host",
-		name,
-		{"last_poll_kind": kind, "last_poll_error": message[:500], "last_poll_duration_ms": duration_ms},
-	)
+	values = {"last_poll_kind": kind, "last_poll_error": message[:500], "last_poll_duration_ms": duration_ms}
+	current = frappe.db.get_value("Monitored Host", name, list(values), as_dict=True)
+	# A host that keeps failing the same way (for instance one with no Warpgate
+	# target yet) would otherwise be rewritten and committed every cycle.
+	if current and all((current.get(k) or "") == (v or "") for k, v in values.items() if k != "last_poll_duration_ms"):
+		return
+	frappe.db.set_value("Monitored Host", name, values)
 	frappe.db.commit()
 
 

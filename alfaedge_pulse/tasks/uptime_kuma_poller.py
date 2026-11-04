@@ -134,6 +134,10 @@ def ensure_uptime_poller_running() -> None:
 	"""
 	if frappe.cache().get_value(UPTIME_HEARTBEAT_CACHE_KEY):
 		return  # loop is alive and ticking; nothing to do
+	if not _any_instance_enabled():
+		# Nothing to poll (e.g. a restored copy with every Kuma instance
+		# disabled): don't hold a background worker around the clock for it.
+		return
 
 	frappe.enqueue(
 		"alfaedge_pulse.tasks.uptime_kuma_poller.run_uptime_poll_loop",
@@ -148,6 +152,10 @@ def ensure_uptime_poller_running() -> None:
 		# already queued/running wouldn't actually block a second enqueue.
 		deduplicate=True,
 	)
+
+
+def _any_instance_enabled() -> bool:
+	return bool(frappe.db.count("Uptime Kuma Instance", {"enabled": 1}))
 
 
 def run_uptime_poll_loop() -> None:
@@ -186,6 +194,13 @@ def run_uptime_poll_loop() -> None:
 				# reading Settings itself) — log it but keep the loop
 				# alive rather than let one bad cycle end the whole poller.
 				frappe.log_error(title="Uptime Monitor: poll cycle failed", message=frappe.get_traceback())
+
+			# With no instance enabled the cycle above only re-checked site
+			# state, which cannot change without new checks. End the loop so it
+			# frees its worker; ensure_uptime_poller_running starts it again as
+			# soon as an instance is enabled.
+			if not _any_instance_enabled():
+				break
 
 			# Sleep in 1s increments (rather than one time.sleep(interval)
 			# call) so a SIGTERM, if forwarded into this job, lands within
