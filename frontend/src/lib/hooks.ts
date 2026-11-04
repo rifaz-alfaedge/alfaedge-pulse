@@ -3,6 +3,7 @@ import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-r
 import type {
   BifrostSettings,
   HostOverview,
+  HostDiagnosis,
   HostTrendPoint,
   UptimeOverview,
   FailedJobGroup,
@@ -784,6 +785,18 @@ export function useHostHealthTrend(hours: number) {
     'alfaedge_pulse.host_health.api.get_host_health_trend',
     { hours },
     ['host-health-trend', hours],
+    { refreshInterval: SLOW_POLL_MS },
+  )
+  return { ...result, data: result.data?.message }
+}
+
+/** Diagnose view for one host: findings with the numbers behind them, the
+ * latest readings and trends over ``hours`` (host_health/api.py::get_host_diagnosis). */
+export function useHostDiagnosis(monitoredHost: string, hours: number) {
+  const result = useFrappeGetCall<{ message: HostDiagnosis }>(
+    'alfaedge_pulse.host_health.api.get_host_diagnosis',
+    { monitored_host: monitoredHost, hours },
+    ['host-diagnosis', monitoredHost, hours],
     { refreshInterval: SLOW_POLL_MS },
   )
   return { ...result, data: result.data?.message }

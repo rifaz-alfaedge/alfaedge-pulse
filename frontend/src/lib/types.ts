@@ -782,3 +782,59 @@ export interface UptimeOverview {
   }[]
   range: { start: string; end: string; bucket_seconds: number }
 }
+
+// ---------------------------------------------------------------------------
+// Host Health: Diagnose view (host_health/api.py::get_host_diagnosis)
+// ---------------------------------------------------------------------------
+
+export interface DiagnosisFinding {
+  id: string
+  severity: 'critical' | 'warning'
+  title: string
+  /** What was measured, with the numbers. */
+  detail: string
+  /** The next step, with a suggested value where there is one. */
+  advice: string
+}
+
+export interface TopProcess {
+  pid: number
+  name: string
+  rss_mb: number
+  swap_mb: number
+}
+
+/** One stored sample (a Memory Metric Log, Disk IO Sample or MariaDB Metric
+ * Log row). Fields differ per kind; read them through ``sampleNumber``. */
+export type DiagnosisSample = { collected_at: string; rates_valid?: number; top_processes?: TopProcess[] | null } & {
+  [key: string]: unknown
+}
+
+export interface MariadbSizes {
+  data_mb: number
+  index_mb: number
+  free_mb: number
+  sites_counted: number
+  sites_total?: number
+  collected_at: string
+  by_site: { site: string; mb: number }[]
+  top_tables: { site: string; table: string; mb: number }[]
+}
+
+export interface HostDiagnosis {
+  findings: DiagnosisFinding[]
+  latest: DiagnosisSample | null
+  io_latest: DiagnosisSample[]
+  has_data: boolean
+  hours: number
+  memory_trend: DiagnosisSample[]
+  io_trend: Record<string, DiagnosisSample[]>
+  mariadb: {
+    latest: DiagnosisSample | null
+    config: Record<string, string | number>
+    sizes: MariadbSizes | null
+    limited: string[]
+    has_data: boolean
+    trend: DiagnosisSample[]
+  }
+}

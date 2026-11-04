@@ -529,6 +529,16 @@ MARIADB_RATE_FIELDS = (
 	"slow_queries_per_s", "tmp_disk_percent", "tmp_disk_per_s", "full_joins_per_s", "sort_merge_passes_per_s",
 	"table_opens_per_s", "table_locks_waited_per_s",
 )
+#: Only what the charts draw. The Diagnose view's "latest" readings and the
+#: findings come from the full rows, so a trend need not carry every column.
+TREND_MEMORY_FIELDS = ["mem_total_mb", "mem_available_mb", "swap_in_per_s", "swap_out_per_s", "psi_cpu_some", "psi_memory_some", "psi_io_some"]
+TREND_IO_FIELDS = ["device", "read_iops", "write_iops", "util_percent", "await_ms"]
+TREND_MARIADB_FIELDS = [
+	"bp_hit_percent", "bp_disk_reads_per_s", "data_writes_per_s", "pages_flushed_per_s", "data_fsyncs_per_s",
+	"checkpoint_age_percent", "bp_dirty_percent", "queries_per_s", "slow_queries_per_s", "threads_connected",
+	"threads_running", "row_lock_waits_per_s", "row_lock_avg_wait_ms", "tmp_disk_percent",
+]
+IO_RATE_FIELDS = ("read_iops", "write_iops", "read_mb_s", "write_mb_s", "await_ms", "util_percent", "avg_queue")
 MAX_TREND_POINTS = 120
 MAX_TREND_DEVICES = 3
 
@@ -541,69 +551,66 @@ def _thin(rows: list[dict], limit: int = MAX_TREND_POINTS) -> list[dict]:
 	return [rows[int(i * step)] for i in range(limit)]
 
 
+def _bucketed(
+	doctype: str,
+	fields: list[str],
+	rate_fields: tuple[str, ...],
+	host: str,
+	since,
+	bucket_seconds: int,
+	by_device: bool = False,
+) -> list[dict]:
+	"""Samples of one host since ``since``, averaged into time buckets in the
+	database, so a 7-day chart reads ~120 rows instead of ~20,000.
+
+	Gauges are averaged as they are. Rate fields are averaged over the samples
+	whose rates were really computed, so a sample without rates (first sample,
+	restart, gap) never drags an average down with a false zero; a bucket with
+	none comes back as null, which charts draw as a gap. ``doctype``, ``fields``
+	and ``rate_fields`` are fixed lists in this app, never request input."""
+	skip = {"collected_at", "rates_valid", "top_processes", "device"}
+	parts = ["MAX(collected_at) AS collected_at", "MAX(rates_valid) AS rates_valid"]
+	if by_device:
+		parts.append("device")
+	for field in fields:
+		if field in skip:
+			continue
+		if field in rate_fields:
+			parts.append(f"ROUND(AVG(CASE WHEN rates_valid = 1 THEN `{field}` END), 2) AS `{field}`")
+		else:
+			parts.append(f"ROUND(AVG(`{field}`), 2) AS `{field}`")
+	group = "FLOOR(UNIX_TIMESTAMP(collected_at) / %(bucket)s)" + (", device" if by_device else "")
+	where = "monitored_host = %(host)s AND collected_at >= %(since)s" + (" AND rates_valid = 1" if by_device else "")
+	return frappe.db.sql(
+		f"SELECT {', '.join(parts)} FROM `tab{doctype}` WHERE {where} GROUP BY {group} ORDER BY MAX(collected_at) ASC",
+		{"host": host, "since": since, "bucket": max(bucket_seconds, 1)},
+		as_dict=True,
+	)
+
+
 @frappe.whitelist()
 def get_host_diagnosis(monitored_host: str, hours: int = 6) -> dict:
 	"""Everything the Diagnose view needs for one host: findings with the
-	numbers behind them, the latest readings, and memory/pressure and disk
-	trends over the last ``hours`` (1 to 168)."""
+	numbers behind them, the latest readings, and memory, MariaDB and disk
+	trends over the last ``hours`` (1 to 168), each at most ~120 points."""
 	frappe.has_permission("Monitored Host", "read", doc=monitored_host, throw=True)
-	from alfaedge_pulse.host_health.diagnosis import IO_FIELDS, MEMORY_FIELDS, diagnose_host
+	from alfaedge_pulse.host_health.diagnosis import diagnose_host
 
 	hours = max(1, min(cint(hours) or 6, 168))
 	since = add_to_date(now_datetime(), hours=-hours)
+	bucket = max(30, int(hours * 3600 / MAX_TREND_POINTS))
 
 	result = diagnose_host(monitored_host)
 
-	trend_fields = [f for f in MEMORY_FIELDS if f != "top_processes"]
-	memory_trend = frappe.get_all(
-		"Memory Metric Log",
-		filters={"monitored_host": monitored_host, "collected_at": [">=", since]},
-		fields=trend_fields,
-		order_by="collected_at asc",
-		limit_page_length=0,
-		ignore_permissions=True,
-	)
+	result["memory_trend"] = _bucketed("Memory Metric Log", TREND_MEMORY_FIELDS, RATE_FIELDS, monitored_host, since, bucket)
 
-	# Rows without computed rates would draw as a false zero, so rate fields
-	# are blanked (a gap in the chart) rather than shown as 0.
-	for row in memory_trend:
-		if not row.get("rates_valid"):
-			for key in RATE_FIELDS:
-				row[key] = None
-
-	io_rows = frappe.get_all(
-		"Disk IO Sample",
-		filters={"monitored_host": monitored_host, "rates_valid": 1, "collected_at": [">=", since]},
-		fields=IO_FIELDS,
-		order_by="collected_at asc",
-		limit_page_length=0,
-		ignore_permissions=True,
-	)
+	io_rows = _bucketed("Disk IO Sample", TREND_IO_FIELDS, IO_RATE_FIELDS, monitored_host, since, bucket, by_device=True)
 	by_device: dict[str, list[dict]] = {}
 	for row in io_rows:
 		by_device.setdefault(row["device"], []).append(row)
-	busiest = sorted(
-		by_device,
-		key=lambda d: max((r["util_percent"] or 0) for r in by_device[d]),
-		reverse=True,
-	)[:MAX_TREND_DEVICES]
+	busiest = sorted(by_device, key=lambda d: max((r["util_percent"] or 0) for r in by_device[d]), reverse=True)[:MAX_TREND_DEVICES]
+	result["io_trend"] = {d: by_device[d] for d in busiest}
 
-	from alfaedge_pulse.host_health.diagnosis import MARIADB_LOG_FIELDS
-
-	mariadb_trend = frappe.get_all(
-		"MariaDB Metric Log",
-		filters={"monitored_host": monitored_host, "collected_at": [">=", since]},
-		fields=MARIADB_LOG_FIELDS,
-		order_by="collected_at asc",
-		limit_page_length=0,
-		ignore_permissions=True,
-	)
-	for row in mariadb_trend:
-		if not row.get("rates_valid"):
-			for key in MARIADB_RATE_FIELDS:
-				row[key] = None
-	result["mariadb"]["trend"] = _thin(mariadb_trend)
+	result["mariadb"]["trend"] = _bucketed("MariaDB Metric Log", TREND_MARIADB_FIELDS, MARIADB_RATE_FIELDS, monitored_host, since, bucket)
 	result["hours"] = hours
-	result["memory_trend"] = _thin(memory_trend)
-	result["io_trend"] = {d: _thin(by_device[d]) for d in busiest}
 	return result

@@ -26,6 +26,7 @@ import type {
 } from '../lib/types'
 import { getErrorMessage } from '../lib/errors'
 import { formatUptime, timeAgo } from '../lib/format'
+import { HostDiagnosisDialog } from './HostDiagnosisDialog'
 import { MultiSelectFilter } from './MultiSelectFilter'
 import { SearchInput } from './SearchInput'
 import { StatusBadge } from './StatusBadge'
@@ -183,6 +184,7 @@ export function HostHealthPanel() {
   const [sort, setSort] = useState<{ field: HostSortField; dir: SortDirection }>({ field: 'attention', dir: 'desc' })
   const [selected, setSelected] = useState<string | null>(null)
   const [detailHost, setDetailHost] = useState<string | null>(null)
+  const [diagnoseHost, setDiagnoseHost] = useState<{ name: string; label: string } | null>(null)
 
   const thresholds = overview?.thresholds
   const assessed = useMemo(
@@ -394,10 +396,17 @@ export function HostHealthPanel() {
         </div>
 
         <div className="min-w-0 flex-[1_1_340px]">
-          {current ? <HostSidePanel host={current} onOpenDetails={() => setDetailHost(current.row.name)} /> : null}
+          {current ? (
+            <HostSidePanel
+              host={current}
+              onOpenDetails={() => setDetailHost(current.row.name)}
+              onDiagnose={() => setDiagnoseHost({ name: current.row.name, label: current.row.hostname || current.row.name })}
+            />
+          ) : null}
         </div>
       </div>
 
+      {diagnoseHost && <HostDiagnosisDialog hostName={diagnoseHost.name} label={diagnoseHost.label} onClose={() => setDiagnoseHost(null)} />}
       {detailHost && <HostDetailLoader hostName={detailHost} role={assessed.find((h) => h.row.name === detailHost)?.row.role ?? undefined} onClose={() => setDetailHost(null)} />}
     </div>
   )
@@ -588,7 +597,7 @@ function DisksTable({ hosts, onSelect }: { hosts: AssessedHost[]; onSelect: (nam
   )
 }
 
-function HostSidePanel({ host, onOpenDetails }: { host: AssessedHost; onOpenDetails: () => void }) {
+function HostSidePanel({ host, onOpenDetails, onDiagnose }: { host: AssessedHost; onOpenDetails: () => void; onDiagnose: () => void }) {
   const r = host.row
   const queues = Object.entries(parseQueueDepths(r.workers?.queue_depths))
   return (
@@ -690,6 +699,13 @@ function HostSidePanel({ host, onOpenDetails }: { host: AssessedHost; onOpenDeta
       </section>
 
       <div className="flex flex-wrap gap-2 px-5 py-4">
+        <button
+          type="button"
+          onClick={onDiagnose}
+          className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+        >
+          Diagnose
+        </button>
         <button
           type="button"
           onClick={onOpenDetails}
