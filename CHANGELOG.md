@@ -2,27 +2,36 @@
 
 All notable changes to this project are documented here.
 
-## Unreleased
+## [6.1.0] - 2026-11-04
+
+Deep diagnosis for Host Health (MariaDB, Redis, memory, disk I/O), a Diagnose view, and fixes found while rolling 6.0.0 out to production.
 
 ### Added
 - **MariaDB monitoring.** Each poll reads about 54 status counters and 33 settings from the host's MariaDB, using each site's own database login (read on the host, never printed or sent), plus the server process's memory and swap, and every 5 minutes the data size per site. Counters become per-second rates (hit ratio, disk reads, flushing, row locks, temporary tables, connections, slow queries); a restart or long gap is marked instead of shown as a spike. New MariaDB Metric Log and MariaDB Config Snapshot (a snapshot when a setting changes, and about hourly with sizes).
 - **MariaDB findings** in `get_host_diagnosis`, each with the numbers and a concrete next step: reading from disk too often (judged over about 5 minutes, with a buffer pool size suggested from the data size and the guest's memory), running out of free pages, a nearly full redo log, flushing limited by `innodb_io_capacity` while the disk is idle, temporary tables on disk, connection limit, purge lag, MariaDB in swap, log buffer waits, row locks, table cache, open files and slow queries. Things that need the PROCESS privilege (open transactions) are reported as not readable, not as errors.
-- **Diagnose view.** A **Diagnose** button in the Host Health side panel opens a dialog with four tabs and a 1h / 6h / 24h / 7d range:
+- **Diagnose view.** A **Diagnose** button in the Host Health side panel opens a dialog with five tabs (Summary, MariaDB, Redis, Memory, Disk I/O) and a 1h / 6h / 24h / 7d range:
   - **Summary:** key readings and the ranked findings, each with the numbers and what to do.
   - **MariaDB:** cache hit ratio, disk reads, writing and flushing against `innodb_io_capacity`, redo log and changed pages, queries, connections, row locks, temporary tables, the settings that matter, and data size with the largest tables.
   - **Memory:** memory in use, swap activity, time spent waiting on CPU, memory and disk, container limits and the largest processes.
+  - **Redis:** memory against its limit, cache hit ratio, commands, clients, evictions and save pauses for each instance.
   - **Disk I/O:** how busy each disk is, wait per request, reads and writes per second.
 - Trends are averaged in the database into about 120 points per chart (a week of 30-second samples answers in under a second), and a sample whose rates could not be computed never drags an average down.
-
 
 - **Redis monitoring.** Each poll reads every distinct Redis instance named in the bench's config (cache, queue and socketio): memory against its limit, fragmentation, cache hit ratio, commands per second, evictions, clients, refused connections, whether saves to disk work, how long the last save paused Redis, and recent slow commands (names only, never their arguments). Counters become per-second rates; a restart or long gap is marked instead of shown as a spike. New Redis Metric Log. Findings, each with the numbers and a next step: queue data being evicted, a full or unlimited instance, a cache that is too small, Redis in swap, saves failing, refused connections, a long fork pause, slow commands. A new **Redis** tab in the Diagnose view.
 
 - **Fill Missing Targets** (SSH Settings): sets the Warpgate target on hosts that already exist but have none (for example hosts created by the old agent), from the guest name, with a preview first. A new `guest` naming option uses the Proxmox guest id (for example `Sarbath-1100`). `scripts/fill_ssh_targets.py` does the same from the command line.
 
+- **Maintenance scripts** in `scripts/` (each lists what it would do and changes nothing unless told to): `reset_uptime.py` clears Uptime sites and instances when Kuma is unreachable; `bulk_add_uptime_sites.py` adds many Uptime sites from a file at the fleet heartbeat interval; `fill_ssh_targets.py`; `park_stale_emails.py` holds back old queued email before a long-paused scheduler is resumed; `diagnose_scheduler.py` and `diagnose_uptime.py` are read-only checks.
+
 ### Fixed
 - **Test Connection on a host with no Warpgate target** showed a server error. It now answers in plain words.
 - **Missing database indexes.** Pulse's composite indexes were created by one-off patches, and Frappe records every patch as already run when an app is installed fresh, so a site installed that way never got them. On production-sized data this made the "latest worker health for this host" lookup scan the whole history table (5 seconds per call, on every poll, with thousands of disk reads a second); with the index it takes well under a millisecond. Pulse now checks its indexes on every migrate and on install (`db_indexes.py`), adds whichever are missing, and also indexes the date columns the daily cleanups filter on so they no longer scan whole tables.
 - Enabling an Uptime Kuma Instance now starts the Uptime poll loop straight away. Since 6.0.0 the loop ends while no instance is enabled and was restarted only by the scheduler's once-a-minute check, so after removing and re-adding instances heartbeats could stay missing ("Pending · stale never") until that check ran.
+
+### Upgrade notes
+- Nothing to install or configure beyond the 6.0.0 setup: pull, build the frontend, migrate, restart. The migrate now **builds the missing database indexes**, so on a large site it can take a few minutes the first time (about 30 seconds for 1.6 million history rows). It adds indexes without blocking normal use.
+- The new collector sections (MariaDB, Redis, memory, disk I/O) start filling in on their own once SSH polling is on; nothing to enable. MariaDB's open-transaction check needs the PROCESS privilege on the site's database login, and is reported as "not readable" without it.
+- Existing hosts without a Warpgate target can be filled in with **Fill Missing Targets** in SSH Settings.
 
 ## [6.0.0] - 2026-11-04
 
