@@ -26,6 +26,9 @@ def after_install() -> None:
 	from alfaedge_pulse.tasks.poller import ensure_poller_running
 
 	ensure_poller_running()
+	from alfaedge_pulse.db_indexes import ensure_indexes
+
+	ensure_indexes()
 	_seed_default_expected_services()
 	frappe.db.commit()
 

@@ -16,6 +16,7 @@ All notable changes to this project are documented here.
 
 
 ### Fixed
+- **Missing database indexes.** Pulse's composite indexes were created by one-off patches, and Frappe records every patch as already run when an app is installed fresh, so a site installed that way never got them. On production-sized data this made the "latest worker health for this host" lookup scan the whole history table (5 seconds per call, on every poll, with thousands of disk reads a second); with the index it takes well under a millisecond. Pulse now checks its indexes on every migrate and on install (`db_indexes.py`), adds whichever are missing, and also indexes the date columns the daily cleanups filter on so they no longer scan whole tables.
 - Enabling an Uptime Kuma Instance now starts the Uptime poll loop straight away. Since 6.0.0 the loop ends while no instance is enabled and was restarted only by the scheduler's once-a-minute check, so after removing and re-adding instances heartbeats could stay missing ("Pending · stale never") until that check ran.
 
 ## [6.0.0] - 2026-11-04

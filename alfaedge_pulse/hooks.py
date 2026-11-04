@@ -92,6 +92,9 @@ after_install = "alfaedge_pulse.install.after_install"
 # they come back up on their own after a bench update/restart without a
 # manual step.
 after_migrate = [
+	# Composite indexes cannot be declared in doctype JSON and a patch is skipped on
+	# a fresh install, so they are checked on every migrate (see db_indexes.py).
+	"alfaedge_pulse.db_indexes.ensure_indexes",
 	"alfaedge_pulse.tasks.poller.ensure_poller_running",
 	"alfaedge_pulse.tasks.uptime_kuma_poller.ensure_uptime_poller_running",
 	"alfaedge_pulse.tasks.host_poller.ensure_host_poller_running",
