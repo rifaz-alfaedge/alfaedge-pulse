@@ -17,7 +17,7 @@ def check(name, ok, detail=""):
 	results.append((name, bool(ok), list(detail) if isinstance(detail, list) else detail))
 
 
-T0 = datetime(2026, 11, 4, 12, 0, 0)
+T0 = datetime.now().replace(microsecond=0) - timedelta(hours=2)  # inside the trend window, whatever day this runs
 clock = {"now": T0}
 orig_now, orig_commit = ingest.now_datetime, frappe.db.commit
 ingest.now_datetime = lambda: clock["now"]

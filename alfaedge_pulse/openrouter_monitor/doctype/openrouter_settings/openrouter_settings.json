@@ -1,0 +1,194 @@
+{
+ "document_type": "System",
+ "icon": "fa fa-cog",
+ "issingle": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "connection_section",
+   "fieldtype": "Section Break",
+   "label": "Connection"
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1"
+  },
+  {
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "label": "API Base URL",
+   "reqd": 1,
+   "default": "https://openrouter.ai/api/v1"
+  },
+  {
+   "fieldname": "column_break_connection",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "management_key",
+   "fieldtype": "Password",
+   "label": "Management API Key",
+   "reqd": 1,
+   "description": "A Management API key from OpenRouter (Settings > Management Keys). A normal inference key is refused by the credits and activity endpoints. Stored encrypted, never shown or logged."
+  },
+  {
+   "fieldname": "sync_section",
+   "fieldtype": "Section Break",
+   "label": "Sync and alerts"
+  },
+  {
+   "fieldname": "balance_interval_minutes",
+   "fieldtype": "Int",
+   "label": "Balance Check Interval (minutes)",
+   "default": "30",
+   "non_negative": 1,
+   "description": "How often the remaining credit is read. Daily usage is fetched once a day, shortly after 00:35 UTC."
+  },
+  {
+   "fieldname": "column_break_sync",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "low_balance_threshold",
+   "fieldtype": "Float",
+   "label": "Low Balance Alert Threshold (USD)",
+   "default": "0",
+   "precision": "2",
+   "non_negative": 1,
+   "description": "Send an alert (to the global recipients in Proxmox Monitor Settings) when the remaining credit falls below this. 0 turns the alert off."
+  },
+  {
+   "fieldname": "sync_usage_now",
+   "fieldtype": "Button",
+   "label": "Sync Usage Now"
+  },
+  {
+   "fieldname": "check_balance_now",
+   "fieldtype": "Button",
+   "label": "Check Balance Now"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "last_activity_synced",
+   "fieldtype": "Datetime",
+   "label": "Usage Last Synced",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_activity_through",
+   "fieldtype": "Date",
+   "label": "Latest Usage Day (UTC)",
+   "read_only": 1,
+   "description": "The most recent completed UTC day OpenRouter has reported."
+  },
+  {
+   "fieldname": "last_activity_row_count",
+   "fieldtype": "Int",
+   "label": "Usage Rows Seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_activity_attempt",
+   "fieldtype": "Datetime",
+   "label": "Last Usage Attempt",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "last_activity_error",
+   "fieldtype": "Small Text",
+   "label": "Usage Last Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_balance_at",
+   "fieldtype": "Datetime",
+   "label": "Balance Last Checked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_remaining",
+   "fieldtype": "Float",
+   "label": "Remaining Credit (USD)",
+   "read_only": 1,
+   "precision": "6"
+  },
+  {
+   "fieldname": "last_balance_error",
+   "fieldtype": "Small Text",
+   "label": "Balance Last Error",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "actions": [],
+ "creation": "2026-11-09 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "OpenRouter Monitor",
+ "name": "OpenRouter Settings",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "states": [],
+ "field_order": [
+  "connection_section",
+  "enabled",
+  "base_url",
+  "column_break_connection",
+  "management_key",
+  "sync_section",
+  "balance_interval_minutes",
+  "column_break_sync",
+  "low_balance_threshold",
+  "sync_usage_now",
+  "check_balance_now",
+  "status_section",
+  "last_activity_synced",
+  "last_activity_through",
+  "last_activity_row_count",
+  "last_activity_attempt",
+  "last_activity_error",
+  "column_break_status",
+  "last_balance_at",
+  "last_remaining",
+  "last_balance_error"
+ ]
+}

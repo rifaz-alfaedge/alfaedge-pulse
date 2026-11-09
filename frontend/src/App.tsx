@@ -24,6 +24,7 @@ import { NodeDetailDialog, type SelectedNode } from './components/NodeDetailDial
 import { BackupsPanel } from './components/BackupsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
 import { AiUsagePanel } from './components/AiUsagePanel'
+import { OpenRouterPanel } from './components/OpenRouterPanel'
 import { AiInsightsPanel } from './components/AiInsightsPanel'
 import { UptimePanel } from './components/UptimePanel'
 import { LogsPanel } from './components/LogsPanel'
@@ -36,7 +37,7 @@ import type { ProxmoxGuest, ProxmoxServer } from './lib/types'
 // wrong right now" tabs — followed by AI Usage, the renamed Overview
 // ("Usage Metrics"), Backups, Alerts, and AI Insights last (a weekly-
 // cadence tab, the lowest-traffic one here).
-const MAIN_TABS = ['Host Health', 'Uptime', 'Error Logs', 'AI Usage', 'Usage Metrics', 'Backups', 'Alerts', 'AI Insights'] as const
+const MAIN_TABS = ['Host Health', 'Uptime', 'Error Logs', 'AI Usage', 'OpenRouter', 'Usage Metrics', 'Backups', 'Alerts', 'AI Insights'] as const
 const DEFAULT_WARNING_THRESHOLD = 85
 const DEFAULT_CRITICAL_THRESHOLD = 95
 const DEFAULT_POLL_SECONDS = 20
@@ -255,6 +256,7 @@ function App() {
       {mainTab === 'Backups' && <BackupsPanel backupLogs={activeBackupLogs} guests={allGuests} servers={allServers} />}
       {mainTab === 'Alerts' && <AlertsPanel alertLogs={allAlertLogs} />}
       {mainTab === 'AI Usage' && <AiUsagePanel />}
+      {mainTab === 'OpenRouter' && <OpenRouterPanel />}
       {mainTab === 'AI Insights' && <AiInsightsPanel />}
       {mainTab === 'Uptime' && <UptimePanel />}
       {mainTab === 'Host Health' && <HostHealthPanel />}

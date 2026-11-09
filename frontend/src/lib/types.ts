@@ -218,6 +218,69 @@ export interface UsageFilterOptions {
   virtual_keys: string[]
 }
 
+// OpenRouter dashboard — mirrors alfaedge_pulse/openrouter_monitor/api.py
+export interface OpenRouterSettings {
+  enabled: 0 | 1
+  balance_interval_minutes: number
+  low_balance_threshold: number
+  last_activity_synced?: string
+  last_activity_through?: string
+  last_activity_row_count?: number
+  last_activity_error?: string
+  last_balance_at?: string
+  last_remaining?: number
+  last_balance_error?: string
+}
+
+export interface OpenRouterSummary {
+  total_cost: number
+  byok_cost: number
+  total_requests: number
+  total_tokens: number
+  prompt_tokens: number
+  completion_tokens: number
+  reasoning_tokens: number
+  latest_day?: string | null
+  credits?: { total_purchased: number; total_used: number; remaining: number; taken_at: string } | null
+}
+
+export interface OpenRouterTrendPoint {
+  bucket: string
+  total_cost: number
+  total_requests: number
+  total_tokens: number
+  prompt_tokens: number
+  completion_tokens: number
+  reasoning_tokens: number
+}
+
+export interface OpenRouterBreakdownRow {
+  label: string
+  total_cost: number
+  total_requests: number
+  total_tokens: number
+}
+
+export interface OpenRouterModelRow {
+  model: string
+  providers: string
+  total_cost: number
+  total_requests: number
+  prompt_tokens: number
+  completion_tokens: number
+  reasoning_tokens: number
+}
+
+export interface OpenRouterBalancePoint {
+  taken_at: string
+  remaining: number
+}
+
+export interface OpenRouterFilterOptions {
+  providers: string[]
+  models: string[]
+}
+
 // Mirrors alfaedge_pulse/uptime_monitor/doctype — see those .json files
 // for the source of truth.
 

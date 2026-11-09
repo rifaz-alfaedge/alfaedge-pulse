@@ -220,3 +220,31 @@ export function Segmented<T extends string | number>({
     </div>
   )
 }
+
+/** Proportional bar breakdown (label, bar, value) — the AI Usage tab's
+ * "By Provider" look, with the value formatting passed in. */
+export function BreakdownBars({
+  rows,
+  format,
+}: {
+  rows: { label: string; value: number }[]
+  format: (v: number) => string
+}) {
+  if (rows.length === 0) return <Empty text="No data yet for this range." />
+  const max = Math.max(...rows.map((r) => r.value), 0.0001)
+  return (
+    <div className="flex flex-col gap-3">
+      {rows.map((row) => (
+        <div key={row.label} className="grid grid-cols-[7rem_1fr_5rem] items-center gap-3">
+          <span className="truncate text-sm text-ink-secondary" title={row.label}>
+            {row.label}
+          </span>
+          <span className="h-2 overflow-hidden rounded-full bg-gridline">
+            <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.max((row.value / max) * 100, 2)}%` }} />
+          </span>
+          <span className="text-right text-xs tabular-nums text-ink-muted">{format(row.value)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}

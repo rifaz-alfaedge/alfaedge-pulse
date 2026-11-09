@@ -1,0 +1,176 @@
+{
+ "document_type": "System",
+ "icon": "fa fa-bolt",
+ "autoname": "field:row_key",
+ "naming_rule": "By fieldname",
+ "allow_rename": 0,
+ "sort_field": "date",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "row_key",
+   "fieldtype": "Data",
+   "label": "Row Key",
+   "reqd": 1,
+   "unique": 1,
+   "hidden": 1,
+   "read_only": 1,
+   "description": "date + endpoint; the upsert key."
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date (UTC)",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "A UTC calendar day. OpenRouter reports whole completed UTC days."
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model",
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "model_permaslug",
+   "fieldtype": "Data",
+   "label": "Model Permaslug",
+   "read_only": 1
+  },
+  {
+   "fieldname": "endpoint_id",
+   "fieldtype": "Data",
+   "label": "Endpoint ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "provider_name",
+   "fieldtype": "Data",
+   "label": "Provider",
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "usage_section",
+   "fieldtype": "Section Break",
+   "label": "Usage"
+  },
+  {
+   "fieldname": "usage_usd",
+   "fieldtype": "Float",
+   "label": "Spend (USD)",
+   "precision": "6",
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "Credits spent (OpenRouter's usage field)."
+  },
+  {
+   "fieldname": "byok_usage_usd",
+   "fieldtype": "Float",
+   "label": "BYOK Spend (USD)",
+   "precision": "6",
+   "read_only": 1,
+   "description": "Usage billed to your own provider key; not taken from credits."
+  },
+  {
+   "fieldname": "requests",
+   "fieldtype": "Int",
+   "label": "Requests",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_usage",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "prompt_tokens",
+   "fieldtype": "Int",
+   "label": "Prompt Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completion_tokens",
+   "fieldtype": "Int",
+   "label": "Completion Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reasoning_tokens",
+   "fieldtype": "Int",
+   "label": "Reasoning Tokens",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "actions": [],
+ "creation": "2026-11-09 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "OpenRouter Monitor",
+ "name": "OpenRouter Daily Usage",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "states": [],
+ "field_order": [
+  "row_key",
+  "date",
+  "model",
+  "model_permaslug",
+  "endpoint_id",
+  "provider_name",
+  "usage_section",
+  "usage_usd",
+  "byok_usage_usd",
+  "requests",
+  "column_break_usage",
+  "prompt_tokens",
+  "completion_tokens",
+  "reasoning_tokens"
+ ]
+}

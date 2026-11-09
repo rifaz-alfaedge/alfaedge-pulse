@@ -340,6 +340,34 @@ The `LLM Usage Log` schema includes a `Source` field (currently always
 etc.'s own billing APIs directly, bypassing Bifrost) could feed the same
 table and dashboard without a rework — not built yet, just left room for.
 
+## AI Usage (OpenRouter)
+
+Spend, per-model usage and remaining credit for an
+[OpenRouter](https://openrouter.ai) account, on the **OpenRouter** tab. It is
+separate from Bifrost: own settings, own tables, own endpoints.
+
+**Setup:**
+1. Create a **Management API key** in OpenRouter (an ordinary key is refused
+   by `/activity` and `/credits`).
+2. Open *Desk → OpenRouter Settings*, paste the key into **Management API
+   Key** and save. It is a write-only Password field: never shown again,
+   never logged, never sent to the browser.
+3. Click **Sync Usage Now** (first run pulls the 30 completed days OpenRouter
+   keeps) and **Check Balance Now**, or wait for the background jobs.
+4. Optional: set **Low Balance Threshold** (USD, 0 = off) to get a *Low Credit
+   Balance* alert to the global recipients, with a recovery message.
+
+**How it works:** `GET /activity` returns one row per day, model and provider
+endpoint for the last 30 completed **UTC** days (never today). A job runs
+after 00:35 UTC, retries every 15 minutes until it succeeds, and upserts
+every row by (day, endpoint) into `OpenRouter Daily Usage`, so reruns are
+harmless. `GET /credits` is read every 30 minutes into `OpenRouter Balance
+Snapshot` (remaining = purchased − used). The tab's dates are UTC days; sync
+and balance times are in the site's timezone. Tokens = prompt + completion
+(reasoning tokens are shown separately); spend is OpenRouter's `usage`, with
+BYOK usage shown beside it. Manual run from a terminal:
+`bench --site <site> execute alfaedge_pulse.tasks.openrouter_sync.run_activity_sync`.
+
 ## Uptime Monitoring (Uptime Kuma)
 
 Add, monitor, and manage sites across any number of self-hosted

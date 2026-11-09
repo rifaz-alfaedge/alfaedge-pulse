@@ -179,6 +179,9 @@ scheduler_events = {
 			# without a code change. Minutes-granularity is fine for this
 			# one (unlike polling, nothing needs a sub-minute Bifrost sync).
 			"alfaedge_pulse.tasks.bifrost_sync.sync_bifrost_logs",
+			# OpenRouter usage (daily, after 00:35 UTC) and credit balance (every 30
+			# minutes): one self-throttled entry that decides what is due, like Bifrost's.
+			"alfaedge_pulse.tasks.openrouter_sync.sync_openrouter",
 			# Purely a staleness check (Host Unreachable / Scheduler
 			# Stalled) over what the SSH poller last stored — see its module
 			# docstring for why once-a-minute is already enough, no bounded

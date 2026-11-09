@@ -1,0 +1,98 @@
+{
+ "document_type": "System",
+ "icon": "fa fa-line-chart",
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "sort_field": "taken_at",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "taken_at",
+   "fieldtype": "Datetime",
+   "label": "Taken At",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "Site timezone (IST), like every other Pulse timestamp."
+  },
+  {
+   "fieldname": "total_purchased",
+   "fieldtype": "Float",
+   "label": "Credits Purchased (USD)",
+   "precision": "6",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_used",
+   "fieldtype": "Float",
+   "label": "Credits Used (USD)",
+   "precision": "6",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "remaining",
+   "fieldtype": "Float",
+   "label": "Remaining (USD)",
+   "precision": "6",
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "Purchased minus used."
+  }
+ ],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Proxmox Monitor Viewer"
+  }
+ ],
+ "actions": [],
+ "creation": "2026-11-09 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "OpenRouter Monitor",
+ "name": "OpenRouter Balance Snapshot",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "states": [],
+ "field_order": [
+  "taken_at",
+  "total_purchased",
+  "total_used",
+  "remaining"
+ ]
+}

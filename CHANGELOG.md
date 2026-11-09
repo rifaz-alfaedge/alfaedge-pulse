@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+- **OpenRouter dashboard.** A new **OpenRouter** tab, next to AI Usage and laid out like it: date range, Providers and Models filters, tiles for total spend (BYOK shown separately), requests, tokens, credits remaining and credits purchased, spend, token and remaining-credit charts, By Provider and By Model bars, and a sortable per-model table. Latency, success rate, the request log and the virtual-key views are left out because OpenRouter's data has none of them. Bifrost is untouched.
+- **OpenRouter Settings** (management API key in a write-only Password field, enable switch, balance interval, low-balance threshold) with **Sync Usage Now** and **Check Balance Now** buttons. Daily usage is synced from `/activity` after 00:35 UTC (the first run backfills the 30 completed days it holds; retried every 15 minutes until it succeeds; idempotent by day and endpoint), and the credit balance is read from `/credits` every 30 minutes. Today's usage is not available from OpenRouter and is not shown.
+- **Low Credit Balance alert** (new Alert Type) when remaining credit falls below the threshold; it goes to the global recipients and a recovery message follows. A threshold of 0 turns it off.
+- `tests/manual/test_openrouter.py` (no network).
+
 ## [6.1.1] - 2026-11-04
 
 Warpgate targets default to the host's hostname, and a safety limit for servers that hold copies of production.

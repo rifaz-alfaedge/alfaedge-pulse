@@ -52,3 +52,19 @@ export function isFresh(lastSynced: string | undefined, pollIntervalSeconds: num
   const then = new Date(lastSynced.replace(' ', 'T')).getTime()
   return Date.now() - then < pollIntervalSeconds * 4000
 }
+
+/** USD with 4 decimals under $1, otherwise 2 (same as the AI Usage tab). */
+export function formatCost(v: number): string {
+  return `$${v.toFixed(v < 1 ? 4 : 2)}`
+}
+
+export function formatTokens(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`
+  return String(Math.round(v))
+}
+
+/** Same "naive string is browser/site-local, not UTC" convention as timeAgo. */
+export function bucketToUnixSeconds(bucket: string): number {
+  return Math.floor(new Date(bucket.replace(' ', 'T')).getTime() / 1000)
+}

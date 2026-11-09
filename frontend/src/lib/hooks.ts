@@ -2,6 +2,13 @@ import { useMemo } from 'react'
 import { useFrappeGetCall, useFrappeGetDoc, useFrappeGetDocList } from 'frappe-react-sdk'
 import type {
   BifrostSettings,
+  OpenRouterBalancePoint,
+  OpenRouterBreakdownRow,
+  OpenRouterFilterOptions,
+  OpenRouterModelRow,
+  OpenRouterSettings,
+  OpenRouterSummary,
+  OpenRouterTrendPoint,
   HostOverview,
   HostDiagnosis,
   HostTrendPoint,
@@ -317,6 +324,66 @@ export function useAiUsageFilterOptions() {
     { refreshInterval: SLOW_POLL_MS },
   )
   return { ...result, data: result.data?.message }
+}
+
+// ---------------------------------------------------------------------------
+// OpenRouter — its own dashboard (see openrouter_monitor/api.py). Same slow
+// refresh and filter convention as the AI Usage hooks above.
+// ---------------------------------------------------------------------------
+export interface OpenRouterFilters {
+  provider?: string[]
+  model?: string[]
+}
+
+const OR_API = 'alfaedge_pulse.openrouter_monitor.api'
+
+function openRouterParams(startDate: string | undefined, endDate: string | undefined, filters: OpenRouterFilters) {
+  return {
+    start_date: startDate,
+    end_date: endDate,
+    provider: serializeFilterList(filters.provider),
+    model: serializeFilterList(filters.model),
+  }
+}
+
+function useOpenRouterCall<T>(method: string, params: Record<string, unknown>) {
+  const result = useFrappeGetCall<{ message: T }>(`${OR_API}.${method}`, params, undefined, { refreshInterval: SLOW_POLL_MS })
+  return { ...result, data: result.data?.message }
+}
+
+export function useOpenRouterSettings() {
+  return useFrappeGetDoc<OpenRouterSettings>('OpenRouter Settings', 'OpenRouter Settings', undefined, {
+    refreshInterval: SLOW_POLL_MS,
+  })
+}
+
+export function useOpenRouterSummary(startDate?: string, endDate?: string, filters: OpenRouterFilters = {}) {
+  return useOpenRouterCall<OpenRouterSummary>('get_summary', openRouterParams(startDate, endDate, filters))
+}
+
+export function useOpenRouterTrend(startDate?: string, endDate?: string, filters: OpenRouterFilters = {}) {
+  return useOpenRouterCall<OpenRouterTrendPoint[]>('get_trend', openRouterParams(startDate, endDate, filters))
+}
+
+export function useOpenRouterBreakdown(
+  dimension: 'provider' | 'model',
+  startDate?: string,
+  endDate?: string,
+  filters: OpenRouterFilters = {},
+) {
+  return useOpenRouterCall<OpenRouterBreakdownRow[]>('get_breakdown', { dimension, ...openRouterParams(startDate, endDate, filters) })
+}
+
+export function useOpenRouterModelTable(startDate?: string, endDate?: string, filters: OpenRouterFilters = {}) {
+  return useOpenRouterCall<OpenRouterModelRow[]>('get_model_table', openRouterParams(startDate, endDate, filters))
+}
+
+export function useOpenRouterBalanceHistory(startDate?: string, endDate?: string) {
+  return useOpenRouterCall<OpenRouterBalancePoint[]>('get_balance_history', { start_date: startDate, end_date: endDate })
+}
+
+export function useOpenRouterFilterOptions() {
+  return useOpenRouterCall<OpenRouterFilterOptions>('get_filter_options', {})
 }
 
 // ---------------------------------------------------------------------------

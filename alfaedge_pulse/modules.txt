@@ -6,3 +6,4 @@ Proxmox Resource History
 AI Insights
 Log Monitor
 Site Discovery
+OpenRouter Monitor
